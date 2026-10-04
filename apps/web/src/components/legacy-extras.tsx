@@ -179,7 +179,7 @@ function SettingsForm({ cms }: { cms: boolean }) {
         {cms && <h2>{t("Front Setting Details")}</h2>}
         {notice && (
           <p className="success mb-5" role="status">
-            {notice}
+            {t(notice)}
           </p>
         )}
         <div
@@ -211,7 +211,7 @@ function SettingsForm({ cms }: { cms: boolean }) {
                     />
                   </span>
                   <small className="block text-muted mt-3">
-                    Allowed file types: png, jpg, jpeg.
+                    {t("Allowed file types: png, jpg, jpeg.")}
                   </small>
                 </>
               ) : f.options ? (
@@ -224,7 +224,7 @@ function SettingsForm({ cms }: { cms: boolean }) {
                 >
                   {f.options.map((o) => (
                     <option key={o} value={o}>
-                      {o === "en" ? "English" : o === "am" ? "አማርኛ" : o}
+                      {o === "en" ? t("English") : o === "am" ? "አማርኛ" : o}
                     </option>
                   ))}
                 </select>
@@ -273,7 +273,7 @@ function ModulesSettings() {
     <section className="legacy-card">
       <h2>{t("Modules Setting")}</h2>
       <p className="form-preview-note">
-        Preview visibility settings. API permissions are unchanged.
+        {t("Preview visibility settings. API permissions are unchanged.")}
       </p>
       <div className="module-toggle-grid">
         {groups
@@ -310,7 +310,7 @@ function ModulesSettings() {
       </button>
       {notice && (
         <p className="success mt-4" role="status">
-          {notice}
+          {t(notice)}
         </p>
       )}
     </section>
@@ -326,7 +326,7 @@ function QueueTheme() {
       <h2>{t("Patient Queue Theme")}</h2>
       <div className="legacy-form mt-6">
         <label>
-          <span className="label">Header Color</span>
+          <span className="label">{t("Header Color")}</span>
           <input
             className="field"
             type="color"
@@ -338,17 +338,19 @@ function QueueTheme() {
           <span className="label">{t("Message")}</span>
           <input
             className="field"
-            value={message}
+            value={t(message)}
             onChange={(e) => setMessage(e.target.value)}
           />
         </label>
       </div>
       <div className="queue-preview">
-        <header style={{ background: color }}>ULSHMS · Patient Queue</header>
-        <h3>Now serving</h3>
+        <header style={{ background: color }}>
+          {t("ULSHMS · Patient Queue")}
+        </header>
+        <h3>{t("Now serving")}</h3>
         <strong>024</strong>
         <p>Dr. Avery Reed · Room 2</p>
-        <footer>{message}</footer>
+        <footer>{t(message)}</footer>
       </div>
       <button
         className="primary"
@@ -481,14 +483,14 @@ function Attendance({ manage }: { manage: boolean }) {
       </div>
       {notice && (
         <p className="success mb-5" role="status">
-          {notice}
+          {t(notice)}
         </p>
       )}
       <div className="table-toolbar">
         <div className="table-search">
           <Search size={18} />
           <input
-            aria-label="Search attendance"
+            aria-label={t("Search attendance")}
             placeholder={t("Search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -496,7 +498,7 @@ function Attendance({ manage }: { manage: boolean }) {
         </div>
         <div className="flex gap-3">
           <select
-            aria-label="Attendance status"
+            aria-label={t("Attendance status")}
             className="field !w-auto"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -609,7 +611,7 @@ function Attendance({ manage }: { manage: boolean }) {
               <h2 id="attendance-title">{t("Add Attendance")}</h2>
               <button
                 type="button"
-                aria-label="Close"
+                aria-label={t("Close")}
                 onClick={() => setEditing(null)}
               >
                 <X />
@@ -802,7 +804,7 @@ function SmartCards({ templates }: { templates: boolean }) {
         <div className="table-search">
           <Search size={18} />
           <input
-            aria-label="Search cards"
+            aria-label={t("Search cards")}
             placeholder={t("Search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -814,7 +816,7 @@ function SmartCards({ templates }: { templates: boolean }) {
           <thead>
             <tr>
               <th>{t(templates ? "Template Name" : "Patient")}</th>
-              <th>{templates ? "Color" : t("Patient ID")}</th>
+              <th>{templates ? t("Color") : t("Patient ID")}</th>
               <th>{t(templates ? "Preview" : "Template Name")}</th>
               <th>{t("Action")}</th>
             </tr>
@@ -881,7 +883,8 @@ function SmartCards({ templates }: { templates: boolean }) {
                           <span>
                             {people[card.patient]}
                             <small>
-                              sample{card.patient + 1}@example.invalid
+                              {t("sample")}
+                              {card.patient + 1}@example.invalid
                             </small>
                           </span>
                         </button>
@@ -946,7 +949,7 @@ function SmartCards({ templates }: { templates: boolean }) {
               <h2 id="template-title">{t("Template")}</h2>
               <button
                 type="button"
-                aria-label="Close"
+                aria-label={t("Close")}
                 onClick={() => setEditing(null)}
               >
                 <X />
@@ -966,7 +969,7 @@ function SmartCards({ templates }: { templates: boolean }) {
                   />
                 </label>
                 <label>
-                  <span className="label">Header Color</span>
+                  <span className="label">{t("Header Color")}</span>
                   <input
                     className="field"
                     type="color"
@@ -1072,7 +1075,7 @@ function SmartCards({ templates }: { templates: boolean }) {
           <div className="smart-card-modal">
             <button
               className="smart-card-close"
-              aria-label="Close card"
+              aria-label={t("Close card")}
               onClick={() => setSelected(null)}
             >
               <X size={19} />
@@ -1111,7 +1114,7 @@ function SmartCard({
     <article className="smart-card">
       <header style={{ background: template.color }}>
         <strong>ULSHMS</strong>
-        <span>Addis Ababa, Ethiopia · Frontend preview</span>
+        <span>{t("Addis Ababa, Ethiopia · Frontend preview")}</span>
       </header>
       <div className="smart-card-details">
         <div className="card-portrait">

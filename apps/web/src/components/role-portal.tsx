@@ -52,7 +52,7 @@ const sampleValue = (column: string, i: number, role: string): string => {
 };
 export function RolePortal({ section }: { section: string }) {
   const role = usePreviewRole();
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const config = portalSections[section];
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -141,7 +141,7 @@ export function RolePortal({ section }: { section: string }) {
             {rows.map((i) => (
               <tr key={i}>
                 {config.columns.map((c) => (
-                  <td key={c}>{t(sampleValue(c, i, role))}</td>
+                  <td key={c}>{formatValue(sampleValue(c, i, role))}</td>
                 ))}
                 <td>
                   <button
@@ -194,7 +194,7 @@ export function RolePortal({ section }: { section: string }) {
                   {config.columns.map((c) => (
                     <div key={c}>
                       <dt className="muted">{t(c)}</dt>
-                      <dd>{t(sampleValue(c, selected, role))}</dd>
+                      <dd>{formatValue(sampleValue(c, selected, role))}</dd>
                     </div>
                   ))}
                 </dl>
@@ -231,7 +231,7 @@ export function RolePortal({ section }: { section: string }) {
 }
 export function RoleDashboard() {
   const role = usePreviewRole();
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const links = roleNavigation(role);
   const tiles =
     role === "Patient"
@@ -302,7 +302,7 @@ export function RoleDashboard() {
                 {[0, 1, 2].map((i) => (
                   <tr key={i}>
                     {["Doctor", "Department", "Date", "Status"].map((c) => (
-                      <td key={c}>{t(sampleValue(c, i, role))}</td>
+                      <td key={c}>{formatValue(sampleValue(c, i, role))}</td>
                     ))}
                   </tr>
                 ))}

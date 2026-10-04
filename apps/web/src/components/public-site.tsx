@@ -119,12 +119,15 @@ export function PublicSite({
         </Link>
         <button
           className="public-menu-button"
-          aria-label="Open menu"
+          aria-label={t("Open menu")}
           onClick={() => setMobile(!mobile)}
         >
           <Menu />
         </button>
-        <nav className={mobile ? "open" : ""} aria-label="Public navigation">
+        <nav
+          className={mobile ? "open" : ""}
+          aria-label={t("Public navigation")}
+        >
           {[
             ["/", "Home"],
             ["/our-services", "Services"],
@@ -190,7 +193,7 @@ export function PublicSite({
             <form className="public-booking" action="/appointment">
               <h2>{t("Book an Appointment")}</h2>
               <select
-                aria-label="Select Doctor"
+                aria-label={t("Select Doctor")}
                 className="field"
                 name="doctor"
               >
@@ -200,7 +203,7 @@ export function PublicSite({
                 ))}
               </select>
               <input
-                aria-label="Appointment date"
+                aria-label={t("Appointment date")}
                 name="date"
                 className="field"
                 type="date"
@@ -307,7 +310,10 @@ export function PublicSite({
                   <div>
                     <h2>{doctors[doctorIndex]}</h2>
                     <h3>{t("Email")}</h3>
-                    <p>doctor{doctorIndex + 1}@example.invalid</p>
+                    <p>
+                      {t("doctor")}
+                      {doctorIndex + 1}@example.invalid
+                    </p>
                     <h3>{t("Qualification")}</h3>
                     <p>MD · {t(services[doctorIndex])}</p>
                     <Link
@@ -397,7 +403,9 @@ export function PublicSite({
                 {["Alex Morgan", "Jamie Wilson", "Taylor Davis"].map((name) => (
                   <article key={name}>
                     <span className="testimonial-quote">“</span>
-                    <p>Sample patient testimonial for frontend review.</p>
+                    <p>
+                      {t("Sample patient testimonial for frontend review.")}
+                    </p>
                     <h3>{name}</h3>
                   </article>
                 ))}
@@ -407,8 +415,9 @@ export function PublicSite({
                 <h2>{t(titles[page])}</h2>
                 <p>{settings.terms}</p>
                 <p className="form-preview-note">
-                  Preview content. Hospital-approved policies have not been
-                  supplied.
+                  {t(
+                    "Preview content. Hospital-approved policies have not been supplied.",
+                  )}
                 </p>
               </article>
             ) : (
@@ -421,12 +430,13 @@ export function PublicSite({
                   )}
                 </h2>
                 <p className="form-preview-note">
-                  Frontend preview · This form does not submit real requests or
-                  create accounts.
+                  {t(
+                    "Frontend preview · This form does not submit real requests or create accounts.",
+                  )}
                 </p>
                 {notice && (
                   <p className="success" role="status">
-                    {notice}
+                    {t(notice)}
                   </p>
                 )}
                 <div className="legacy-form">
@@ -489,7 +499,7 @@ export function PublicSite({
                         />
                       </label>
                       <label>
-                        <span className="label">Time *</span>
+                        <span className="label">{t("Time *")}</span>
                         <select
                           key={doctor + date}
                           className="field"
@@ -561,7 +571,7 @@ export function PublicSite({
           <div>
             <h2>ULSHMS</h2>
             <p>{t("Your health, our priority")}</p>
-            <small>Frontend preview · Sample content</small>
+            <small>{t("Frontend preview · Sample content")}</small>
           </div>
           <div>
             <h3>{t("Our Features")}</h3>

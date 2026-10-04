@@ -1,10 +1,13 @@
 "use client";
+import { useLanguage } from "@/components/language";
 import { useEffect, useState, useCallback } from "react";
 import { Modal } from "@/components/modal";
 import { Plus, Search, Users, X } from "lucide-react";
 import { api, type Patient } from "@/lib/api";
 import { useIdentity } from "@/components/workspace";
 export default function Patients() {
+  const { t } = useLanguage();
+
   const identity = useIdentity();
   const [rows, setRows] = useState<Patient[]>([]);
   const [search, setSearch] = useState("");
@@ -56,12 +59,12 @@ export default function Patients() {
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between gap-4">
         <div>
-          <p className="eyebrow text-brand">Patient management</p>
+          <p className="eyebrow text-brand">{t("Patient management")}</p>
           <h1 className="mt-2 text-[28px] font-semibold tracking-tight">
-            Patient directory
+            {t("Patient directory")}
           </h1>
           <p className="mt-2 text-sm text-muted">
-            The people at the heart of your hospital.
+            {t("The people at the heart of your hospital.")}
           </p>
         </div>
         {identity?.permissions.includes("patients.create") && (
@@ -73,18 +76,18 @@ export default function Patients() {
             className="primary self-center"
           >
             <Plus size={16} />
-            Register patient
+            {t("Register patient")}
           </button>
         )}
       </div>
       {notice && (
         <p role="status" className="success">
-          {notice}
+          {t(notice)}
         </p>
       )}
       {error && (
         <p className="error" role="alert">
-          {error}
+          {t(error)}
         </p>
       )}
       <section className="card overflow-hidden">
@@ -103,17 +106,17 @@ export default function Patients() {
                 className="absolute left-3 top-3.5 text-muted"
               />
               <input
-                aria-label="Search patients by name or record number"
+                aria-label={t("Search patients by name or record number")}
                 className="field !pl-10"
-                placeholder="Search by name or record number…"
+                placeholder={t("Search by name or record number…")}
                 value={search}
                 maxLength={80}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <button className="secondary">Search</button>
+            <button className="secondary">{t("Search")}</button>
           </form>
-          <span className="text-xs text-muted">25 records per page</span>
+          <span className="text-xs text-muted">{t("25 records per page")}</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -163,7 +166,7 @@ export default function Patients() {
         </div>
         {loading ? (
           <div className="p-16 text-center text-muted" role="status">
-            Loading patient records…
+            {t("Loading patient records…")}
           </div>
         ) : (
           !rows.length && (
@@ -183,21 +186,24 @@ export default function Patients() {
           )
         )}
         <div className="flex items-center justify-between border-t border-slate-100 p-4">
-          <span className="text-xs text-muted">Page {page}</span>
+          <span className="text-xs text-muted">
+            {t("Page")}
+            {page}
+          </span>
           <div className="flex gap-2">
             <button
               className="secondary"
               disabled={page === 1 || loading}
               onClick={() => setPage(page - 1)}
             >
-              Previous
+              {t("Previous")}
             </button>
             <button
               className="secondary"
               disabled={rows.length < 25 || loading}
               onClick={() => setPage(page + 1)}
             >
-              Next
+              {t("Next")}
             </button>
           </div>
         </div>
@@ -208,14 +214,14 @@ export default function Patients() {
             <div className="mb-6 flex justify-between">
               <div>
                 <h2 id="register-title" className="text-xl font-semibold">
-                  Register a patient
+                  {t("Register a patient")}
                 </h2>
                 <p className="mt-2 text-xs text-muted">
-                  Start with their essential details.
+                  {t("Start with their essential details.")}
                 </p>
               </div>
               <button
-                aria-label="Close registration"
+                aria-label={t("Close registration")}
                 onClick={() => setModal(false)}
               >
                 <X size={19} />
@@ -224,13 +230,13 @@ export default function Patients() {
             <form className="space-y-5" onSubmit={register}>
               {formError && (
                 <p role="alert" className="error">
-                  {formError}
+                  {t(formError)}
                 </p>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="label" htmlFor="givenName">
-                    First name
+                    {t("First name")}
                   </label>
                   <input
                     autoFocus
@@ -244,7 +250,7 @@ export default function Patients() {
                 </div>
                 <div>
                   <label className="label" htmlFor="familyName">
-                    Last name
+                    {t("Last name")}
                   </label>
                   <input
                     className="field"
@@ -258,7 +264,7 @@ export default function Patients() {
               </div>
               <div>
                 <label className="label" htmlFor="dateOfBirth">
-                  Date of birth
+                  {t("Date of birth")}
                 </label>
                 <input
                   className="field"
@@ -271,8 +277,10 @@ export default function Patients() {
               </div>
               <div>
                 <label className="label" htmlFor="patientPhone">
-                  Phone number{" "}
-                  <span className="font-normal text-muted">· optional</span>
+                  {t("Phone number")}{" "}
+                  <span className="font-normal text-muted">
+                    {t("· optional")}
+                  </span>
                 </label>
                 <input
                   className="field"
@@ -284,8 +292,9 @@ export default function Patients() {
                 />
               </div>
               <p className="text-xs leading-5 text-muted">
-                Registration creates a clinical record. Portal access and
-                care-team assignment will be managed separately.
+                {t(
+                  "Registration creates a clinical record. Portal access and care-team assignment will be managed separately.",
+                )}
               </p>
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
                 <button
@@ -293,10 +302,10 @@ export default function Patients() {
                   className="secondary"
                   onClick={() => setModal(false)}
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
                 <button className="primary" disabled={busy}>
-                  {busy ? "Saving…" : "Register patient"}
+                  {busy ? "Saving…" : t("Register patient")}
                 </button>
               </div>
             </form>

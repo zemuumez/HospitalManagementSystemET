@@ -19,3 +19,9 @@ Restored prescription fields from `physical-info-fields.blade.php` and `other-fi
 Correction to the earlier audit: `departments/add_modal.blade.php` says “New Role”, and `routes/web.php:1102–1103` comments out its routes. It is a dormant role-management fragment, not an active missing hospital-department workflow. The separate Doctor Departments screen already exists.
 
 Verification: TypeScript and three unit tests passed. Browser checked dependent doctor and slot choices/reset, prescription partial fields, two-factor demo errors/enable/regenerate/disable, and public doctor schedule/booking. Real stock, availability, clinical enforcement, custom-field backend schemas and document PDF generation remain backend work. This checkpoint does not assert exhaustive clinical parity.
+
+## Step 3 — English and Amharic coverage
+
+Added Amharic entries for all catalog screen titles, groups, columns and form labels, the omitted prescription partials, CMS fields, role names/personal views, form actions, and common validation/feedback. Static accessibility labels and dropdown text use the same translator; option values stay canonical English so language changes do not change stored values. Dates displayed in record tables use localized Gregorian formatting; this does not switch the clinical calendar to the Ethiopian calendar or change currency denomination.
+
+Added a coverage test for all source-derived catalog/CMS/prescription labels. Browser checks passed for Amharic prescriptions, language switching with entered data preserved, patient dashboard, refresh persistence, 390px overflow and translated browser validation. Screenshots inspected. Proper names, medicine names, identifiers and user-authored content are preserved. Provider-returned error messages can still fall back to English. Native-speaker/clinical review of the new Amharic wording remains required; there is no original Amharic pack to compare.

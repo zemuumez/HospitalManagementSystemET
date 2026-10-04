@@ -1,8 +1,11 @@
 "use client";
+import { useLanguage } from "@/components/language";
 import { useEffect, useState } from "react";
 import { Mail, Send } from "lucide-react";
 import { api, type Message } from "@/lib/api";
 export default function Communications() {
+  const { t } = useLanguage();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState("email");
   const [error, setError] = useState("");
@@ -21,22 +24,22 @@ export default function Communications() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="eyebrow text-brand">Stay connected</p>
+        <p className="eyebrow text-brand">{t("Stay connected")}</p>
         <h1 className="mt-2 text-[28px] font-semibold tracking-tight">
-          Communications
+          {t("Communications")}
         </h1>
         <p className="mt-2 text-sm text-muted">
-          Send a clear, timely message to the people who need it.
+          {t("Send a clear, timely message to the people who need it.")}
         </p>
       </div>
       {error && (
         <p className="error" role="alert">
-          {error}
+          {t(error)}
         </p>
       )}
       {notice && (
         <p className="success" role="status">
-          {notice}
+          {t(notice)}
         </p>
       )}
       <div className="grid items-start gap-6 xl:grid-cols-[1fr_1.1fr]">
@@ -72,11 +75,11 @@ export default function Communications() {
         >
           <h2 className="flex items-center gap-2 font-semibold">
             <Mail size={18} className="text-brand" />
-            New message
+            {t("New message")}
           </h2>
           <div>
             <label htmlFor="channel" className="label">
-              Send via
+              {t("Send via")}
             </label>
             <select
               className="field"
@@ -84,15 +87,15 @@ export default function Communications() {
               value={channel}
               onChange={(e) => setChannel(e.target.value)}
             >
-              <option value="email">Email</option>
-              <option value="sms">SMS</option>
+              <option value="email">{t("Email")}</option>
+              <option value="sms">{t("SMS")}</option>
             </select>
           </div>
           <div>
             <label htmlFor="recipient" className="label">
               {channel === "sms"
                 ? "Phone number with country code"
-                : "Email address"}
+                : t("Email address")}
             </label>
             <input
               className="field"
@@ -104,7 +107,8 @@ export default function Communications() {
           </div>
           <div>
             <label className="label" htmlFor="subject">
-              Subject {channel === "sms" && "· internal reference"}
+              {t("Subject")}
+              {channel === "sms" && "· internal reference"}
             </label>
             <input
               className="field"
@@ -116,7 +120,7 @@ export default function Communications() {
           </div>
           <div>
             <label className="label" htmlFor="body">
-              Message
+              {t("Message")}
             </label>
             <textarea
               className="field min-h-32"
@@ -127,8 +131,9 @@ export default function Communications() {
             />
           </div>
           <p className="text-xs leading-5 text-muted">
-            Keep messages brief. Use the patient portal for private clinical
-            information.
+            {t(
+              "Keep messages brief. Use the patient portal for private clinical information.",
+            )}
           </p>
           <button className="primary" disabled={busy || !key}>
             <Send size={15} />
@@ -137,14 +142,14 @@ export default function Communications() {
         </form>
         <section className="card overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 p-5">
-            <h2 className="font-semibold">Recent messages</h2>
+            <h2 className="font-semibold">{t("Recent messages")}</h2>
             <button className="text-xs text-brand" onClick={load}>
-              Refresh status
+              {t("Refresh status")}
             </button>
           </div>
           {!messages.length ? (
             <p className="px-6 py-16 text-center text-sm text-muted">
-              Your sent and queued messages will appear here.
+              {t("Your sent and queued messages will appear here.")}
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">

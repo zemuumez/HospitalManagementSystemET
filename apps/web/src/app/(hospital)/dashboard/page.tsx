@@ -37,7 +37,7 @@ export default function Dashboard() {
         <h1>{t("Dashboard")}</h1>
         <select
           className="field !w-auto"
-          aria-label="Report period"
+          aria-label={t("Report period")}
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
         >
@@ -83,11 +83,11 @@ export default function Dashboard() {
         <div className="legacy-card">
           <div className="page-heading">
             <h2>{t("Income and Expense Report")}</h2>
-            <span className="badge">{period}</span>
+            <span className="badge">{t(period)}</span>
           </div>
           <div className="chart-legend">
-            <span>● Income</span>
-            <span>● Expense</span>
+            <span>{t("● Income")}</span>
+            <span>{t("● Expense")}</span>
           </div>
           <div
             className="bar-chart"
@@ -116,7 +116,7 @@ export default function Dashboard() {
                   />
                   <span style={{ height: `${15 + ((i * 11) % 50)}%` }} />
                 </div>
-                <small>{m}</small>
+                <small>{t(m)}</small>
               </div>
             ))}
           </div>
@@ -131,8 +131,11 @@ export default function Dashboard() {
             <div className="notice-row" key={n}>
               <span className="notice-dot" />
               <div>
-                <h3>{n}</h3>
-                <p>October {i + 1}, 2026 · Sample notice</p>
+                <h3>{t(n)}</h3>
+                <p>
+                  {t("October")}
+                  {i + 1}, 2026 · Sample notice
+                </p>
               </div>
             </div>
           ))}
@@ -142,7 +145,7 @@ export default function Dashboard() {
         <div className="page-heading">
           <h2>{t("Upcoming Appointments")}</h2>
           <Link className="text-brand" href="/modules/appointments">
-            View All
+            {t("View All")}
           </Link>
         </div>
         <div className="legacy-table-wrap">
@@ -166,10 +169,13 @@ export default function Dashboard() {
                     </Link>
                   </td>
                   <td>Dr. Avery Reed</td>
-                  <td>General Medicine</td>
-                  <td>Oct {i + 5}, 2026 · 09:00 AM</td>
+                  <td>{t("General Medicine")}</td>
                   <td>
-                    <span className="badge">Confirmed</span>
+                    {t("Oct")}
+                    {i + 5}, 2026 · 09:00 AM
+                  </td>
+                  <td>
+                    <span className="badge">{t("Confirmed")}</span>
                   </td>
                 </tr>
               ))}

@@ -1,8 +1,11 @@
 "use client";
+import { useLanguage } from "@/components/language";
 import { useState } from "react";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 export default function ResetPassword() {
+  const { t } = useLanguage();
+
   const [message, setMessage] = useState("");
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,16 +40,16 @@ export default function ResetPassword() {
           }
         }}
       >
-        <h1 className="text-2xl font-semibold">Choose a new password</h1>
+        <h1 className="text-2xl font-semibold">{t("Choose a new password")}</h1>
         {message && (
           <p role="status" className={done ? "success" : "error"}>
-            {message}
+            {t(message)}
           </p>
         )}
         {!done && (
           <>
             <label className="label" htmlFor="new-password">
-              New password · at least 12 characters
+              {t("New password · at least 12 characters")}
             </label>
             <input
               id="new-password"
@@ -58,12 +61,12 @@ export default function ResetPassword() {
               autoComplete="new-password"
             />
             <button className="primary w-full" disabled={busy}>
-              Update password
+              {t("Update password")}
             </button>
           </>
         )}
         <Link className="block text-sm text-brand" href="/login">
-          Return to sign in
+          {t("Return to sign in")}
         </Link>
       </form>
     </main>

@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/components/language";
 import { useRef, useState } from "react";
 import { initializeApp, getApps } from "firebase/app";
 import {
@@ -11,6 +12,8 @@ import {
 } from "firebase/auth";
 let emulatorConnected = false;
 export function PhoneAuth({ link = false }: { link?: boolean }) {
+  const { t } = useLanguage();
+
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationResult>();
@@ -21,8 +24,9 @@ export function PhoneAuth({ link = false }: { link?: boolean }) {
   if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY)
     return (
       <p className="rounded-lg bg-slate-50 p-4 text-sm text-muted">
-        Phone sign-in will be available after your administrator connects
-        Firebase. You can sign in with your email.
+        {t(
+          "Phone sign-in will be available after your administrator connects Firebase. You can sign in with your email.",
+        )}
       </p>
     );
   async function submit(event: React.FormEvent) {
@@ -93,7 +97,7 @@ export function PhoneAuth({ link = false }: { link?: boolean }) {
   if (success)
     return (
       <p className="success" role="status">
-        Phone linked. You can now use it to sign in.
+        {t("Phone linked. You can now use it to sign in.")}
       </p>
     );
   return (
@@ -105,12 +109,12 @@ export function PhoneAuth({ link = false }: { link?: boolean }) {
       </p>
       {error && (
         <p className="error" role="alert">
-          {error}
+          {t(error)}
         </p>
       )}
       <div>
         <label className="label" htmlFor="phone">
-          Phone number
+          {t("Phone number")}
         </label>
         <input
           id="phone"
@@ -128,7 +132,7 @@ export function PhoneAuth({ link = false }: { link?: boolean }) {
       {confirmation && (
         <div>
           <label className="label" htmlFor="otp">
-            Verification code
+            {t("Verification code")}
           </label>
           <input
             id="otp"

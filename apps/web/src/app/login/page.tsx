@@ -64,28 +64,28 @@ export default function Login() {
         <h1>{t(tab === "reset" ? "Forgot Password" : "Sign In")}</h1>
         {tab !== "reset" && (
           <div className="detail-tabs mb-6">
-            {["email", "phone"].map((t) => (
+            {["email", "phone"].map((method) => (
               <button
-                key={t}
-                className={tab === t ? "active" : ""}
+                key={method}
+                className={tab === method ? "active" : ""}
                 onClick={() => {
-                  setTab(t);
+                  setTab(method);
                   setError("");
                 }}
               >
-                {t === "email" ? "Email & password" : "Phone number"}
+                {method === "email" ? t("Email & password") : t("Phone number")}
               </button>
             ))}
           </div>
         )}
         {error && (
           <p className="error mb-4" role="alert">
-            {error}
+            {t(error)}
           </p>
         )}
         {notice && (
           <p className="success mb-4" role="status">
-            {notice}
+            {t(notice)}
           </p>
         )}
         {tab === "phone" ? (
@@ -101,7 +101,7 @@ export default function Login() {
                 type="email"
                 autoComplete="username"
                 className="field"
-                placeholder="Email"
+                placeholder={t("Email")}
                 required
               />
             </label>
@@ -125,7 +125,7 @@ export default function Login() {
                   type="password"
                   autoComplete="current-password"
                   className="field"
-                  placeholder="Password"
+                  placeholder={t("Password")}
                   required
                 />
               </div>
@@ -149,16 +149,18 @@ export default function Login() {
                 className="text-brand"
                 onClick={() => setTab("email")}
               >
-                Back to sign in
+                {t("Back to sign in")}
               </button>
             )}
           </form>
         )}
         <p className="mt-6 text-xs text-muted">
-          Need an account? Contact your hospital administrator.
+          {t("Need an account? Contact your hospital administrator.")}
         </p>
       </section>
-      <p className="text-xs text-muted mt-8">Hospital Management System</p>
+      <p className="text-xs text-muted mt-8">
+        {t("Hospital Management System")}
+      </p>
     </main>
   );
 }

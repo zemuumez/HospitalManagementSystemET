@@ -100,12 +100,12 @@ export function Workspace({ children }: { children: React.ReactNode }) {
           className={`legacy-shell ${collapsed ? "is-collapsed" : ""} ${dark ? "legacy-dark" : ""}`}
         >
           <a className="sr-only focus:not-sr-only" href="#main-content">
-            Skip to content
+            {t("Skip to content")}
           </a>
           {mobile && (
             <button
               className="legacy-overlay"
-              aria-label="Close navigation"
+              aria-label={t("Close navigation")}
               onClick={() => setMobile(false)}
             />
           )}
@@ -116,7 +116,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                 <strong>ULSHMS</strong>
               </Link>
               <button
-                aria-label="Close menu"
+                aria-label={t("Close menu")}
                 onClick={() => setMobile(false)}
                 className="mobile-only"
               >
@@ -133,13 +133,13 @@ export function Workspace({ children }: { children: React.ReactNode }) {
             <div className="legacy-search">
               <Search size={16} />
               <input
-                aria-label="Search menu"
+                aria-label={t("Search menu")}
                 placeholder={t("Search")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <nav aria-label="Main navigation">
+            <nav aria-label={t("Main navigation")}>
               <Link
                 className={`legacy-nav ${path === "/dashboard" ? "active" : ""}`}
                 href="/dashboard"
@@ -193,12 +193,15 @@ export function Workspace({ children }: { children: React.ReactNode }) {
             <header className="legacy-header">
               <button
                 className="mobile-only"
-                aria-label="Open navigation"
+                aria-label={t("Open navigation")}
                 onClick={() => setMobile(true)}
               >
                 <Menu size={22} />
               </button>
-              <nav className="legacy-submenu" aria-label="Module navigation">
+              <nav
+                className="legacy-submenu"
+                aria-label={t("Module navigation")}
+              >
                 {group ? (
                   groupScreens(group)
                     .filter(
@@ -222,7 +225,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                     {path === "/dashboard"
                       ? t("Dashboard")
                       : path === "/account"
-                        ? "My Profile"
+                        ? t("My Profile")
                         : path.startsWith("/portal/")
                           ? t(
                               portalSections[path.split("/")[2]]?.title ||
@@ -242,7 +245,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                 </button>
                 <div className="relative">
                   <button
-                    aria-label="Notifications"
+                    aria-label={t("Notifications")}
                     onClick={() => setNotifications(!notifications)}
                   >
                     <Bell size={20} color="#6571ff" />
@@ -274,14 +277,16 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                         {t("Two-Factor Authentication")}
                       </Link>
                       <Link href="/">{t("Front Site")}</Link>
-                      <Link href="/communications">Live communications</Link>
+                      <Link href="/communications">
+                        {t("Live communications")}
+                      </Link>
                       <button
                         onClick={async () => {
                           await authClient.signOut();
                           window.location.assign("/login");
                         }}
                       >
-                        Sign Out
+                        {t("Sign Out")}
                       </button>
                     </div>
                   )}
@@ -291,14 +296,16 @@ export function Workspace({ children }: { children: React.ReactNode }) {
             <div className="preview-strip">
               <span>
                 {isLive
-                  ? "Connected hospital workspace"
-                  : "Frontend preview · Sample data · Changes stay in this browser tab"}
+                  ? t("Connected hospital workspace")
+                  : t(
+                      "Frontend preview · Sample data · Changes stay in this browser tab",
+                    )}
               </span>
               {!isLive && (
                 <label className="role-preview">
-                  View as{" "}
+                  {t("View as")}{" "}
                   <select
-                    aria-label="Preview role"
+                    aria-label={t("Preview role")}
                     value={role}
                     onChange={(e) => changeRole(e.target.value)}
                   >
@@ -312,22 +319,24 @@ export function Workspace({ children }: { children: React.ReactNode }) {
               )}
               <Link href={isLive ? "/patients" : "/live-patients"}>
                 {isLive
-                  ? "Return to frontend preview"
-                  : "Open live patient register"}
+                  ? t("Return to frontend preview")
+                  : t("Open live patient register")}
               </Link>
             </div>
             <main id="main-content" className="legacy-main">
               {error ? (
                 <p className="error" role="alert">
-                  {error}
+                  {t(error)}
                 </p>
               ) : (
                 children
               )}
             </main>
             <footer className="legacy-footer">
-              Copyright © {new Date().getFullYear()} ULSHMS. All rights
-              reserved.<span>Hospital Management System</span>
+              {t("Copyright ©")}
+              {new Date().getFullYear()}
+              {t("ULSHMS. All rights reserved.")}
+              <span>{t("Hospital Management System")}</span>
             </footer>
           </div>
         </div>

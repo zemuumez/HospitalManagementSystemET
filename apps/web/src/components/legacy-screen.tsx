@@ -42,7 +42,7 @@ function FieldInput({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const type = /password/.test(f.key) ? "password" : f.type;
   const customOptions = f.key.startsWith("custom_")
     ? (f.source || "")
@@ -54,7 +54,8 @@ function FieldInput({
     return (
       <fieldset>
         <legend className="label">
-          Gender: <b className="text-red-500">*</b>
+          {t("Gender:")}
+          <b className="text-red-500">*</b>
         </legend>
         <div className="flex gap-6 pt-3">
           {["Male", "Female"].map((g) => (
@@ -62,12 +63,12 @@ function FieldInput({
               <input
                 type="radio"
                 name="gender"
-                value={g}
+                value={t(g)}
                 checked={value === g}
                 onChange={() => onChange(g)}
                 required={f.required}
               />
-              {g}
+              {t(g)}
             </label>
           ))}
         </div>
@@ -76,7 +77,7 @@ function FieldInput({
   if (f.key === "status")
     return (
       <label>
-        <span className="label">Status:</span>
+        <span className="label">{t("Status:")}</span>
         <input
           className="legacy-checkbox"
           type="checkbox"
@@ -97,7 +98,9 @@ function FieldInput({
           onChange={(e) => onChange(e.target.value)}
           required={f.required}
         >
-          <option value="">Select {t(f.label)}</option>
+          <option value="">
+            {t("Select")} {t(f.label)}
+          </option>
           {(
             customOptions ||
             dependentOptions(f.key, values) ||
@@ -150,6 +153,15 @@ function FieldInput({
   );
 }
 
+function singularTitle(title: string) {
+  return /Status$/.test(title)
+    ? title
+    : title
+        .replace(/Diagnoses$/, "Diagnosis")
+        .replace(/ies$/, "y")
+        .replace(/(?<!si)s$/, "");
+}
+
 export function LegacyScreen({
   screen: s,
   scope = "",
@@ -157,7 +169,7 @@ export function LegacyScreen({
   screen: Screen;
   scope?: string;
 }) {
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const [rows, setRows] = useState<PreviewRow[]>(() => seedRows(s));
   const [ready, setReady] = useState(false);
   const [customFields, setCustomFields] = useState<Field[]>([]);
@@ -217,7 +229,8 @@ export function LegacyScreen({
   if (!ready)
     return (
       <div className="legacy-card" aria-busy="true">
-        Loading {s.title}…
+        {t("Loading")}
+        {s.title}…
       </div>
     );
   const columns = s.columns
@@ -396,13 +409,13 @@ export function LegacyScreen({
           </button>
           <button className="primary" hidden={readonly} onClick={newRow}>
             <Plus size={16} />
-            {t("New")} {t(s.title.replace(/ies$/, "y").replace(/s$/, ""))}
+            {t("New")} {t(singularTitle(s.title))}
           </button>
         </div>
       </div>
       {notice && (
         <p className="success mb-5" role="status">
-          {notice}
+          {t(notice)}
         </p>
       )}
       {s.id === "bed-status" ? (
@@ -468,11 +481,11 @@ export function LegacyScreen({
                   className="secondary"
                   onClick={() => setCalendar(!calendar)}
                 >
-                  {calendar ? "List View" : "Calendar View"}
+                  {t(calendar ? "List View" : "Calendar View")}
                 </button>
               )}
               <select
-                aria-label="Filter by status"
+                aria-label={t("Filter by status")}
                 className="field !w-auto"
                 value={filter}
                 onChange={(e) => {
@@ -500,7 +513,7 @@ export function LegacyScreen({
                 <div className="flex gap-2">
                   <button
                     className="secondary"
-                    aria-label="Previous month"
+                    aria-label={t("Previous month")}
                     onClick={() => {
                       const d = new Date(year, month - 1);
                       setMonth(d.getMonth());
@@ -511,7 +524,7 @@ export function LegacyScreen({
                   </button>
                   <button
                     className="secondary"
-                    aria-label="Next month"
+                    aria-label={t("Next month")}
                     onClick={() => {
                       const d = new Date(year, month + 1);
                       setMonth(d.getMonth());
@@ -524,7 +537,7 @@ export function LegacyScreen({
               </div>
               <div className="calendar-grid">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                  <strong key={d}>{d}</strong>
+                  <strong key={d}>{t(d)}</strong>
                 ))}
                 {Array.from(
                   { length: new Date(year, month, 1).getDay() },
@@ -547,7 +560,7 @@ export function LegacyScreen({
                         <small>
                           {people[i % 6]}
                           <br />
-                          09:00 · Consultation
+                          {t("09:00 · Consultation")}
                         </small>
                       )}
                     </button>
@@ -586,7 +599,7 @@ export function LegacyScreen({
                         <td key={c}>
                           {/status/i.test(c) ? (
                             <button
-                              aria-label={`Toggle status ${r.id}`}
+                              aria-label={`${t("Toggle status")} ${r.id}`}
                               className={`status-switch ${r.status === "Active" ? "on" : ""}`}
                               onClick={() =>
                                 setRows((old) =>
@@ -620,14 +633,14 @@ export function LegacyScreen({
                                 </span>
                               )}
                               <span>
-                                {r.values[c] || r.id}
+                                {formatValue(r.values[c] || r.id)}
                                 {s.id === "patients" && (
                                   <small>{r.values.email}</small>
                                 )}
                               </span>
                             </button>
                           ) : (
-                            r.values[c] || "—"
+                            formatValue(r.values[c] || "—")
                           )}
                         </td>
                       ))}
@@ -643,8 +656,8 @@ export function LegacyScreen({
                       <td>
                         <div className="row-actions">
                           <button
-                            title="View"
-                            aria-label={`View ${r.id}`}
+                            title={t("View")}
+                            aria-label={`${t("View")} ${r.id}`}
                             onClick={() => {
                               setView(r);
                               setTab("Overview");
@@ -653,8 +666,8 @@ export function LegacyScreen({
                             <Eye size={17} />
                           </button>
                           <button
-                            title="Edit"
-                            aria-label={`Edit ${r.id}`}
+                            title={t("Edit")}
+                            aria-label={`${t("Edit")} ${r.id}`}
                             onClick={() =>
                               setEditing({ ...r, values: { ...r.values } })
                             }
@@ -662,8 +675,8 @@ export function LegacyScreen({
                             <Pencil size={16} />
                           </button>
                           <button
-                            title="Delete"
-                            aria-label={`Delete ${r.id}`}
+                            title={t("Delete")}
+                            aria-label={`${t("Delete")} ${r.id}`}
                             onClick={() => setDeleting(r)}
                           >
                             <Trash2 size={16} />
@@ -675,7 +688,7 @@ export function LegacyScreen({
                   {!shown.length && (
                     <tr>
                       <td colSpan={columns.length + 2} className="empty-state">
-                        No matching records found
+                        {t("No matching records found")}
                       </td>
                     </tr>
                   )}
@@ -683,14 +696,16 @@ export function LegacyScreen({
               </table>
               <div className="table-footer">
                 <span>
-                  Showing {filtered.length ? (current - 1) * size + 1 : 0} to{" "}
-                  {Math.min(current * size, filtered.length)} of{" "}
-                  {filtered.length} results
+                  {t("Showing")}
+                  {filtered.length ? (current - 1) * size + 1 : 0}
+                  {t("to")} {Math.min(current * size, filtered.length)}
+                  {t("of")} {filtered.length}
+                  {t("results")}
                 </span>
                 <div className="flex items-center gap-3">
                   <select
                     className="field !w-auto"
-                    aria-label="Rows per page"
+                    aria-label={t("Rows per page")}
                     value={size}
                     onChange={(e) => {
                       setSize(Number(e.target.value));
@@ -702,7 +717,7 @@ export function LegacyScreen({
                     ))}
                   </select>
                   <button
-                    aria-label="Previous page"
+                    aria-label={t("Previous page")}
                     disabled={current === 1}
                     onClick={() => setPage(current - 1)}
                   >
@@ -710,7 +725,7 @@ export function LegacyScreen({
                   </button>
                   <span className="page-number">{current}</span>
                   <button
-                    aria-label="Next page"
+                    aria-label={t("Next page")}
                     disabled={current === pages}
                     onClick={() => setPage(current + 1)}
                   >
@@ -730,12 +745,12 @@ export function LegacyScreen({
           <form onSubmit={save}>
             <div className="modal-heading">
               <h2 id="record-form-title">
-                {rows.some((r) => r.id === editing.id) ? "Edit" : "New"}{" "}
-                {t(s.title.replace(/s$/, ""))}
+                {rows.some((r) => r.id === editing.id) ? t("Edit") : t("New")}{" "}
+                {t(singularTitle(s.title))}
               </h2>
               <button
                 type="button"
-                aria-label="Close form"
+                aria-label={t("Close form")}
                 onClick={() => setEditing(null)}
               >
                 <X size={20} />
@@ -744,11 +759,11 @@ export function LegacyScreen({
             <div className="modal-content">
               {formError && (
                 <p className="error mb-4" role="alert">
-                  {formError}
+                  {t(formError)}
                 </p>
               )}
               <p className="form-preview-note">
-                Preview form · Use sample information only
+                {t("Preview form · Use sample information only")}
               </p>
               <div className="legacy-form">
                 {s.fields.map((f) => (
@@ -803,8 +818,14 @@ export function LegacyScreen({
           onClose={() => setView(null)}
         >
           <div className="modal-heading">
-            <h2 id="record-detail-title">{s.title} Details</h2>
-            <button aria-label="Close details" onClick={() => setView(null)}>
+            <h2 id="record-detail-title">
+              {s.title}
+              {t("Details")}
+            </h2>
+            <button
+              aria-label={t("Close details")}
+              onClick={() => setView(null)}
+            >
               <X size={20} />
             </button>
           </div>
@@ -838,7 +859,7 @@ export function LegacyScreen({
                   .map((f) => (
                     <div key={f.key}>
                       <dt>{t(f.label)}</dt>
-                      <dd>{view.values[f.key] || "—"}</dd>
+                      <dd>{formatValue(view.values[f.key] || "—")}</dd>
                     </div>
                   ))}
               </dl>
@@ -884,10 +905,12 @@ export function LegacyScreen({
       {deleting && (
         <Modal titleId="delete-title" onClose={() => setDeleting(null)}>
           <div className="modal-heading">
-            <h2 id="delete-title">Delete preview record?</h2>
+            <h2 id="delete-title">{t("Delete preview record?")}</h2>
           </div>
           <div className="modal-content">
-            Remove {deleting.id} from this preview?
+            {t("Remove")}
+            {deleting.id}
+            {t("from this preview?")}
           </div>
           <div className="modal-footer">
             <button
@@ -942,6 +965,8 @@ function FullPageForm({
   );
 }
 function PatientCard({ values }: { values: Record<string, string> }) {
+  const { t } = useLanguage();
+
   return (
     <div className="patient-card-preview">
       <header
@@ -951,7 +976,7 @@ function PatientCard({ values }: { values: Record<string, string> }) {
             : "#6571ff",
         }}
       >
-        ULSHMS <span>Patient Identification Card</span>
+        ULSHMS <span>{t("Patient Identification Card")}</span>
       </header>
       <div>
         <span className="avatar large">A</span>
@@ -960,10 +985,10 @@ function PatientCard({ values }: { values: Record<string, string> }) {
           <p>Patient ID: DEMO-0001</p>
           {values.show_email !== "No" && <p>sample1@example.invalid</p>}
           {values.show_phone !== "No" && <p>+254700000100</p>}
-          {values.show_blood_group !== "No" && <p>Blood Group: A+</p>}
+          {values.show_blood_group !== "No" && <p>{t("Blood Group: A+")}</p>}
         </section>
       </div>
-      <footer>Sample card · Not valid for patient identification</footer>
+      <footer>{t("Sample card · Not valid for patient identification")}</footer>
     </div>
   );
 }
@@ -980,6 +1005,8 @@ function LineItems({
   onChange?: (v: string) => void;
   readOnly?: boolean;
 }) {
+  const { t } = useLanguage();
+
   type Item = {
     id: number;
     name: string;
@@ -1013,13 +1040,13 @@ function LineItems({
     setItems(items.map((i) => (i.id === id ? { ...i, [key]: value } : i)));
   return (
     <section className="line-items">
-      <h3>{prescription ? "Medicines" : "Items"}</h3>
+      <h3>{prescription ? t("Medicines") : t("Items")}</h3>
       {items.map((item, index) => (
         <div key={item.id}>
           <div className="line-item">
             <label>
               <span className="label">
-                {prescription || purchase ? "Medicine" : "Item"}
+                {prescription || purchase ? t("Medicine") : t("Item")}
               </span>
               <input
                 className="field"
@@ -1029,7 +1056,7 @@ function LineItems({
               />
             </label>
             <label>
-              <span className="label">Quantity</span>
+              <span className="label">{t("Quantity")}</span>
               <input
                 className="field"
                 disabled={readOnly}
@@ -1040,7 +1067,9 @@ function LineItems({
               />
             </label>
             <label>
-              <span className="label">{prescription ? "Days" : "Rate"}</span>
+              <span className="label">
+                {prescription ? t("Days") : t("Rate")}
+              </span>
               <input
                 className="field"
                 disabled={readOnly}
@@ -1065,7 +1094,7 @@ function LineItems({
           {purchase && (
             <div className="legacy-form mb-5">
               <label>
-                <span className="label">Lot Number</span>
+                <span className="label">{t("Lot Number")}</span>
                 <input
                   className="field"
                   disabled={readOnly}
@@ -1074,7 +1103,7 @@ function LineItems({
                 />
               </label>
               <label>
-                <span className="label">Expiry Date</span>
+                <span className="label">{t("Expiry Date")}</span>
                 <input
                   className="field"
                   disabled={readOnly}
@@ -1088,21 +1117,23 @@ function LineItems({
           {prescription && (
             <div className="legacy-form mb-5">
               <label>
-                <span className="label">Dose Interval</span>
+                <span className="label">{t("Dose Interval")}</span>
                 <select
                   className="field"
                   disabled={readOnly}
                   value={item.frequency || ""}
                   onChange={(e) => change(item.id, "frequency", e.target.value)}
                 >
-                  <option value="">Select interval</option>
-                  <option>Once daily</option>
-                  <option>Twice daily</option>
-                  <option>Three times daily</option>
+                  <option value="">{t("Select interval")}</option>
+                  <option value="Once daily">{t("Once daily")}</option>
+                  <option value="Twice daily">{t("Twice daily")}</option>
+                  <option value="Three times daily">
+                    {t("Three times daily")}
+                  </option>
                 </select>
               </label>
               <label>
-                <span className="label">Instructions</span>
+                <span className="label">{t("Instructions")}</span>
                 <input
                   className="field"
                   disabled={readOnly}
@@ -1125,13 +1156,13 @@ function LineItems({
           }
         >
           <Plus size={16} />
-          Add Item
+          {t("Add Item")}
         </button>
       )}
       {!prescription && (
         <div className="invoice-totals">
           <label>
-            Discount{" "}
+            {t("Discount")}{" "}
             <input
               className="field"
               disabled={readOnly}
@@ -1142,7 +1173,7 @@ function LineItems({
             />
           </label>
           <label>
-            Tax (%){" "}
+            {t("Tax (%)")}{" "}
             <input
               className="field"
               disabled={readOnly}
@@ -1152,7 +1183,10 @@ function LineItems({
               onChange={(e) => setTax(Number(e.target.value))}
             />
           </label>
-          <strong>Total: {total.toFixed(2)}</strong>
+          <strong>
+            {t("Total:")}
+            {total.toFixed(2)}
+          </strong>
         </div>
       )}
     </section>
@@ -1204,7 +1238,7 @@ function Discharge({
   patient: string;
   admissionDate?: string;
 }) {
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const [saved, setSaved] = useState(false);
   const [summary, setSummary] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -1236,7 +1270,7 @@ function Discharge({
           "Follow Up",
         ].map((label) => (
           <label key={label}>
-            <span className="label">{label}</span>
+            <span className="label">{t(label)}</span>
             {label === "Discharge Date" ? (
               <input
                 className="field"
@@ -1256,10 +1290,12 @@ function Discharge({
                   setSummary({ ...summary, [label]: e.target.value })
                 }
               >
-                <option>Recovered</option>
-                <option>Referred</option>
-                <option>Discharged on request</option>
-                <option>Death</option>
+                <option value="Recovered">{t("Recovered")}</option>
+                <option value="Referred">{t("Referred")}</option>
+                <option value="Discharged on request">
+                  {t("Discharged on request")}
+                </option>
+                <option value="Death">{t("Death")}</option>
               </select>
             ) : (
               <textarea
@@ -1274,36 +1310,37 @@ function Discharge({
           </label>
         ))}
       </div>
-      <button className="primary mt-5">Save Discharge Summary</button>
+      <button className="primary mt-5">{t("Save Discharge Summary")}</button>
       {saved && (
         <p className="success mt-4" role="status">
-          Sample discharge summary saved for {patient}.
+          {t("Sample discharge summary saved for")}
+          {patient}.
         </p>
       )}
     </form>
   );
 }
 function BedBoard({ onSelect }: { onSelect: (r: PreviewRow) => void }) {
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const [filter, setFilter] = useState("All");
   return (
     <div className="legacy-card">
       <div className="page-heading">
-        <h2>Bed Status</h2>
+        <h2>{t("Bed Status")}</h2>
         <select
           className="field !w-auto"
-          aria-label="Bed availability"
+          aria-label={t("Bed availability")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         >
           <option value="All">{t("All")}</option>
-          <option>Available</option>
-          <option>Occupied</option>
+          <option value="Available">{t("Available")}</option>
+          <option value="Occupied">{t("Occupied")}</option>
         </select>
       </div>
       {["General Ward", "Private Ward", "ICU"].map((ward, j) => (
         <section className="mb-8" key={ward}>
-          <h3>{ward}</h3>
+          <h3>{t(ward)}</h3>
           <div className="bed-grid">
             {Array.from({ length: 8 }, (_, i) => ({
               id: `${j + 1}-${i + 1}`,
@@ -1333,7 +1370,7 @@ function BedBoard({ onSelect }: { onSelect: (r: PreviewRow) => void }) {
                 >
                   <BedDouble size={30} />
                   <strong>{b.id}</strong>
-                  <small>{b.occupied ? "Occupied" : "Available"}</small>
+                  <small>{b.occupied ? t("Occupied") : t("Available")}</small>
                 </button>
               ))}
           </div>
@@ -1343,7 +1380,7 @@ function BedBoard({ onSelect }: { onSelect: (r: PreviewRow) => void }) {
   );
 }
 function Odontogram() {
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const [selected, setSelected] = useState(1);
   const [conditions, setConditions] = useState<Record<number, string>>({});
   const [saved, setSaved] = useState(false);
@@ -1368,7 +1405,7 @@ function Odontogram() {
     <div className="legacy-card">
       <div className="legacy-form">
         <label>
-          <span className="label">Patient:</span>
+          <span className="label">{t("Patient:")}</span>
           <select className="field">
             {people.map((p) => (
               <option key={p}>{p}</option>
@@ -1376,7 +1413,7 @@ function Odontogram() {
           </select>
         </label>
         <label>
-          <span className="label">Tooth:</span>
+          <span className="label">{t("Tooth:")}</span>
           <select
             className="field"
             value={selected}
@@ -1410,8 +1447,9 @@ function Odontogram() {
         ))}
       </div>
       <p className="form-preview-note">
-        Select a tooth, then choose its marking. Original chart and marking
-        palette.
+        {t(
+          "Select a tooth, then choose its marking. Original chart and marking palette.",
+        )}
       </p>
       <div
         className="original-odontogram"
@@ -1443,19 +1481,19 @@ function Odontogram() {
             setSaved(false);
           }}
         >
-          Reset
+          {t("Reset")}
         </button>
       </div>
       {saved && (
         <p className="success mt-4" role="status">
-          Sample dental chart saved.
+          {t("Sample dental chart saved.")}
         </p>
       )}
     </div>
   );
 }
 function Schedule() {
-  const { t } = useLanguage();
+  const { t, formatValue } = useLanguage();
   const [saved, setSaved] = useState(false);
   return (
     <form
@@ -1465,7 +1503,7 @@ function Schedule() {
         setSaved(true);
       }}
     >
-      <h2>Hospital Schedule</h2>
+      <h2>{t("Hospital Schedule")}</h2>
       {[
         "Monday",
         "Tuesday",
@@ -1485,7 +1523,7 @@ function Schedule() {
             type="time"
             defaultValue="08:00"
           />
-          <span>to</span>
+          <span>{t("to")}</span>
           <input
             aria-label={`${d} closing time`}
             className="field"
@@ -1497,7 +1535,7 @@ function Schedule() {
       <button className="primary mt-5">{t("Save")}</button>
       {saved && (
         <p role="status" className="success mt-4">
-          Preview schedule saved.
+          {t("Preview schedule saved.")}
         </p>
       )}
     </form>
