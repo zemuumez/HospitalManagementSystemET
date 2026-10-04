@@ -27,6 +27,7 @@ type Server struct {
 	CMSSettings    application.CMSSettingsService
 	FrontOffice    application.FrontOfficeService
 	LiveConsultation application.LiveConsultationService
+	PharmacyBloodBank application.PharmacyBloodBankService
 	App            application.Hospital
 	Scheduling     application.Scheduling
 	Clinical       application.Clinical
@@ -172,6 +173,9 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.liveConsultations(w, r, a) {
+			return
+		}
+		if s.pharmacyBloodBank(w, r, a) {
 			return
 		}
 		if s.audit(w, r, a) {

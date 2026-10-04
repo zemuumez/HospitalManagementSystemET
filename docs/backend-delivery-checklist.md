@@ -227,13 +227,13 @@ Backend-first progress:
 
 ### G. Pharmacy, blood bank and inventory
 
-- [ ] Medicines, categories, brands, units, suppliers, purchases and batches/expiry.
+- [x] Medicines, categories, brands, units, suppliers, purchases and batches/expiry (migrations 006, 034; [contract](backend-pharmacy-blood-bank-contract.md)).
 - [x] Pharmacy append-only stock movements; transactional no-negative-stock checks, commit-time balance reconciliation and concurrent dispensing tests (migration 006). General inventory is tracked separately below.
 - [x] Signed medication-order-to-dispensation linkage, partial dispensing limits across batches, retained cancellation and bounded quarantined returns.
-- [ ] Full prescription document linkage, return assessment, recalls and replacement/refill workflows.
+- [x] Full prescription document linkage, return assessment, recalls and replacement/refill workflows (migration 034).
 - [ ] Medicine bills, payments, discounts and reversals linked to the financial ledger.
-- [ ] Blood groups, donors, donations, components, screening, inventory and issued units.
-- [ ] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels.
+- [x] Blood groups, donors, donations, components, screening, inventory and issued units (migration 034).
+- [x] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels (migration 034).
 - [x] General inventory category/item APIs, exact-unit receipts, issues/returns/write-offs, low-stock query and ledger reconciliation (migration 010; concurrency/authorization tests).
 - [ ] Scheduled low-stock notifications, stock-count approval, department/date/attachment parity and inventory finance integration.
 

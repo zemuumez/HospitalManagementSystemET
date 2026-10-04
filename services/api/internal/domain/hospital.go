@@ -91,6 +91,14 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "doctor"
 	case "live_meetings.read":
 		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "receptionist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
+	case "blood_bank.manage":
+		return a.Role == "admin" || a.Role == "lab_technician" || a.Role == "doctor"
+	case "blood_bank.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "lab_technician" || a.Role == "pharmacist" || a.Role == "receptionist" || a.Role == "patient"
+	case "prescriptions.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "prescriptions.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "patient"
 	case "appointments.read", "appointments.book":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "patient"
 	case "staff.manage":
@@ -115,7 +123,8 @@ func (a Actor) Permissions() []string {
 		"operations.read", "settings.manage", "settings.read", "enquiries.read", "enquiries.manage",
 		"complaints.read", "complaints.manage", "complaints.create", "notices.read", "notices.manage",
 		"front_office.manage", "front_office.read", "live_consultations.manage", "live_consultations.read",
-		"live_meetings.manage", "live_meetings.read",
+		"live_meetings.manage", "live_meetings.read", "blood_bank.manage", "blood_bank.read",
+		"prescriptions.manage", "prescriptions.read",
 	} {
 		if a.Can(p) {
 			result = append(result, p)
