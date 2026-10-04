@@ -23,3 +23,5 @@ Firebase CLI 15.32.1 is a pinned development dependency. Its scoped overrides us
 ## Authentication/API isolation
 
 `npm run test:integration` now uses the disposable-schema wrapper too. It starts an isolated Go API, worker and copied Next app, forces capture SMS and loopback Mailpit SMTP, and drops only its generated schema after stopping those processes. It no longer deletes individual audit rows or real development fixtures. This preserves migration 019 audit retention without weakening triggers for test cleanup. Local Mailpit must be running on ports 1025/8025. CI supplies it as a service container and no longer starts redundant shared web/API/worker processes.
+
+`npm run test:invitations` uses the same isolated worker/Mailpit harness to verify invitation issuance, acceptance, expiry, renewal, revocation and listing, including simultaneous acceptance and email ownership. CI runs this after password recovery.

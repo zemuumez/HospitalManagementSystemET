@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { pool } from "./db";
 import { sendAuthMail } from "./mail";
 import { firebasePhone } from "./firebase-plugin";
+import { staffInvitations } from "./invitations";
 import { hospitalMfa } from "./mfa";
 
 const baseURL = process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3000";
@@ -66,5 +67,5 @@ export const auth = betterAuth({
       },
     },
   },
-  plugins: [firebasePhone(), hospitalMfa()],
+  plugins: [firebasePhone(), hospitalMfa(), staffInvitations()],
 });

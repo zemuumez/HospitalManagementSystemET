@@ -146,7 +146,8 @@ Backend-first progress:
 
 - [x] Better Auth credentials/sessions and active database roles.
 - [x] Administrator provisioning and disablement.
-- [ ] Invitation acceptance with expiring single-use links, first-login password policy and identity verification.
+- [x] Administrator invitations, durable email delivery, 24-hour single-use acceptance, verified email, initial password policy, renewal/revocation and private paginated invitation list (migration 023; Mailpit/Better Auth/Go integration tests).
+- [ ] Invitation acceptance/admin screens and invitation-specific delivery troubleshooting UI.
 - [x] Administrator staff demographic/qualification profile edits with optimistic concurrency and retained revisions; audited role changes revoke sessions and reject active clinical/appointment/access assignments (migration 020).
 - [ ] Explicit care-work reassignment, expanded deprovisioning workflow and staff revision review UI.
 - [x] Opt-in Better Auth authenticator MFA backend: verified enrollment, email/Firebase challenges, single-use recovery, lockout, audited enable/disable and prior-session revocation (migration 018; real Auth-emulator suite).
@@ -321,8 +322,9 @@ Backend-first progress:
 - [ ] Cross-patient and cross-doctor ID substitution; inactive accounts; role changes mid-session.
 - [ ] Missing, malformed, extra, oversized, Unicode, boundary and injection-like inputs.
 - [ ] CSRF, XSS, upload traversal, malicious filenames, download authorization and sensitive logging checks.
-- [ ] Firebase success-path/emulator tests and recovery/phone-binding races.
-- [ ] Password reset completion, expiry, reuse, session revocation and abuse throttling.
+- [x] Real Firebase Auth-emulator OTP/link/sign-in, token revocation, replay and concurrent phone linking.
+- [ ] Audited phone-change/recovery workflow and its race tests.
+- [x] Password reset completion, expiry, reuse, session revocation and abuse throttling (isolated Mailpit recovery suite).
 - [ ] Concurrent booking, bed allocation, stock depletion, invoice posting, refunds and duplicate webhooks.
 - [ ] Retry after transport loss; same key/same data; same key/different data; process crash during commit/delivery.
 - [ ] Database migration from a clean schema and upgrade from the prior committed schema; rollback/recovery procedure.

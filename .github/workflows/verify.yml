@@ -83,3 +83,5 @@ jobs:
         run: npm run test:firebase
       - name: Password recovery integration
         run: npm run test:recovery
+      - name: Staff invitation integration
+        run: npm run test:invitations

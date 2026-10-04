@@ -17,6 +17,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.cwd();
 const firebaseMode = process.argv.includes("--firebase");
+const invitationsMode = process.argv.includes("--invitations");
 const integrationMode = process.argv.includes("--integration");
 const recoveryMode = process.argv.includes("--recovery");
 const dsn = new URL(process.env.DATABASE_URL);
@@ -167,7 +168,7 @@ try {
       emulator,
     );
   }
-  if (recoveryMode || integrationMode) {
+  if (recoveryMode || integrationMode || invitationsMode) {
     Object.assign(env, {
       SMTP_HOST: "127.0.0.1",
       SMTP_PORT: "1025",
@@ -193,7 +194,7 @@ try {
     windowsHide: true,
   });
   const api = start(binary, [], env, root, "api");
-  if (integrationMode) {
+  if (integrationMode || invitationsMode) {
     const workerBinary = resolve(
       root,
       `services/api/bin/qa-worker${process.platform === "win32" ? ".exe" : ""}`,
@@ -228,13 +229,15 @@ try {
     const test = spawn(
       process.execPath,
       [
-        integrationMode
-          ? "scripts/integration.mjs"
-          : firebaseMode
-            ? "scripts/verify-firebase.mjs"
-            : recoveryMode
-              ? "scripts/verify-recovery.mjs"
-              : "scripts/verify-connected.mjs",
+        invitationsMode
+          ? "scripts/verify-invitations.mjs"
+          : integrationMode
+            ? "scripts/integration.mjs"
+            : firebaseMode
+              ? "scripts/verify-firebase.mjs"
+              : recoveryMode
+                ? "scripts/verify-recovery.mjs"
+                : "scripts/verify-connected.mjs",
       ],
       {
         cwd: root,

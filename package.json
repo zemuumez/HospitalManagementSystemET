@@ -16,7 +16,8 @@
     "admin:create": "npm run admin:create --workspace @hms/web",
     "test:frontend": "node scripts/verify-frontend.mjs",
     "test:firebase": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --firebase",
-    "test:recovery": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --recovery"
+    "test:recovery": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --recovery",
+    "test:invitations": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --invitations"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",
