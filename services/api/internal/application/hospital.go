@@ -7,6 +7,10 @@ import (
 )
 
 type Repository interface {
+	PatientProfile(context.Context, domain.Actor, string) (domain.PatientProfile, error)
+	UpdatePatientProfile(context.Context, domain.Actor, string, domain.PatientProfileInput) (domain.PatientProfile, error)
+	PatientRevisions(context.Context, domain.Actor, string, int) ([]domain.ProfileRevision, error)
+
 	LinkPatient(context.Context, domain.Actor, string, domain.PatientAccess) error
 	Patients(context.Context, domain.Actor, string, int) ([]domain.Patient, error)
 	RegisterPatient(context.Context, domain.Actor, domain.PatientInput) (domain.Patient, error)

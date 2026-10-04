@@ -138,3 +138,5 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 ## Closure rule
 
 A row closes only after source contracts, migrations, service rules, authorization, original UI integration, errors/empty/loading states, localization, exports/files when applicable and relevant unit/database/API/browser tests are verified. Update this table after each committed implementation step.
+
+Patient profile detail/edit/revision backend is now verified (migration 008); the current frontend still exposes essential registration/access linkage. Full source-field and profile UI parity remain open.

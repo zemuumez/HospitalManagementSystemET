@@ -105,7 +105,7 @@ Manual payment forms record completed money movements; they do not send bank tra
 | Area | Current persistent API | Connected frontend | Remaining integration |
 |---|---|---|---|
 | Identity | Better Auth `/api/auth/*`; administrator `/api/staff` | Login, reset, account, Users | Invitations, MFA, recovery, richer staff profiles |
-| Patients | `/v1/patients`, `/v1/patients/{id}` access linking | Patients / live register | Full demographics, detail/edit, files, care team |
+| Patients | Registration/list, scoped detail, profile PATCH/revisions, administrator access linking | Essential register and access linking only | Profile UI, remaining fields/files, care team |
 | Scheduling | `/v1/doctors`, `/v1/slots`, `/v1/appointments`, appointment PATCH | Schedules, Appointments, portal appointments | Calendars, queues, absence UI, fees, reminders |
 | Clinical | `/v1/beds`, `/v1/cases`, `/v1/encounters` | Beds, Cases, OPD/IPD and portal lists | Original submodules and fields |
 | Notes/discharge | Encounter `/notes` and `/discharge` | Encounter details | Attachments, amendments, templates, print/PDF |
@@ -160,8 +160,9 @@ Backend-first progress:
 ### C. Patient and staff master data
 
 - [x] Patient creation, generated MRN, scoped list/search and explicit portal linkage.
-- [ ] Full patient demographics: email, sex/gender, blood group, addresses, contact details, status and relevant original fields.
-- [ ] Patient detail/edit with optimistic concurrency and audit history; no destructive clinical-record deletion.
+- [x] Patient demographic profile API: contact email, gender, blood group, address/contact details, administrative status and emergency contact (migration 008; [contract](backend-patient-profile-contract.md)).
+- [ ] Remaining patient source fields, custom fields/photos, optional/unknown DOB policy and complete original form parity.
+- [x] Patient detail/edit with optimistic concurrency and retained before/after audit history; no patient-delete API, retained clinical/revision references prevent destructive record deletion.
 - [ ] Duplicate detection, merge/correction policy and imported identifier preservation.
 - [ ] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management.
 - [ ] Nurse, receptionist, accountant, pharmacist, case-manager and lab-technician profile parity.
@@ -360,3 +361,9 @@ See [pharmacy contracts, source differences and remaining work](backend-pharmacy
 Migration 007 captures sale prices when medicine is dispensed and links a source movement to one issued invoice. Quantity/patient/price are server-derived; only admin/accountant may bill. Concurrent requests cannot bill the same source twice. Return credits, full medicine bills and other domain charge integrations remain open.
 
 Verification: isolated PostgreSQL and HTTP tests, Go vet/build, the live authentication/scheduling/message integration suite and the existing synthetic Chrome connected-workflow regression passed. Local migrations 005-007 applied and the API restarted with the new build. No new Section 4 frontend integration was undertaken.
+
+### Backend-first increment: patient profiles and retained edit history
+
+Migration 008 adds typed demographic/contact fields, default profile initialization and retained revisions. Detail reads enforce patient/doctor scope; only admin/reception edit; only admin reads revision snapshots. Version checks prevent lost updates, and changes require a reason. Existing authentication identity fields stay separate from demographic contact details. Go unit/database/HTTP tests and vet passed; frontend profile integration is deferred. Full field parity, uploads, duplicate resolution and care-team workflows remain open.
+
+Migration 008 was applied to the existing local database, the API restarted with `api-profiles.exe`, and the live integration regression passed again. The earlier Chrome regression in this session ran after migrations 005-007; it was not rerun after 008 because no frontend workflow changed.

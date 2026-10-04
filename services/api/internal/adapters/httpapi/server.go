@@ -117,6 +117,9 @@ func (s Server) Handler() http.Handler {
 			write(w, 401, map[string]string{"error": "Sign in to continue"})
 			return
 		}
+		if s.patientProfile(w, r, a) {
+			return
+		}
 		if s.pharmacy(w, r, a) {
 			return
 		}
