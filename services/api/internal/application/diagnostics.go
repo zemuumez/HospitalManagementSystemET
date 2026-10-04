@@ -7,6 +7,7 @@ import (
 )
 
 type DiagnosticsRepository interface {
+	DiagnosticSamples(context.Context, domain.Actor, string, int) ([]domain.DiagnosticSample, error)
 	ReviseDiagnosticTest(context.Context, domain.Actor, string, domain.DiagnosticRevisionInput) (domain.DiagnosticTest, error)
 	ArchiveDiagnosticTest(context.Context, domain.Actor, string, domain.DiagnosticArchiveInput) error
 	DiagnosticRevisions(context.Context, string, int) ([]domain.DiagnosticTest, error)
@@ -70,7 +71,7 @@ func (d Diagnostics) Transition(ctx context.Context, a domain.Actor, id string, 
 	if e := i.Validate(); e != nil {
 		return domain.DiagnosticOrder{}, e
 	}
-	if (i.Action == "collect" || i.Action == "process") != (a.Role == "lab_technician") {
+	if (i.Action == "collect" || i.Action == "process" || i.Action == "recollect" || i.Action == "reject_sample") != (a.Role == "lab_technician") {
 		return domain.DiagnosticOrder{}, domain.ErrForbidden
 	}
 	return d.Store.DiagnosticTransition(ctx, a, id, i)
@@ -130,4 +131,14 @@ func (d Diagnostics) TestRevisions(ctx context.Context, a domain.Actor, id strin
 		return nil, domain.ErrValidation
 	}
 	return d.Store.DiagnosticRevisions(ctx, id, page)
+}
+
+func (d Diagnostics) Samples(ctx context.Context, a domain.Actor, id string, page int) ([]domain.DiagnosticSample, error) {
+	if a.Role != "admin" && a.Role != "lab_technician" && a.Role != "doctor" {
+		return nil, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) || !pageOK(page) {
+		return nil, domain.ErrValidation
+	}
+	return d.Store.DiagnosticSamples(ctx, a, id, page)
 }

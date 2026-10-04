@@ -218,7 +218,8 @@ Backend-first progress:
 - [x] Diagnostic catalog revision/archive with retained parameters/tariffs, linked revision series, active-only ordering and concurrent revision protection (migration 024).
 - [ ] Full category/unit master CRUD, remaining original fields and charge categories.
 - [x] Encounter-linked orders, unique sample/accession references, collection/processing, doctor sign-off/release and retained result amendments; concurrency/privacy tests.
-- [ ] Sample rejection/recollection, complete original report parity and reviewer specialty/team policy.
+- [x] Lab sample rejection/recollection with required rejection reasons, immutable collection/rejection history, globally retained sample references and no replacement after results exist (migration 026).
+- [ ] Complete original report parity and reviewer specialty/team policy.
 - [ ] Authorized report files and patient portal report release.
 - [ ] Diagnosis templates/tests/results and linkage to cases/encounters.
 - [ ] Vaccination catalog, administered doses, lot/expiry records and schedules.

@@ -209,6 +209,63 @@ func testDiagnostics(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			t.Fatalf("diagnostic HTTP wanted %d got %d: %s", tc.want, w.Code, w.Body.String())
 		}
 	}
+
+	sampleOrder, e := d.Order(ctx, doctor, input, "diagnostic-sample-order")
+	if e != nil {
+		t.Fatal(e)
+	}
+	sampleOrder, e = d.Transition(ctx, lab, sampleOrder.ID, domain.DiagnosticAction{Action: "collect", Version: 1, SampleReference: "RECOLLECT-1"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = d.Transition(ctx, doctor, sampleOrder.ID, domain.DiagnosticAction{Action: "reject_sample", Version: 2, Reason: "Invalid sample"}); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal(e)
+	}
+	sampleOrder, e = d.Transition(ctx, lab, sampleOrder.ID, domain.DiagnosticAction{Action: "reject_sample", Version: 2, Reason: "Container labeling mismatch"})
+	if e != nil || sampleOrder.Status != "sample_rejected" {
+		t.Fatal(sampleOrder, e)
+	}
+	if _, e = d.Transition(ctx, lab, sampleOrder.ID, domain.DiagnosticAction{Action: "process", Version: 3}); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("rejected sample processed", e)
+	}
+	if _, e = d.Transition(ctx, lab, sampleOrder.ID, domain.DiagnosticAction{Action: "recollect", Version: 3, SampleReference: "RECOLLECT-1"}); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("old sample identifier reused", e)
+	}
+	for n := 0; n < 2; n++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			_, errs[index] = d.Transition(ctx, lab, sampleOrder.ID, domain.DiagnosticAction{Action: "recollect", Version: 3, SampleReference: "RECOLLECT-2"})
+		}(n)
+	}
+	wg.Wait()
+	if !((errs[0] == nil && errors.Is(errs[1], domain.ErrStale)) || (errs[1] == nil && errors.Is(errs[0], domain.ErrStale))) {
+		t.Fatal("recollection race", errs)
+	}
+	samples, e := d.Samples(ctx, doctor, sampleOrder.ID, 1)
+	if e != nil || len(samples) != 2 || samples[1].RejectionReason != "Container labeling mismatch" || samples[1].RejectedAt == nil || samples[0].Reference != "RECOLLECT-2" || samples[0].RejectedAt != nil {
+		t.Fatal(samples, e)
+	}
+	if _, e = d.Samples(ctx, other, sampleOrder.ID, 1); !errors.Is(e, domain.ErrNotFound) {
+		t.Fatal(e)
+	}
+	if _, e = d.Samples(ctx, patient, sampleOrder.ID, 1); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal(e)
+	}
+	if _, e = d.Transition(ctx, lab, sampleOrder.ID, domain.DiagnosticAction{Action: "process", Version: 4}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = d.Submit(ctx, lab, sampleOrder.ID, domain.DiagnosticResultInput{Version: 5, Summary: "Synthetic recollection result", Values: []domain.DiagnosticValue{{Position: 1, Value: "10"}}}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = d.Transition(ctx, lab, sampleOrder.ID, domain.DiagnosticAction{Action: "reject_sample", Version: 6, Reason: "Late rejection"}); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("result sample replaced", e)
+	}
+	for _, sql := range []string{`UPDATE diagnostic_sample SET reference='changed' WHERE reference='RECOLLECT-1'`, `DELETE FROM diagnostic_sample_rejection`} {
+		if _, e = db.Exec(ctx, sql); e == nil {
+			t.Fatal("sample history mutable")
+		}
+	}
 	revision := domain.DiagnosticRevisionInput{DiagnosticTestInput: test.DiagnosticTestInput, Version: 1, Reason: "Updated assay definition"}
 	revision.ChargeMinor = 250
 	revision.Parameters = []domain.DiagnosticParameter{{Name: "New parameter", Unit: "new-unit", ValueType: "text"}}

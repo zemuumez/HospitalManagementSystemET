@@ -71,6 +71,10 @@ func (s Server) diagnostics(w http.ResponseWriter, r *http.Request, a domain.Act
 			return false
 		}
 		switch {
+		case parts[1] == "samples" && r.Method == "GET":
+			var data []domain.DiagnosticSample
+			data, e = s.Diagnostics.Samples(r.Context(), a, parts[0], page)
+			out = map[string]any{"samples": data, "page": page, "pageSize": 25}
 		case parts[1] == "actions" && r.Method == "POST":
 			var i domain.DiagnosticAction
 			if !decode(w, r, &i) {

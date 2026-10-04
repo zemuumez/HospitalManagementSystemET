@@ -199,6 +199,20 @@ func (s Store) DiagnosticTransition(ctx context.Context, a domain.Actor, id stri
 		if o.Status == "ordered" {
 			target = "collected"
 		}
+	case "recollect":
+		if o.Status == "sample_rejected" {
+			target = "collected"
+		}
+	case "reject_sample":
+		if o.Status == "collected" || o.Status == "processing" {
+			var hasResult bool
+			if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM diagnostic_result WHERE order_id=$1)`, id).Scan(&hasResult); e != nil {
+				return out, e
+			}
+			if !hasResult {
+				target = "sample_rejected"
+			}
+		}
 	case "process":
 		if o.Status == "collected" {
 			target = "processing"
@@ -216,15 +230,23 @@ func (s Store) DiagnosticTransition(ctx context.Context, a domain.Actor, id stri
 			target = "processing"
 		}
 	case "cancel":
-		if o.Status == "ordered" || o.Status == "collected" || o.Status == "processing" || o.Status == "review" {
+		if o.Status == "ordered" || o.Status == "collected" || o.Status == "processing" || o.Status == "review" || o.Status == "sample_rejected" {
 			target = "cancelled"
 		}
 	}
 	if target == "" {
 		return out, domain.ErrStale
 	}
-	if i.Action == "collect" {
+	if i.Action == "collect" || i.Action == "recollect" {
+		if _, e = tx.Exec(ctx, `INSERT INTO diagnostic_sample(order_id,reference,collected_by,collected_at,order_version) VALUES($1,$2,$3,clock_timestamp(),$4)`, id, i.SampleReference, a.ID, o.Version+1); e != nil {
+			return out, clinicalError(e)
+		}
 		if _, e = tx.Exec(ctx, `UPDATE diagnostic_order SET sample_reference=$2 WHERE id=$1`, id, i.SampleReference); e != nil {
+			return out, clinicalError(e)
+		}
+	}
+	if i.Action == "reject_sample" {
+		if _, e = tx.Exec(ctx, `INSERT INTO diagnostic_sample_rejection(sample_id,actor_id,reason) SELECT id,$2,$3 FROM diagnostic_sample WHERE order_id=$1 AND reference=$4`, id, a.ID, i.Reason, o.SampleReference); e != nil {
 			return out, clinicalError(e)
 		}
 	}
@@ -379,6 +401,39 @@ func (s Store) DiagnosticResults(ctx context.Context, a domain.Actor, id string,
 		}
 	}
 	if e = pharmacyAudit(ctx, tx, a, "diagnostic_results.viewed", id); e != nil {
+		return nil, e
+	}
+	return out, tx.Commit(ctx)
+}
+
+func (s Store) DiagnosticSamples(ctx context.Context, a domain.Actor, id string, page int) ([]domain.DiagnosticSample, error) {
+	tx, e := s.DB.Begin(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer tx.Rollback(ctx)
+	if _, e = scanDiagnosticOrder(tx.QueryRow(ctx, `SELECT `+diagnosticOrderFields+diagnosticOrderFrom+` WHERE o.id=$3 AND `+diagnosticScope, a.Role, a.ID, id)); e != nil {
+		return nil, e
+	}
+	rows, e := tx.Query(ctx, `SELECT s.id,s.reference,COALESCE(s.collected_by,''),s.collected_at,s.order_version,COALESCE(r.actor_id,''),COALESCE(r.reason,''),r.rejected_at FROM diagnostic_sample s LEFT JOIN diagnostic_sample_rejection r ON r.sample_id=s.id WHERE s.order_id=$1 ORDER BY s.order_version DESC LIMIT 25 OFFSET $2`, id, (page-1)*25)
+	if e != nil {
+		return nil, e
+	}
+	out := []domain.DiagnosticSample{}
+	for rows.Next() {
+		var v domain.DiagnosticSample
+		if e = rows.Scan(&v.ID, &v.Reference, &v.CollectedBy, &v.CollectedAt, &v.OrderVersion, &v.RejectedBy, &v.RejectionReason, &v.RejectedAt); e != nil {
+			rows.Close()
+			return nil, e
+		}
+		out = append(out, v)
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, e
+	}
+	if e = pharmacyAudit(ctx, tx, a, "diagnostic.samples_viewed", id); e != nil {
 		return nil, e
 	}
 	return out, tx.Commit(ctx)

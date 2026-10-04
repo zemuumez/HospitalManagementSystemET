@@ -86,19 +86,19 @@ func (i *DiagnosticAction) Validate() error {
 		return ErrValidation
 	}
 	switch i.Action {
-	case "collect":
+	case "collect", "recollect":
 		if i.SampleReference == "" {
 			return ErrValidation
 		}
 	case "process", "sign", "release":
-	case "cancel", "reject":
+	case "cancel", "reject", "reject_sample":
 		if i.Reason == "" {
 			return ErrValidation
 		}
 	default:
 		return ErrValidation
 	}
-	if i.Action != "collect" && i.SampleReference != "" {
+	if i.Action != "collect" && i.Action != "recollect" && i.SampleReference != "" {
 		return ErrValidation
 	}
 	return nil
@@ -154,4 +154,15 @@ type DiagnosticRevisionInput struct {
 type DiagnosticArchiveInput struct {
 	Version int    `json:"version"`
 	Reason  string `json:"reason"`
+}
+
+type DiagnosticSample struct {
+	ID              string     `json:"id"`
+	Reference       string     `json:"reference"`
+	CollectedBy     string     `json:"collectedBy"`
+	CollectedAt     *time.Time `json:"collectedAt"`
+	OrderVersion    int        `json:"orderVersion"`
+	RejectedBy      string     `json:"rejectedBy"`
+	RejectionReason string     `json:"rejectionReason"`
+	RejectedAt      *time.Time `json:"rejectedAt"`
 }
