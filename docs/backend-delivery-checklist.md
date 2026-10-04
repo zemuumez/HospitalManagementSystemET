@@ -191,7 +191,7 @@ Backend-first progress:
 - [ ] Calendar views and patient queues backed by server data; concurrent queue token allocation.
 - [ ] Scheduled reminders with durable jobs, deduplication, preferences and timezone handling.
 - [ ] Public appointment requests, spam protection, verification and staff confirmation workflow.
-- [ ] Notices, enquiries, visitor records, postal dispatch/receive and call logs.
+- [x] Notices, enquiries, visitor records, postal dispatch/receive and call logs (migration 032).
 
 ### E. Clinical care and bed management
 
@@ -263,7 +263,7 @@ Backend-first progress:
 - [x] Services, charge categories, operations, custom fields and validated module settings (migration 030).
 - [x] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely (migration 031).
 - [x] Hospital general settings, logo/favicon, schedules, language and queue theme persisted (migration 031).
-- [ ] Complaints, notices, testimonials moderation and front-office enquiry lifecycle.
+- [x] Complaints, notices, testimonials moderation and front-office enquiry lifecycle (migrations 031, 032).
 - [ ] Live consultations/meetings, provider tokens/permissions and visit linkage.
 - [x] Operational email/SMS outbox and safe development transports.
 - [ ] Delivery callbacks, preferences/consent, templates, localization, scheduled jobs and retry/reconciliation UI.
@@ -508,4 +508,19 @@ Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi
 - Role authorization (`settings.manage`, `settings.read`, `cms.manage`, `cms.read`).
 
 PostgreSQL and HTTP integration tests verify: role permissions and denials, start/end time boundaries, validation invariants, draft vs published visibility, CRUD updates, audit events, and HTTP endpoints. See contract in [backend CMS settings contract](backend-cms-settings-contract.md). Frontend integration deferred to Section 4.
+
+### Front office, complaints, enquiries, notices, visitors, call logs, and postals increment
+
+Migration 032 adds `hospital_complaint`, `hospital_notice_board`, `hospital_enquiry`, `hospital_visitor`, `hospital_call_log`, and `hospital_postal` tables.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Patient grievance & complaint lifecycle (`pending`, `in_progress`, `resolved`, `rejected`) with administrative resolution notes, resolver user references, and strict patient-scoping privacy rules.
+- Hospital announcement notice board with full CRUD and role-based publishing.
+- Public patient enquiries and feedback intake with read-status tracking and receptionist review audits.
+- Front-office visitor registry capturing visit purpose, visitor name, contact, kebele ID, headcounts, date, check-in, and check-out times.
+- Telephonic call logs tracking incoming/outgoing reception interactions and scheduled follow-up dates.
+- Physical postal mail log tracking incoming dispatches and outgoing consignments with reference numbers and date stamps.
+- Role authorization (`front_office.manage`, `front_office.read`, `complaints.manage`, `complaints.read`, `complaints.create`, `notices.manage`, `notices.read`).
+
+PostgreSQL and HTTP integration tests verify: role authorization and denials, patient record scoping and privacy, resolution transitions, public enquiry intake, CRUD operations across all front-office registries, audit event recording, and HTTP endpoints. See contract in [backend front office contract](backend-front-office-contract.md). Frontend integration deferred to Section 4.
 

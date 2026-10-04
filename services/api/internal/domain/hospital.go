@@ -69,6 +69,20 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin"
 	case "cms.read":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician" || a.Role == "patient"
+	case "front_office.manage":
+		return a.Role == "admin" || a.Role == "receptionist"
+	case "front_office.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "case_manager" || a.Role == "accountant"
+	case "complaints.manage":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "case_manager"
+	case "complaints.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "case_manager" || a.Role == "patient"
+	case "complaints.create":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "patient"
+	case "notices.manage":
+		return a.Role == "admin"
+	case "notices.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician" || a.Role == "patient"
 	case "appointments.read", "appointments.book":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "patient"
 	case "staff.manage":

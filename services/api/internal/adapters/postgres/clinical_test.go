@@ -419,4 +419,5 @@ func TestClinicalTransactions(t *testing.T) {
 	testAmbulances(t, db, store, actors)
 	testServicesOperations(t, db, store, actors)
 	testCMSSettings(t, db, store, actors)
+	testFrontOffice(t, db, store, actors)
 }
