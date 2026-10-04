@@ -260,7 +260,7 @@ Backend-first progress:
 
 - [x] Attendance/check-in/out, shifts, breaks, overtime, corrections and approval history (migration 028).
 - [x] Ambulances, assignment/calls, tariffs and billing (migration 029).
-- [ ] Services, charge categories, operations, custom fields and validated module settings.
+- [x] Services, charge categories, operations, custom fields and validated module settings (migration 030).
 - [ ] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely.
 - [ ] Hospital general settings, logo/favicon, schedules, language and queue theme persisted.
 - [ ] Complaints, notices, testimonials moderation and front-office enquiry lifecycle.
@@ -481,4 +481,18 @@ Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi
 - Role authorization matrix (`ambulance.manage`, `ambulance.read`, `ambulance_call.manage`, `ambulance_call.read`, `billing.manage`) ensuring patient records remain private to the patient.
 
 PostgreSQL and HTTP tests verify: role permissions and denials, patient scope isolation, concurrent dispatch conflicts, status transitions, vehicle release, stale version rejections, idempotent billing, trigger immutability, and HTTP status codes. See contract in [backend ambulances contract](backend-ambulances-contract.md). Frontend integration deferred to Section 4.
+ 
+### Services, charge categories, operations, custom fields, and module settings increment
+
+Migration 030 adds `charge_category`, `hospital_charge`, `hospital_service`, `operation_category`, `hospital_operation`, `custom_field`, and `hospital_module_setting` tables.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Charge categories across 5 typed domains (Investigation, Operation, Bed, Doctor, Other) and standard charges with integer ETB minor currency (cents).
+- Billable and procedural hospital services with unit rates, quantities, and active/inactive status toggling.
+- Surgical and procedural taxonomy: operation categories and operations with category associations.
+- Extensible custom fields per module (patient, appointment, ipd, opd, etc.), field types (text, number, select, date, boolean, textarea), validation rules, and responsive grid layout spans (1-12).
+- Dynamic module settings for enabling/disabling hospital sub-systems.
+- RBAC permissions (`services.manage`, `services.read`, `operations.manage`, `operations.read`, `settings.manage`, `settings.read`).
+
+PostgreSQL and HTTP integration tests verify: role authorization and denials, validation constraints, CRUD lifecycle, custom field module lookups, module setting activation toggles, and HTTP endpoints. See contract in [backend services operations contract](backend-services-operations-contract.md). Frontend integration deferred to Section 4.
 
