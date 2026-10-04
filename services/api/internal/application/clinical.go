@@ -8,6 +8,11 @@ import (
 )
 
 type ClinicalRepository interface {
+	AssignNurse(context.Context, domain.Actor, string, domain.NurseAssignment) (domain.EncounterNurse, error)
+	Nurses(context.Context, domain.Actor, string) ([]domain.EncounterNurse, error)
+	NursingEncounters(context.Context, domain.Actor, int) ([]domain.Encounter, error)
+	Vitals(context.Context, domain.Actor, string, int) ([]domain.Vitals, error)
+	RecordVitals(context.Context, domain.Actor, string, domain.VitalsInput, string) (domain.Vitals, error)
 	BedTypes(context.Context, int) ([]domain.BedType, error)
 	SaveBedType(context.Context, domain.Actor, string, domain.BedTypeInput) (domain.BedType, error)
 	SetBedState(context.Context, domain.Actor, string, domain.BedStateInput) (domain.Bed, error)

@@ -191,7 +191,8 @@ Backend-first progress:
 - [x] Versioned ready/maintenance/unavailable bed states, scoped transfers and retained admission/transfer/discharge history (migration 011; concurrent and authorization tests).
 - [x] Bed-type master IDs, descriptions, versioned rename/archive and bed references with compatibility for existing forms (migration 014).
 - [ ] Complete original bed assignment fields and historical occupancy reports.
-- [ ] Nursing/team access, vitals and observations with units/ranges and timestamps.
+- [x] Versioned nurse assignment/revocation, scoped nursing encounters and immutable timestamped vitals with explicit units, validation and correction chains (migration 015).
+- [ ] Broader care-team delegation, clinical range policies/alerts and patient-visible observation release.
 - [ ] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments.
 - [x] Signed encounter medication orders with medicine references, dose, route, frequency, duration, instructions and explicit quantity; assigned-doctor signing and retained cancellation.
 - [ ] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF.
@@ -414,3 +415,7 @@ Migration 013 supports future time-range absences, cancellation reasons and vers
 ### Bed-type master data
 
 Migration 014 backfills master records from existing bed labels and gives every bed a required type reference. Admin APIs create/edit/archive types with optimistic versions; beds cannot be created using archived types. Existing label-based bed creation remains compatible and resolves or creates a master record in the same transaction. Type renames update display labels; archiving a type does not remove existing beds or clinical history. PostgreSQL tests and vet passed for role denial, stable references, renamed labels, archived-type rejection and stale edits.
+
+### Nursing access and retained observations
+
+Migration 015 adds bounded nurse rosters with retained assignment events and typed vitals. Only assigned nurses and the encounter doctor can record; administrators can assign/read but cannot sign measurements. Removing assignment denies subsequent reads and even same-key replays. Corrections retain the earlier observation and cannot fork under competing requests. Go unit/PostgreSQL/HTTP tests and vet passed. [Detailed contract and source differences](backend-nursing-contract.md). Clinical interpretation, wider team delegation and patient release remain open.

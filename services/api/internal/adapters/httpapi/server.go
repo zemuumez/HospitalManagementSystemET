@@ -154,6 +154,9 @@ func (s Server) Handler() http.Handler {
 		if s.schedulingChanges(w, r, a) {
 			return
 		}
+		if s.nursing(w, r, a) {
+			return
+		}
 		if s.clinical(w, r, a) {
 			return
 		}
