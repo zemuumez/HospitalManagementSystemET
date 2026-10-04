@@ -7,3 +7,5 @@ Checks: fresh migrations, uncached Go unit/database/HTTP tests, Go vet and API/w
 Node 24 and the Go version in go.mod are installed with the official [setup-node](https://github.com/actions/setup-node) and [setup-go](https://github.com/actions/setup-go) actions; [checkout](https://github.com/actions/checkout) does not persist credentials. Action major tags and container tags should be SHA/digest pinned as part of production supply-chain hardening. A workflow file being present does not prove a hosted run passed; inspect the repository Actions result before making it a required branch check.
 
 Local equivalent commands and fixture boundaries are in the delivery checklist. Test:connected is existing UI regression coverage, not implementation of Section 4. Full per-module browser journeys remain to be added as those integrations are implemented. Firebase emulator success-path and dependency remediation are separate pending checks; npm audit may correctly fail when a vulnerability requires fixing.
+
+First hosted execution: [run 37225297032](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37225297032) passed all steps for commit `3eed632`.

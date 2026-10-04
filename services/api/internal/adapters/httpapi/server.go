@@ -17,12 +17,14 @@ type ActorStore interface {
 	Actor(context.Context, string) (domain.Actor, error)
 }
 type Server struct {
+	Inventory   application.Inventory
 	App         application.Hospital
 	Scheduling  application.Scheduling
 	Clinical    application.Clinical
 	Billing     application.Billing
 	Pharmacy    application.Pharmacy
 	Diagnostics application.Diagnostics
+	Ready       func(context.Context) error
 	Actors      ActorStore
 	AuthURL     string
 	Origin      string
@@ -39,34 +41,40 @@ func write(w http.ResponseWriter, status int, v any) {
 func fail(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	message := "Unable to complete the request"
+	code := "INTERNAL_ERROR"
 	if errors.Is(err, domain.ErrForbidden) {
+		code = "FORBIDDEN"
 		status = 403
 		message = "You do not have permission for this action"
 	}
 	if errors.Is(err, domain.ErrValidation) {
+		code = "VALIDATION_FAILED"
 		status = 422
 		message = "Check the supplied fields and try again"
 	}
 	if errors.Is(err, domain.ErrConflict) {
+		code = "IDEMPOTENCY_CONFLICT"
 		status = 409
 		message = "This request key was already used for different data"
 	}
 	if errors.Is(err, domain.ErrNotFound) {
+		code = "NOT_FOUND"
 		status = 404
 		message = "Record not found"
 	}
 	if errors.Is(err, domain.ErrStale) {
+		code = "STATE_CONFLICT"
 		status = 409
-		message = "The record changed or the selected time is unavailable. Refresh and try again."
+		message = "The record changed or the requested action is no longer available. Refresh and try again."
 	}
-	write(w, status, map[string]string{"error": message})
+	write(w, status, map[string]string{"error": message, "code": code})
 }
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
 	if d.Decode(v) != nil || d.Decode(&struct{}{}) != io.EOF {
-		write(w, 400, map[string]string{"error": "Invalid JSON request"})
+		write(w, 400, map[string]string{"error": "Invalid JSON request", "code": "INVALID_JSON"})
 		return false
 	}
 	return true
@@ -104,18 +112,31 @@ func (s Server) identify(r *http.Request) (domain.Actor, error) {
 	return s.Actors.Actor(r.Context(), result.User.ID)
 }
 func (s Server) Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return observe(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/readyz" && r.Method == "GET" {
+			ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+			defer cancel()
+			if s.Ready == nil || s.Ready(ctx) != nil {
+				write(w, 503, map[string]string{"status": "unavailable"})
+				return
+			}
+			write(w, 200, map[string]string{"status": "ready"})
+			return
+		}
 		if r.URL.Path == "/healthz" && r.Method == "GET" {
 			write(w, 200, map[string]string{"status": "ok"})
 			return
 		}
 		if r.Method != "GET" && r.Header.Get("Origin") != s.Origin {
-			write(w, 403, map[string]string{"error": "Request origin is not allowed"})
+			write(w, 403, map[string]string{"error": "Request origin is not allowed", "code": "ORIGIN_DENIED"})
 			return
 		}
 		a, err := s.identify(r)
 		if err != nil {
-			write(w, 401, map[string]string{"error": "Sign in to continue"})
+			write(w, 401, map[string]string{"error": "Sign in to continue", "code": "UNAUTHENTICATED"})
+			return
+		}
+		if s.inventory(w, r, a) {
 			return
 		}
 		if s.diagnostics(w, r, a) {
@@ -252,7 +273,7 @@ func (s Server) Handler() http.Handler {
 			}
 			write(w, 202, out)
 		default:
-			write(w, 404, map[string]string{"error": "Endpoint not found"})
+			write(w, 404, map[string]string{"error": "Endpoint not found", "code": "NOT_FOUND"})
 		}
-	})
+	}))
 }

@@ -217,7 +217,8 @@ Backend-first progress:
 - [ ] Medicine bills, payments, discounts and reversals linked to the financial ledger.
 - [ ] Blood groups, donors, donations, components, screening, inventory and issued units.
 - [ ] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels.
-- [ ] General inventory items/categories, stock receipt, issue/return, low-stock alerts and reconciliation.
+- [x] General inventory category/item APIs, exact-unit receipts, issues/returns/write-offs, low-stock query and ledger reconciliation (migration 010; concurrency/authorization tests).
+- [ ] Scheduled low-stock notifications, stock-count approval, department/date/attachment parity and inventory finance integration.
 
 ### H. Billing, finance and payroll
 
@@ -256,10 +257,11 @@ Backend-first progress:
 - [ ] Migration/import mapping from Laravel, trial runs, reconciliation reports and rollback plan.
 - [ ] Pagination/filtering/search/export for every list; avoid unbounded option loaders.
 - [ ] Background workers with leases/heartbeats, crash recovery, retries and observability.
-- [ ] Structured redacted logs, request IDs, metrics, health/readiness checks and alerting.
+- [x] Structured request logs excluding sensitive inputs, generated request IDs, liveness and database readiness checks; unit tests.
+- [ ] Metrics, alerting and production observability deployment.
 - [ ] Database indexes/query plans, connection limits, load tests and capacity targets.
 - [ ] Automated backups, encryption, retention and a demonstrated restore drill.
-- [ ] CI gates for migrations, unit/integration/browser tests, build and dependencies.
+- [x] CI gates for migrations, unit/database/API integration, existing browser regression, builds and production npm dependency audit; [hosted run passed](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37225297032). New module browser coverage remains Section 4/5 work.
 - [ ] Staging deployment, environment separation, secret management and production runbooks.
 - [ ] User acceptance sign-off, migration cutover, rollback rehearsal and post-release monitoring.
 
@@ -379,3 +381,11 @@ Migration 009 and typed Go domain/application/PostgreSQL/HTTP layers implement t
 ### Continuous verification setup
 
 Added a GitHub Actions workflow covering disposable PostgreSQL migrations, Go tests/vet/builds, web checks/build, npm production dependency audit, Mailpit/captured-message API integration and existing Chrome workflows. [Verification setup](continuous-verification.md). Local web tests and formatting passed; production dependency audit returned zero vulnerabilities after allowing access to the npm advisory endpoint. Workflow YAML parsed/formatted with Prettier. Hosted execution is not yet claimed successful and the full CI checklist item remains open until verified.
+
+Stable Go API error codes and tested request logging/readiness are documented in [backend operations](backend-operations.md). Full OpenAPI/type generation remains pending.
+
+### Inventory and operational API checks
+
+Migration 010 provides general inventory with immutable movements, original-issue return tracking, exact fractional quantities, low-stock queries, versioned catalog edits and commit-time reconciliation. [Detailed contract](backend-inventory-contract.md). Go tests ran uncached with PostgreSQL enabled and passed; vet passed. Request redaction/readiness/error-code checks passed in the same run.
+
+The first GitHub Actions run for `3eed632` completed successfully: migrations, Go checks, npm checks/build/typecheck, dependency audit, live API/Mailpit/capture checks and connected Chrome regression. This is evidence for the configured CI gates, not completion of every module or a security certification.

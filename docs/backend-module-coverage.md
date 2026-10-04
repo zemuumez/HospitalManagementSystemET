@@ -61,10 +61,10 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Charge Categories (`charge-categories`) | Hospital Charges | Preview only; typed backend, integration and workflow QA pending | Open |
 | Charges (`charges`) | Hospital Charges | Preview only; typed backend, integration and workflow QA pending | Open |
 | Doctor OPD Charges (`doctor-opd-charges`) | Hospital Charges | Preview only; typed backend, integration and workflow QA pending | Open |
-| Item Categories (`item-categories`) | Inventory | Preview only; typed backend, integration and workflow QA pending | Open |
-| Items (`items`) | Inventory | Preview only; typed backend, integration and workflow QA pending | Open |
-| Item Stocks (`item-stocks`) | Inventory | Preview only; typed backend, integration and workflow QA pending | Open |
-| Issued Items (`issued-items`) | Inventory | Preview only; typed backend, integration and workflow QA pending | Open |
+| Item Categories (`item-categories`) | Inventory | Inventory catalog/stock ledger API tested; remaining source fields and UI integration pending | Open |
+| Items (`items`) | Inventory | Inventory catalog/stock ledger API tested; remaining source fields and UI integration pending | Open |
+| Item Stocks (`item-stocks`) | Inventory | Inventory catalog/stock ledger API tested; remaining source fields and UI integration pending | Open |
+| Issued Items (`issued-items`) | Inventory | Inventory catalog/stock ledger API tested; remaining source fields and UI integration pending | Open |
 | Live Consultations (`live-consultations`) | Live Consultations | Preview only; typed backend, integration and workflow QA pending | Open |
 | Live Meetings (`live-consultations-live-meetings`) | Live Consultations | Preview only; typed backend, integration and workflow QA pending | Open |
 | Google Meet Consultations (`goole-meet-consultation`) | Live Consultations | Preview only; typed backend, integration and workflow QA pending | Open |
