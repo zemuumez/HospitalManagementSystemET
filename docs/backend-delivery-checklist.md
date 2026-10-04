@@ -259,7 +259,7 @@ Backend-first progress:
 ### I. Operational modules, content and communications
 
 - [x] Attendance/check-in/out, shifts, breaks, overtime, corrections and approval history (migration 028).
-- [ ] Ambulances, assignment/calls, tariffs and billing.
+- [x] Ambulances, assignment/calls, tariffs and billing (migration 029).
 - [ ] Services, charge categories, operations, custom fields and validated module settings.
 - [ ] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely.
 - [ ] Hospital general settings, logo/favicon, schedules, language and queue theme persisted.
@@ -466,4 +466,19 @@ Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi
 - Filtered paginated list endpoints and aggregated summary statistics (`total_scheduled_minutes`, `total_worked_minutes`, `total_break_minutes`, `total_overtime_minutes`, `total_late_minutes`, `total_early_departure_minutes`).
 
 PostgreSQL and HTTP tests verify: all role permissions and denials, cross-staff ID isolation, concurrent check-ins and stale updates, overlapping breaks, overnight shifts crossing EAT midnight, reasoned corrections, approval state transitions, database trigger immutability, and API error codes. See contract in [backend attendance contract](backend-attendance-contract.md). Frontend integration deferred to Section 4.
+ 
+### Ambulance and ambulance call billing increment
+
+Migration 029 adds `ambulance`, `ambulance_call`, and `ambulance_call_invoice` with database-level immutability triggers on invoice linkage (`protect_retained_record`). Seeded default owned and contracted ambulances.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Vehicle CRUD with year/license validation, owned vs contracted classification, and availability state tracking.
+- Ambulance emergency call dispatching linking patient, assigned vehicle, driver snapshot, date/time, and pickup/destination details.
+- Row-level database locking preventing concurrent double-dispatch of vehicles in transit.
+- Automatic vehicle release (marking vehicle available) upon call completion or cancellation, and atomic vehicle re-assignment during transit.
+- Direct source billing via `insertSourceInvoice` creating sealed invoices with line descriptions referencing vehicle model and registration.
+- Idempotent re-billing protection and DB trigger protection against tampering with retained invoice associations.
+- Role authorization matrix (`ambulance.manage`, `ambulance.read`, `ambulance_call.manage`, `ambulance_call.read`, `billing.manage`) ensuring patient records remain private to the patient.
+
+PostgreSQL and HTTP tests verify: role permissions and denials, patient scope isolation, concurrent dispatch conflicts, status transitions, vehicle release, stale version rejections, idempotent billing, trigger immutability, and HTTP status codes. See contract in [backend ambulances contract](backend-ambulances-contract.md). Frontend integration deferred to Section 4.
 
