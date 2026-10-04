@@ -287,5 +287,6 @@ func TestClinicalTransactions(t *testing.T) {
 
 	testPharmacy(t, db, store, actors, cases)
 	testPatientProfiles(t, db, store, actors, patients)
+	testDiagnostics(t, db, store, actors, cases)
 
 }

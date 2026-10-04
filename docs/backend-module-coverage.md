@@ -81,13 +81,13 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Pathology Categories (`pathology-categories`) | Pathology | Preview only; typed backend, integration and workflow QA pending | Open |
 | Pathology Units (`pathology-units`) | Pathology | Preview only; typed backend, integration and workflow QA pending | Open |
 | Pathology Parameters (`pathology-parameter`) | Pathology | Preview only; typed backend, integration and workflow QA pending | Open |
-| Pathology Tests (`pathology-tests`) | Pathology | Preview only; typed backend, integration and workflow QA pending | Open |
+| Pathology Tests (`pathology-tests`) | Pathology | Diagnostic catalog/order/result/release core API tested; full source parity and UI integration pending | Open |
 | Birth Reports (`birth-reports`) | Reports | Preview only; typed backend, integration and workflow QA pending | Open |
 | Death Reports (`death-reports`) | Reports | Preview only; typed backend, integration and workflow QA pending | Open |
 | Investigation Reports (`investigation-reports`) | Reports | Preview only; typed backend, integration and workflow QA pending | Open |
 | Operation Reports (`operation-reports`) | Reports | Preview only; typed backend, integration and workflow QA pending | Open |
 | Radiology Categories (`radiology-categories`) | Radiology | Preview only; typed backend, integration and workflow QA pending | Open |
-| Radiology Tests (`radiology-tests`) | Radiology | Preview only; typed backend, integration and workflow QA pending | Open |
+| Radiology Tests (`radiology-tests`) | Radiology | Diagnostic catalog/order/result/release core API tested; full source parity and UI integration pending | Open |
 | Insurances (`insurances`) | Services | Preview only; typed backend, integration and workflow QA pending | Open |
 | Packages (`packages`) | Services | Preview only; typed backend, integration and workflow QA pending | Open |
 | Ambulances (`ambulances`) | Services | Preview only; typed backend, integration and workflow QA pending | Open |

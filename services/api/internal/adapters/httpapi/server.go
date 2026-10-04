@@ -17,15 +17,16 @@ type ActorStore interface {
 	Actor(context.Context, string) (domain.Actor, error)
 }
 type Server struct {
-	App        application.Hospital
-	Scheduling application.Scheduling
-	Clinical   application.Clinical
-	Billing    application.Billing
-	Pharmacy   application.Pharmacy
-	Actors     ActorStore
-	AuthURL    string
-	Origin     string
-	Client     *http.Client
+	App         application.Hospital
+	Scheduling  application.Scheduling
+	Clinical    application.Clinical
+	Billing     application.Billing
+	Pharmacy    application.Pharmacy
+	Diagnostics application.Diagnostics
+	Actors      ActorStore
+	AuthURL     string
+	Origin      string
+	Client      *http.Client
 }
 
 func write(w http.ResponseWriter, status int, v any) {
@@ -115,6 +116,9 @@ func (s Server) Handler() http.Handler {
 		a, err := s.identify(r)
 		if err != nil {
 			write(w, 401, map[string]string{"error": "Sign in to continue"})
+			return
+		}
+		if s.diagnostics(w, r, a) {
 			return
 		}
 		if s.patientProfile(w, r, a) {

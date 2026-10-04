@@ -199,8 +199,10 @@ Backend-first progress:
 
 ### F. Diagnostics and treatment records
 
-- [ ] Pathology/radiology categories, units, parameters, reference ranges and test catalogs.
-- [ ] Orders, samples/accessions, collection, processing, result review/sign-off and amendments.
+- [x] Pathology/radiology test definitions and typed parameters with retained unit/reference-range labels (migration 009).
+- [ ] Full category/unit master CRUD, catalog revision/archive, remaining original fields and charge categories.
+- [x] Encounter-linked orders, unique sample/accession references, collection/processing, doctor sign-off/release and retained result amendments; concurrency/privacy tests.
+- [ ] Sample rejection/recollection, complete original report parity and reviewer specialty/team policy.
 - [ ] Authorized report files and patient portal report release.
 - [ ] Diagnosis templates/tests/results and linkage to cases/encounters.
 - [ ] Vaccination catalog, administered doses, lot/expiry records and schedules.
@@ -369,3 +371,7 @@ Verification: isolated PostgreSQL and HTTP tests, Go vet/build, the live authent
 Migration 008 adds typed demographic/contact fields, default profile initialization and retained revisions. Detail reads enforce patient/doctor scope; only admin/reception edit; only admin reads revision snapshots. Version checks prevent lost updates, and changes require a reason. Existing authentication identity fields stay separate from demographic contact details. Go unit/database/HTTP tests and vet passed; frontend profile integration is deferred. Full field parity, uploads, duplicate resolution and care-team workflows remain open.
 
 Migration 008 was applied to the existing local database, the API restarted with `api-profiles.exe`, and the live integration regression passed again. The earlier Chrome regression in this session ran after migrations 005-007; it was not rerun after 008 because no frontend workflow changed.
+
+### Diagnostics backend increment
+
+Migration 009 and typed Go domain/application/PostgreSQL/HTTP layers implement test catalogs and the diagnostic lifecycle. Patient release is explicit; signed/previously released results are retained across amendments. [Contract and remaining scope](backend-diagnostics-contract.md). Go tests with isolated PostgreSQL enabled and vet passed. Provider blanks and setup are documented separately; no external credentials were needed for these tests.
