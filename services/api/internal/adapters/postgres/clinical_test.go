@@ -111,6 +111,37 @@ func TestClinicalTransactions(t *testing.T) {
 	if _, err = clinic.CreateBed(ctx, actors[3], domain.BedInput{Name: "Blocked", Type: "General"}); !errors.Is(err, domain.ErrForbidden) {
 		t.Fatal("patient created bed", err)
 	}
+
+	master, e := clinic.SaveBedType(ctx, actors[0], "", domain.BedTypeInput{Name: "Isolation", Description: "Single room", Active: true})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = clinic.SaveBedType(ctx, actors[3], "", domain.BedTypeInput{Name: "Forbidden", Active: true}); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal("patient changed bed types", e)
+	}
+	typed, e := clinic.CreateBed(ctx, actors[0], domain.BedInput{Name: "Z typed", TypeID: master.ID, ChargeMinor: 50})
+	if e != nil || typed.Type != "Isolation" {
+		t.Fatal("bed type reference", typed, e)
+	}
+	master, e = clinic.SaveBedType(ctx, actors[0], master.ID, domain.BedTypeInput{Name: "Private", Description: "Updated", Active: false, Version: master.Version})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = clinic.CreateBed(ctx, actors[0], domain.BedInput{Name: "Z blocked", TypeID: master.ID}); !errors.Is(e, domain.ErrNotFound) {
+		t.Fatal("archived type assigned", e)
+	}
+	if _, e = clinic.SaveBedType(ctx, actors[0], master.ID, domain.BedTypeInput{Name: "Lost edit", Active: true, Version: 1}); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("lost master edit", e)
+	}
+	typedBeds, e := clinic.Beds(ctx, actors[0], 1)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, v := range typedBeds {
+		if v.ID == typed.ID && v.Type != "Private" {
+			t.Fatal("renamed master not reflected")
+		}
+	}
 	inputs := []domain.EncounterInput{{Kind: "ipd", CaseID: cases[0].ID, BedID: bed.ID, AdmittedAt: time.Now().Add(-time.Minute)}, {Kind: "ipd", CaseID: cases[1].ID, BedID: bed.ID, AdmittedAt: time.Now().Add(-time.Minute)}}
 	results := make([]domain.Encounter, 2)
 	errs := make([]error, 2)

@@ -20,7 +20,7 @@ func clinicalError(err error) error {
 	return err
 }
 func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
-	rows, e := s.DB.Query(ctx, `SELECT b.id,b.name,b.bed_type,b.charge_minor,b.state,b.version,b.state='ready' AND NOT EXISTS(SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active') FROM hospital_bed b WHERE b.active ORDER BY b.name,b.id LIMIT 25 OFFSET $1`, (page-1)*25)
+	rows, e := s.DB.Query(ctx, `SELECT b.id,b.name,t.name,b.type_id,b.charge_minor,b.state,b.version,b.state='ready' AND NOT EXISTS(SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active') FROM hospital_bed b JOIN bed_type t ON t.id=b.type_id WHERE b.active ORDER BY b.name,b.id LIMIT 25 OFFSET $1`, (page-1)*25)
 	if e != nil {
 		return nil, e
 	}
@@ -28,7 +28,7 @@ func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
 	out := []domain.Bed{}
 	for rows.Next() {
 		var b domain.Bed
-		if e = rows.Scan(&b.ID, &b.Name, &b.Type, &b.ChargeMinor, &b.State, &b.Version, &b.Available); e != nil {
+		if e = rows.Scan(&b.ID, &b.Name, &b.Type, &b.TypeID, &b.ChargeMinor, &b.State, &b.Version, &b.Available); e != nil {
 			return nil, e
 		}
 		out = append(out, b)
@@ -42,7 +42,18 @@ func (s Store) CreateBed(ctx context.Context, a domain.Actor, i domain.BedInput)
 		return b, e
 	}
 	defer tx.Rollback(ctx)
-	e = tx.QueryRow(ctx, `INSERT INTO hospital_bed(name,bed_type,charge_minor,created_by) VALUES($1,$2,$3,$4) RETURNING id`, i.Name, i.Type, i.ChargeMinor, a.ID).Scan(&b.ID)
+	if i.TypeID == "" {
+		if _, e = tx.Exec(ctx, `INSERT INTO bed_type(name) VALUES($1) ON CONFLICT(name) DO NOTHING`, i.Type); e != nil {
+			return b, clinicalError(e)
+		}
+		e = tx.QueryRow(ctx, `SELECT id,name FROM bed_type WHERE name=$1 AND active FOR SHARE`, i.Type).Scan(&b.TypeID, &b.Type)
+	} else {
+		e = tx.QueryRow(ctx, `SELECT id,name FROM bed_type WHERE id=$1 AND active FOR SHARE`, i.TypeID).Scan(&b.TypeID, &b.Type)
+	}
+	if e != nil {
+		return b, clinicalError(e)
+	}
+	e = tx.QueryRow(ctx, `INSERT INTO hospital_bed(name,bed_type,charge_minor,created_by,type_id) VALUES($1,$2,$3,$4,$5) RETURNING id`, i.Name, b.Type, i.ChargeMinor, a.ID, b.TypeID).Scan(&b.ID)
 	if e != nil {
 		return b, clinicalError(e)
 	}

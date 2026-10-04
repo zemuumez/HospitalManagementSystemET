@@ -13,6 +13,33 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 		page, _ = strconv.Atoi(raw)
 	}
 	switch {
+	case r.URL.Path == "/v1/bed-types" && r.Method == "GET":
+		out, e := s.Clinical.BedTypes(r.Context(), a, page)
+		if e != nil {
+			fail(w, e)
+		} else {
+			write(w, 200, map[string]any{"bedTypes": out, "page": page, "pageSize": 25})
+		}
+	case (r.URL.Path == "/v1/bed-types" && r.Method == "POST") || (strings.HasPrefix(r.URL.Path, "/v1/bed-types/") && r.Method == "PATCH"):
+		var i domain.BedTypeInput
+		if !decode(w, r, &i) {
+			return true
+		}
+		id := ""
+		if r.Method == "PATCH" {
+			id = strings.TrimPrefix(r.URL.Path, "/v1/bed-types/")
+		}
+		out, e := s.Clinical.SaveBedType(r.Context(), a, id, i)
+		if e != nil {
+			fail(w, e)
+		} else {
+			status := 200
+			if id == "" {
+				status = 201
+			}
+			write(w, status, out)
+		}
+
 	case strings.HasPrefix(r.URL.Path, "/v1/beds/") && r.Method == "PATCH":
 		id := strings.TrimPrefix(r.URL.Path, "/v1/beds/")
 		var i domain.BedStateInput

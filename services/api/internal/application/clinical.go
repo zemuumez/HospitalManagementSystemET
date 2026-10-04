@@ -8,6 +8,8 @@ import (
 )
 
 type ClinicalRepository interface {
+	BedTypes(context.Context, int) ([]domain.BedType, error)
+	SaveBedType(context.Context, domain.Actor, string, domain.BedTypeInput) (domain.BedType, error)
 	SetBedState(context.Context, domain.Actor, string, domain.BedStateInput) (domain.Bed, error)
 	TransferBed(context.Context, domain.Actor, string, domain.BedTransfer) (domain.Encounter, error)
 	BedHistory(context.Context, domain.Actor, string, int) ([]domain.BedEvent, error)
@@ -144,4 +146,25 @@ func (c Clinical) BedHistory(ctx context.Context, a domain.Actor, id string, pag
 		return nil, domain.ErrValidation
 	}
 	return c.Store.BedHistory(ctx, a, id, page)
+}
+
+func (c Clinical) BedTypes(ctx context.Context, a domain.Actor, page int) ([]domain.BedType, error) {
+	if !a.Can("beds.read") {
+		return nil, domain.ErrForbidden
+	}
+	if page < 1 || page > 1000 {
+		return nil, domain.ErrValidation
+	}
+	return c.Store.BedTypes(ctx, page)
+}
+func (c Clinical) SaveBedType(ctx context.Context, a domain.Actor, id string, i domain.BedTypeInput) (domain.BedType, error) {
+	if a.Role != "admin" {
+		return domain.BedType{}, domain.ErrForbidden
+	}
+	i.Name = strings.TrimSpace(i.Name)
+	i.Description = strings.TrimSpace(i.Description)
+	if (id != "" && !domain.UUIDPattern.MatchString(id)) || len([]rune(i.Name)) < 1 || len([]rune(i.Name)) > 80 || len([]rune(i.Description)) > 2000 || (id == "" && i.Version != 0) || (id != "" && i.Version < 1) {
+		return domain.BedType{}, domain.ErrValidation
+	}
+	return c.Store.SaveBedType(ctx, a, id, i)
 }

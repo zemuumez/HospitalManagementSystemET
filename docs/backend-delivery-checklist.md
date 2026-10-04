@@ -189,7 +189,8 @@ Backend-first progress:
 - [x] Case relationships and basic OPD/IPD admission/discharge.
 - [x] Atomic bed occupancy and immutable signed notes.
 - [x] Versioned ready/maintenance/unavailable bed states, scoped transfers and retained admission/transfer/discharge history (migration 011; concurrent and authorization tests).
-- [ ] Bed-type master data, complete original bed assignment fields and historical occupancy reports.
+- [x] Bed-type master IDs, descriptions, versioned rename/archive and bed references with compatibility for existing forms (migration 014).
+- [ ] Complete original bed assignment fields and historical occupancy reports.
 - [ ] Nursing/team access, vitals and observations with units/ranges and timestamps.
 - [ ] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments.
 - [x] Signed encounter medication orders with medicine references, dose, route, frequency, duration, instructions and explicit quantity; assigned-doctor signing and retained cancellation.
@@ -409,3 +410,7 @@ Migration 012 adds 45-second ownership leases and attempt counters. The worker r
 ### Doctor absences and retained rescheduling
 
 Migration 013 supports future time-range absences, cancellation reasons and versions, and immutable reschedule history. Doctor absence reasons are visible only to admin/the doctor. Leave cannot overlap active bookings; booking/rescheduling/leave share the doctor lock. Future booked appointments may move within the same doctor's schedule, preserving original booking identity and time for retries. Go unit/database/HTTP tests and vet passed, including competing leave/booking and reschedule requests. Notification updates, cross-doctor reassignment, original calendar/holiday UI and schedule override parity remain pending. [Contract](backend-scheduling-changes.md).
+
+### Bed-type master data
+
+Migration 014 backfills master records from existing bed labels and gives every bed a required type reference. Admin APIs create/edit/archive types with optimistic versions; beds cannot be created using archived types. Existing label-based bed creation remains compatible and resolves or creates a master record in the same transaction. Type renames update display labels; archiving a type does not remove existing beds or clinical history. PostgreSQL tests and vet passed for role denial, stable references, renamed labels, archived-type rejection and stale edits.

@@ -6,6 +6,7 @@ import (
 )
 
 type BedInput struct {
+	TypeID      string `json:"typeId"`
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	ChargeMinor int64  `json:"chargeMinor"`
@@ -14,7 +15,7 @@ type BedInput struct {
 func (b *BedInput) Validate() error {
 	b.Name = strings.TrimSpace(b.Name)
 	b.Type = strings.TrimSpace(b.Type)
-	if len([]rune(b.Name)) < 1 || len([]rune(b.Name)) > 80 || len([]rune(b.Type)) < 1 || len([]rune(b.Type)) > 80 || b.ChargeMinor < 0 || b.ChargeMinor > 1000000000 {
+	if len([]rune(b.Name)) < 1 || len([]rune(b.Name)) > 80 || (b.TypeID == "" && len([]rune(b.Type)) < 1) || (b.TypeID != "" && !UUIDPattern.MatchString(b.TypeID)) || len([]rune(b.Type)) > 80 || b.ChargeMinor < 0 || b.ChargeMinor > 1000000000 {
 		return ErrValidation
 	}
 	return nil
@@ -113,4 +114,15 @@ type BedEvent struct {
 	Reason      string    `json:"reason"`
 	RecordedAt  time.Time `json:"recordedAt"`
 	Version     int       `json:"version"`
+}
+
+type BedTypeInput struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Active      bool   `json:"active"`
+	Version     int    `json:"version"`
+}
+type BedType struct {
+	BedTypeInput
+	ID string `json:"id"`
 }

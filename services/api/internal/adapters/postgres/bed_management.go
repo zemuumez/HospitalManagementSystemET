@@ -12,7 +12,7 @@ func (s Store) SetBedState(ctx context.Context, a domain.Actor, id string, i dom
 		return b, e
 	}
 	defer tx.Rollback(ctx)
-	e = tx.QueryRow(ctx, `SELECT id,name,bed_type,charge_minor,state,version FROM hospital_bed WHERE id=$1 AND active FOR UPDATE`, id).Scan(&b.ID, &b.Name, &b.Type, &b.ChargeMinor, &b.State, &b.Version)
+	e = tx.QueryRow(ctx, `SELECT id,name,bed_type,type_id,charge_minor,state,version FROM hospital_bed WHERE id=$1 AND active FOR UPDATE`, id).Scan(&b.ID, &b.Name, &b.Type, &b.TypeID, &b.ChargeMinor, &b.State, &b.Version)
 	if e != nil {
 		return b, clinicalError(e)
 	}
