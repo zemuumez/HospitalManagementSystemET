@@ -261,8 +261,8 @@ Backend-first progress:
 - [x] Attendance/check-in/out, shifts, breaks, overtime, corrections and approval history (migration 028).
 - [x] Ambulances, assignment/calls, tariffs and billing (migration 029).
 - [x] Services, charge categories, operations, custom fields and validated module settings (migration 030).
-- [ ] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely.
-- [ ] Hospital general settings, logo/favicon, schedules, language and queue theme persisted.
+- [x] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely (migration 031).
+- [x] Hospital general settings, logo/favicon, schedules, language and queue theme persisted (migration 031).
 - [ ] Complaints, notices, testimonials moderation and front-office enquiry lifecycle.
 - [ ] Live consultations/meetings, provider tokens/permissions and visit linkage.
 - [x] Operational email/SMS outbox and safe development transports.
@@ -495,4 +495,17 @@ Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi
 - RBAC permissions (`services.manage`, `services.read`, `operations.manage`, `operations.read`, `settings.manage`, `settings.read`).
 
 PostgreSQL and HTTP integration tests verify: role authorization and denials, validation constraints, CRUD lifecycle, custom field module lookups, module setting activation toggles, and HTTP endpoints. See contract in [backend services operations contract](backend-services-operations-contract.md). Frontend integration deferred to Section 4.
+
+### CMS content, hospital general settings, schedules, and testimonials increment
+
+Migration 031 adds `hospital_general_setting`, `hospital_schedule_day`, `front_cms_setting`, and `cms_testimonial` tables.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Hospital general settings covering hospital naming, contact info, branding URLs, ETB currency, language, and queue themes with bulk updates and audit logging.
+- Hospital weekly schedule day configuration with start/end time validation and closure toggles.
+- Front CMS settings for public portal landing sections (home, about, services, doctors, contact, map, terms, privacy).
+- Testimonials lifecycle with rating (1-5), role-restricted draft moderation, public vs administrative visibility scoping, and audit events.
+- Role authorization (`settings.manage`, `settings.read`, `cms.manage`, `cms.read`).
+
+PostgreSQL and HTTP integration tests verify: role permissions and denials, start/end time boundaries, validation invariants, draft vs published visibility, CRUD updates, audit events, and HTTP endpoints. See contract in [backend CMS settings contract](backend-cms-settings-contract.md). Frontend integration deferred to Section 4.
 
