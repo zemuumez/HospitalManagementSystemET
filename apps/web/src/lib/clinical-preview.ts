@@ -32,6 +32,8 @@ export function dependentOptions(
   if (key === "bed_type_id") return Object.keys(previewBeds);
   if (key === "bed_id" && "bed_type_id" in values)
     return previewBeds[values.bed_type_id] || [];
+  if (key === "case_id" && !("patient_id" in values))
+    return ["Alex Morgan — CASE-001", "Jamie Wilson — CASE-002"];
   if (key === "case_id")
     return values.patient_id
       ? [`${values.patient_id} — CASE-001`, `${values.patient_id} — CASE-002`]

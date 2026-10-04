@@ -1017,6 +1017,7 @@ dialog:has(.modal-content) {
   max-width: 120px;
 }
 .full-editor {
+  scroll-margin-top: 90px;
   padding: 0;
 }
 .legacy-main section:has(> .full-editor) > :not(.full-editor) {
@@ -1906,5 +1907,31 @@ html[lang="am"] .label {
   }
   body:has(dialog[open]) main > section > :not(dialog) {
     display: none !important;
+  }
+}
+
+.dashboard-columns > * {
+  min-width: 0;
+}
+.dashboard-columns .page-heading {
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .bar-chart {
+    gap: 4px;
+  }
+  .bar-group {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+  .bars {
+    gap: 2px;
+  }
+  .bars span {
+    width: 7px;
+    max-width: 45%;
+  }
+  .dashboard-widget h3 {
+    white-space: normal;
   }
 }

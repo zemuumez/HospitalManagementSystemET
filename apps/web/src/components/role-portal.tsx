@@ -1,7 +1,15 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Eye, Search, X, Printer } from "lucide-react";
+import {
+  Eye,
+  Search,
+  X,
+  Printer,
+  CalendarDays,
+  Video,
+  Banknote,
+} from "lucide-react";
 import { usePreviewRole } from "./workspace";
 import { useLanguage } from "./language";
 import { Modal } from "./modal";
@@ -59,6 +67,7 @@ export function RolePortal({ section }: { section: string }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [tab, setTab] = useState("Overview");
   const [descending, setDescending] = useState(false);
+  const [sortColumn, setSortColumn] = useState(config.columns[0]);
   if (!canPreviewPortal(role, section))
     return (
       <section className="legacy-card">
@@ -73,7 +82,14 @@ export function RolePortal({ section }: { section: string }) {
       ) &&
       (!status || sampleValue("Status", i, role) === status),
   );
-  if (descending) rows.reverse();
+  rows.sort(
+    (a, b) =>
+      sampleValue(sortColumn, a, role).localeCompare(
+        sampleValue(sortColumn, b, role),
+        undefined,
+        { numeric: true },
+      ) * (descending ? -1 : 1),
+  );
   const tabs =
     section === "ipd"
       ? [
@@ -129,7 +145,12 @@ export function RolePortal({ section }: { section: string }) {
             <tr>
               {config.columns.map((c) => (
                 <th key={c}>
-                  <button onClick={() => setDescending(!descending)}>
+                  <button
+                    onClick={() => {
+                      setSortColumn(c);
+                      setDescending(sortColumn === c ? !descending : false);
+                    }}
+                  >
                     {t(c)} ↕
                   </button>
                 </th>
@@ -175,7 +196,7 @@ export function RolePortal({ section }: { section: string }) {
                 <X />
               </button>
             </div>
-            <div className="legacy-tabs" role="tablist">
+            <div className="detail-tabs" role="tablist">
               {tabs.map((label) => (
                 <button
                   role="tab"
@@ -216,10 +237,7 @@ export function RolePortal({ section }: { section: string }) {
                 </dl>
               </div>
             )}
-            <button
-              className="btn-secondary mt-5"
-              onClick={() => window.print()}
-            >
+            <button className="secondary mt-5" onClick={() => window.print()}>
               <Printer size={16} />
               {t("Print")}
             </button>
@@ -265,10 +283,13 @@ export function RoleDashboard() {
           <Link key={tile.title} href={tile.href} className="dashboard-widget">
             <span
               style={{
-                background: ["#6571ff", "#0ac074", "#ff8717", "#0099fb"][i],
+                background:
+                  role === "Patient"
+                    ? "#6571ff"
+                    : ["#6571ff", "#0ac074", "#ff8717", "#0099fb"][i],
               }}
             >
-              <Eye />
+              {i < 2 ? <CalendarDays /> : i === 2 ? <Video /> : <Banknote />}
             </span>
             <div>
               <strong>{tile.value}</strong>
@@ -281,13 +302,15 @@ export function RoleDashboard() {
         <h2>
           {t(role === "Patient" ? "Recent Appointments" : "My Workspace")}
         </h2>
-        <div className="role-shortcuts">
-          {links.map((l) => (
-            <Link className="btn-secondary" key={l.href} href={l.href}>
-              {t(l.title)}
-            </Link>
-          ))}
-        </div>
+        {role !== "Patient" && (
+          <div className="role-shortcuts">
+            {links.map((l) => (
+              <Link className="secondary" key={l.href} href={l.href}>
+                {t(l.title)}
+              </Link>
+            ))}
+          </div>
+        )}
         {role === "Patient" && (
           <div className="legacy-table-wrap">
             <table className="legacy-table">

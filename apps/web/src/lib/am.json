@@ -1225,5 +1225,9 @@
   "Testimonial": "ምስክርነት",
   "Used Medicine": "ጥቅም ላይ የዋለ መድኃኒት",
   "Vaccinated Patient": "የተከተበ ታካሚ",
-  "Visitor": "ጎብኚ"
+  "Visitor": "ጎብኚ",
+  "Opening time": "የመክፈቻ ሰዓት",
+  "Closing time": "የመዝጊያ ሰዓት",
+  "Closing time must be after opening time.": "የመዝጊያ ሰዓት ከመክፈቻ ሰዓት በኋላ መሆን አለበት።",
+  "Template name must be unique.": "የአብነት ስም ልዩ መሆን አለበት።"
 }

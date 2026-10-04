@@ -2,7 +2,7 @@
 
 A single-hospital management system being rebuilt with Next.js, Tailwind CSS and Go. Better Auth owns accounts/sessions; Firebase verifies phone identities; Go owns hospital authorization and workflows.
 
-The current UI is an original-style, frontend-first preview with 111 module routes and synthetic data. See [frontend preview and parity limits](docs/frontend-preview.md). The connected foundation includes email sign-in/reset, Firebase phone linking/sign-in preparation, scoped patient registration/directory at `/live-patients`, and operational email/SMS at `/communications`. The other module backends remain pending. See [discovery](docs/discovery/README.md), [delivery plan](docs/discovery/rebuild-plan.md), and the superseding [authentication decision](docs/architecture/001-authentication.md).
+The current UI is an original-style, frontend-first preview with 116 module routes, separate role/personal-record views, public pages, and synthetic data. See [the four-step frontend review](docs/frontend-four-step-review.md) and [frontend preview and parity limits](docs/frontend-preview.md). The connected foundation includes email sign-in/reset, Firebase phone linking/sign-in preparation, scoped patient registration/directory at `/live-patients`, and operational email/SMS at `/communications`. The other module backends remain pending. See [discovery](docs/discovery/README.md), [delivery plan](docs/discovery/rebuild-plan.md), and the superseding [authentication decision](docs/architecture/001-authentication.md).
 
 ## Local development
 
@@ -54,3 +54,14 @@ The project repository is https://github.com/zemuumez/HospitalManagementSystemET
 `apps/web` contains the UI and Better Auth; `services/api/internal/domain` has policy/validation without transport/database imports; `application` coordinates use cases through interfaces; `adapters` implement HTTP, persistence and delivery. API and worker entry points live in `cmd`. `db/migrations` owns the schema. `review` and `tmp` contain ignored legacy/reference work, not the new runtime.
 
 Do not treat this foundation as the finished HMS or deploy it with development settings. Build the remaining modules as vertical slices with their legacy workflow audit, negative authorization tests and clinical/financial acceptance examples.
+
+## Frontend verification
+
+The frontend audit uses an isolated browser context and refuses non-loopback URLs. It creates only sample browser-storage records; it does not invoke the connected patient registration or messaging forms.
+
+1. Start the local web and Go API as described above.
+2. Set `HMS_TEST_EMAIL` and `HMS_TEST_PASSWORD` to an existing development account. Do not put credentials in tracked files.
+3. Install the test browser with `npx playwright install chromium`, or set `HMS_CHROME_PATH` to your installed Chrome executable.
+4. Run `npm run test:frontend`. Optional `HMS_BASE_URL` defaults to `http://127.0.0.1:3000`.
+
+Results, failure screenshots, responsive screenshots and sample exports are written under ignored `.local/frontend-verification`. The checks cover catalog routes/form submissions, role destinations, persistence, card generation, custom fields, record actions/export, appointment conflicts and desktop/mobile overflow. These are frontend acceptance checks, not proof of backend business-rule parity or a successful comparison with an unreachable live demo.

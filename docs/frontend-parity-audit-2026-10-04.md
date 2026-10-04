@@ -1,5 +1,7 @@
 # Frontend parity audit — 4 October 2026
 
+The subsequent [four-step frontend review](frontend-four-step-review.md) updates the role-screen, department, localization and verification findings below. This document records the earlier checkpoint.
+
 ## Evidence and limits
 
 Compared the five user screenshots, the supplied Laravel Blade/Livewire source, the frontend Sass and static assets, and the current Next.js screens. The public reference `https://hms.infyom.com/dashboard` was attempted through the web reader and Chrome. The reader could not access it; Chrome navigation timed out after 60 seconds. No reference-site records were modified. Consequently, this audit does **not** claim that the deployed demo's nine role sessions were inspected.

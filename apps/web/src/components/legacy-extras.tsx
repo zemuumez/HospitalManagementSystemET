@@ -321,6 +321,17 @@ function QueueTheme() {
   const [color, setColor] = useState("#6571ff");
   const [message, setMessage] = useState("Please wait for your number");
   const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("hms-queue-theme") || "null",
+      );
+      if (saved) {
+        setColor(saved.color);
+        setMessage(saved.message);
+      }
+    } catch {}
+  }, []);
   return (
     <section className="legacy-card">
       <h2>{t("Patient Queue Theme")}</h2>
@@ -338,7 +349,7 @@ function QueueTheme() {
           <span className="label">{t("Message")}</span>
           <input
             className="field"
-            value={t(message)}
+            value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
         </label>
@@ -747,6 +758,8 @@ function SmartCards({ templates }: { templates: boolean }) {
     })),
   );
   const [editing, setEditing] = useState<CardTemplate | null>(null);
+  const [originalName, setOriginalName] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState("");
   const [create, setCreate] = useState(false);
   const [selected, setSelected] = useState<CardRow | null>(null);
   const [search, setSearch] = useState("");
@@ -792,7 +805,9 @@ function SmartCards({ templates }: { templates: boolean }) {
           className="primary"
           onClick={() =>
             templates
-              ? setEditing({ ...templateSeed[0], name: "" })
+              ? (setOriginalName(null),
+                setTemplateError(""),
+                setEditing({ ...templateSeed[0], name: "" }))
               : setCreate(true)
           }
         >
@@ -854,7 +869,11 @@ function SmartCards({ templates }: { templates: boolean }) {
                         <button
                           className="text-brand"
                           aria-label={`Edit ${template.name}`}
-                          onClick={() => setEditing({ ...template })}
+                          onClick={() => {
+                            setOriginalName(template.name);
+                            setTemplateError("");
+                            setEditing({ ...template });
+                          }}
                         >
                           <Pencil size={17} />
                         </button>
@@ -937,11 +956,30 @@ function SmartCards({ templates }: { templates: boolean }) {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              const name = editing.name.trim();
+              if (
+                !name ||
+                list.some(
+                  (x) =>
+                    x.name.toLowerCase() === name.toLowerCase() &&
+                    x.name !== originalName,
+                )
+              ) {
+                setTemplateError("Template name must be unique.");
+                return;
+              }
+              const updated = { ...editing, name };
               setList((old) =>
-                old.some((x) => x.name === editing.name)
-                  ? old.map((x) => (x.name === editing.name ? editing : x))
-                  : [...old, editing],
+                originalName
+                  ? old.map((x) => (x.name === originalName ? updated : x))
+                  : [...old, updated],
               );
+              if (originalName)
+                setCards((old) =>
+                  old.map((c) =>
+                    c.template === originalName ? { ...c, template: name } : c,
+                  ),
+                );
               setEditing(null);
             }}
           >
@@ -956,6 +994,11 @@ function SmartCards({ templates }: { templates: boolean }) {
               </button>
             </div>
             <div className="modal-content">
+              {templateError && (
+                <p className="error" role="alert">
+                  {t(templateError)}
+                </p>
+              )}
               <div className="legacy-form">
                 <label>
                   <span className="label">{t("Template Name")}</span>

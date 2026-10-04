@@ -63,7 +63,7 @@ function FieldInput({
               <input
                 type="radio"
                 name="gender"
-                value={t(g)}
+                value={g}
                 checked={value === g}
                 onChange={() => onChange(g)}
                 required={f.required}
@@ -334,7 +334,7 @@ export function LegacyScreen({
         ).toFixed(2);
       } catch {}
     }
-    s.fields.forEach((f) => {
+    [...s.fields, ...customFields].forEach((f) => {
       if (f.type === "password") delete values[f.key];
       else values[f.label] = values[f.key] || "";
     });
@@ -553,6 +553,17 @@ export function LegacyScreen({
                       key={i}
                       onClick={() => {
                         newRow();
+                        setEditing((old) =>
+                          old
+                            ? {
+                                ...old,
+                                values: {
+                                  ...old.values,
+                                  opd_date: `${year}-${String(month + 1).padStart(2, "0")}-${String(i + 1).padStart(2, "0")}`,
+                                },
+                              }
+                            : old,
+                        );
                       }}
                     >
                       <span>{i + 1}</span>
@@ -766,7 +777,7 @@ export function LegacyScreen({
                 {t("Preview form · Use sample information only")}
               </p>
               <div className="legacy-form">
-                {s.fields.map((f) => (
+                {[...s.fields, ...customFields].map((f) => (
                   <FieldInput
                     key={f.key}
                     field={f}
@@ -854,7 +865,7 @@ export function LegacyScreen({
             </div>
             {tab === "Overview" ? (
               <dl className="detail-grid">
-                {s.fields
+                {[...s.fields, ...customFields]
                   .filter((f) => f.type !== "password")
                   .map((f) => (
                     <div key={f.key}>
@@ -945,7 +956,7 @@ function FullPageForm({
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.scrollIntoView({ block: "start" });
-    ref.current?.focus();
+    ref.current?.focus({ preventScroll: true });
   }, []);
   return (
     <div
@@ -1382,8 +1393,21 @@ function BedBoard({ onSelect }: { onSelect: (r: PreviewRow) => void }) {
 function Odontogram() {
   const { t, formatValue } = useLanguage();
   const [selected, setSelected] = useState(1);
+  const [patient, setPatient] = useState(people[0]);
   const [conditions, setConditions] = useState<Record<number, string>>({});
   const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    try {
+      setConditions(
+        JSON.parse(
+          sessionStorage.getItem(`hms-odontogram-preview:${patient}`) || "{}",
+        ),
+      );
+    } catch {
+      setConditions({});
+    }
+    setSaved(false);
+  }, [patient]);
   const choices = [
     ["Healthy", "#ffffff"],
     ["K", "#e91e63"],
@@ -1406,7 +1430,11 @@ function Odontogram() {
       <div className="legacy-form">
         <label>
           <span className="label">{t("Patient:")}</span>
-          <select className="field">
+          <select
+            className="field"
+            value={patient}
+            onChange={(e) => setPatient(e.target.value)}
+          >
             {people.map((p) => (
               <option key={p}>{p}</option>
             ))}
@@ -1466,7 +1494,7 @@ function Odontogram() {
           className="primary"
           onClick={() => {
             sessionStorage.setItem(
-              "hms-odontogram-preview",
+              `hms-odontogram-preview:${patient}`,
               JSON.stringify(conditions),
             );
             setSaved(true);
@@ -1493,46 +1521,89 @@ function Odontogram() {
   );
 }
 function Schedule() {
-  const { t, formatValue } = useLanguage();
+  const { t } = useLanguage();
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [days, setDays] = useState(() =>
+    [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ].map((day) => ({
+      day,
+      enabled: day !== "Sunday",
+      open: "08:00",
+      close: "17:00",
+    })),
+  );
+  useEffect(() => {
+    try {
+      const data = JSON.parse(
+        sessionStorage.getItem("hms-hospital-schedule") || "null",
+      );
+      if (Array.isArray(data) && data.length === 7) setDays(data);
+    } catch {}
+  }, []);
+  function update(i: number, patch: Partial<(typeof days)[number]>) {
+    setDays(days.map((d, n) => (n === i ? { ...d, ...patch } : d)));
+    setSaved(false);
+  }
   return (
     <form
       className="legacy-card"
       onSubmit={(e) => {
         e.preventDefault();
+        if (days.some((d) => d.enabled && d.close <= d.open)) {
+          setError("Closing time must be after opening time.");
+          return;
+        }
+        sessionStorage.setItem("hms-hospital-schedule", JSON.stringify(days));
+        setError("");
         setSaved(true);
       }}
     >
       <h2>{t("Hospital Schedule")}</h2>
-      {[
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ].map((d) => (
-        <div className="schedule-row" key={d}>
+      {days.map((d, i) => (
+        <div className="schedule-row" key={d.day}>
           <label>
-            <input type="checkbox" defaultChecked={d !== "Sunday"} /> {d}
+            <input
+              type="checkbox"
+              checked={d.enabled}
+              onChange={(e) => update(i, { enabled: e.target.checked })}
+            />{" "}
+            {t(d.day)}
           </label>
           <input
-            aria-label={`${d} opening time`}
+            aria-label={`${t(d.day)} ${t("Opening time")}`}
             className="field"
             type="time"
-            defaultValue="08:00"
+            required={d.enabled}
+            disabled={!d.enabled}
+            value={d.open}
+            onChange={(e) => update(i, { open: e.target.value })}
           />
           <span>{t("to")}</span>
           <input
-            aria-label={`${d} closing time`}
+            aria-label={`${t(d.day)} ${t("Closing time")}`}
             className="field"
             type="time"
-            defaultValue="17:00"
+            required={d.enabled}
+            disabled={!d.enabled}
+            value={d.close}
+            onChange={(e) => update(i, { close: e.target.value })}
           />
         </div>
       ))}
       <button className="primary mt-5">{t("Save")}</button>
+      {error && (
+        <p role="alert" className="error mt-4">
+          {t(error)}
+        </p>
+      )}
       {saved && (
         <p role="status" className="success mt-4">
           {t("Preview schedule saved.")}

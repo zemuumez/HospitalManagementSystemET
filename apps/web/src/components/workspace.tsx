@@ -38,7 +38,11 @@ import {
   visibleGroups,
   groupScreens,
 } from "@/lib/legacy";
-import { roleNavigation, portalSections } from "@/lib/role-preview";
+import {
+  roleNavigation,
+  portalSections,
+  roleCanSeeScreen,
+} from "@/lib/role-preview";
 type Identity = { user: User; permissions: string[] };
 const PreviewRoleContext = createContext("Admin");
 export const usePreviewRole = () => useContext(PreviewRoleContext);
@@ -86,7 +90,15 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   const group = selected?.group;
   useEffect(() => {
     api<Identity>("me")
-      .then(setIdentity)
+      .then((result) => {
+        setIdentity(result);
+        if (!sessionStorage.getItem("hms-preview-role")) {
+          const current = previewRoles.find(
+            (r) => r.toLowerCase().replaceAll(" ", "_") === result.user.role,
+          );
+          if (current) setRole(current);
+        }
+      })
       .catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
@@ -97,6 +109,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     <IdentityContext.Provider value={identity}>
       <PreviewRoleContext.Provider value={role}>
         <div
+          data-ready={identity ? "true" : "false"}
           className={`legacy-shell ${collapsed ? "is-collapsed" : ""} ${dark ? "legacy-dark" : ""}`}
         >
           <a className="sr-only focus:not-sr-only" href="#main-content">
@@ -204,13 +217,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
               >
                 {group ? (
                   groupScreens(group)
-                    .filter(
-                      (s) =>
-                        role === "Admin" ||
-                        !["admins", "users", "doctor-departments"].includes(
-                          s.id,
-                        ),
-                    )
+                    .filter((s) => roleCanSeeScreen(role, s.id))
                     .map((s) => (
                       <Link
                         key={s.id}
@@ -333,8 +340,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
               )}
             </main>
             <footer className="legacy-footer">
-              {t("Copyright ©")}
-              {new Date().getFullYear()}
+              {t("Copyright ©")} {new Date().getFullYear()}{" "}
               {t("ULSHMS. All rights reserved.")}
               <span>{t("Hospital Management System")}</span>
             </footer>

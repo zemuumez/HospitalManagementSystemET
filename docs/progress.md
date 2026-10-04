@@ -1,3 +1,7 @@
+# Latest frontend review
+
+The four source-based frontend checkpoints are documented in [the review report](frontend-four-step-review.md). Role menus/personal records, doctor details, dependent clinical forms, source-field Amharic coverage and frontend regression checks have been added. The live demo remains unreachable, and exact PDF/clinical parity is not claimed. Backend integration has not been extended in this pass.
+
 # Delivery status
 
 ## Screenshot-driven parity pass

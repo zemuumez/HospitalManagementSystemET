@@ -12,13 +12,15 @@
     "test:integration": "node --env-file=apps/web/.env.local scripts/integration.mjs",
     "format:check": "prettier --check \"apps/web/src/**/*.{ts,tsx,css}\" \"apps/web/scripts/*.ts\" \"scripts/*.mjs\"",
     "db:migrate": "npm run db:migrate --workspace @hms/web",
-    "admin:create": "npm run admin:create --workspace @hms/web"
+    "admin:create": "npm run admin:create --workspace @hms/web",
+    "test:frontend": "node scripts/verify-frontend.mjs"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",
     "uuid": "11.1.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "prettier": "3.9.9"
   }
 }

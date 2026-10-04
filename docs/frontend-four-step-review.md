@@ -25,3 +25,25 @@ Verification: TypeScript and three unit tests passed. Browser checked dependent 
 Added Amharic entries for all catalog screen titles, groups, columns and form labels, the omitted prescription partials, CMS fields, role names/personal views, form actions, and common validation/feedback. Static accessibility labels and dropdown text use the same translator; option values stay canonical English so language changes do not change stored values. Dates displayed in record tables use localized Gregorian formatting; this does not switch the clinical calendar to the Ethiopian calendar or change currency denomination.
 
 Added a coverage test for all source-derived catalog/CMS/prescription labels. Browser checks passed for Amharic prescriptions, language switching with entered data preserved, patient dashboard, refresh persistence, 390px overflow and translated browser validation. Screenshots inspected. Proper names, medicine names, identifiers and user-authored content are preserved. Provider-returned error messages can still fall back to English. Native-speaker/clinical review of the new Amharic wording remains required; there is no original Amharic pack to compare.
+
+## Step 4 — audit, fixes and reproducible checks
+
+Added `npm run test:frontend` using a pinned Playwright dependency. It requires an existing development account through environment variables, refuses remote targets, and uses a fresh browser context. Only synthetic frontend records are changed. It records screenshots, CSV/card downloads and machine-readable results under ignored `.local/frontend-verification`.
+
+The audit covers 111 source catalog routes and their available create forms, five supplemental screens, fourteen public URLs, nine role navigation sets and personal detail dialogs, schedule validation/persistence, per-patient dental persistence, template rename/card references, custom-field injection, CRUD/search/export, appointment conflicts, role-specific billing tabs, queue-theme persistence, and desktop/390px page overflow.
+
+Defects found and fixed: schedule/dental/queue settings did not restore saved values; dental state was not patient-specific; template renaming orphaned card references; personal-table sorting reversed rows instead of sorting the chosen column; custom fields were injected into the wrong form branch; case-only forms lost their case options after dependent-select changes; the admin chart overflowed mobile width. Full-page editors now account for the sticky header when scrolled into view. Role tabs were compared with `layouts/sub_menu.blade.php`, and visibility now follows those source role blocks. Initial role selection follows the signed-in role unless a preview role was explicitly saved.
+
+Test corrections are separate from product fixes: required-radio fixture handling, special screens without an H1, ambiguous labels, and waiting for React readiness and navigation before checking role menus.
+
+Final verification: **157 unique browser checks passed** across the catalog run and the targeted follow-up. The 111 catalog checks passed; the follow-up passed all 46 public/role/regression/layout checks, resolving two test-timing failures. Both runs had zero browser runtime errors. Desktop/mobile screenshots were inspected. TypeScript, five unit tests, formatting and the production build are checked separately. The new Playwright dependency audit reported zero vulnerabilities.
+
+## Remaining parity boundaries before claiming a complete original clone
+
+- The deployed demo still cannot be reached from this environment; `/dashboard`, `/login` and `/` attempts failed. Its role sessions and any add-on/version differences have not been visually verified.
+- Personal IPD/OPD subordinate tabs have empty sample histories. They do not constitute a full longitudinal clinical record. Some specialized modules still use the shared source-derived form/table renderer.
+- Print uses browser layouts and CSV/card downloads. Original clinical/billing PDF templates and signed document exports need a separate output-layout pass; browser printing is not exact PDF parity.
+- Real appointment availability, stock, clinical/financial constraints, payment-provider flows, patient self-service submission, secure attachments, QR patient lookup and actual two-factor enrollment require backend contracts and enforcement. Preview behavior must not be treated as the final business specification.
+- Proper names and user-authored content remain untranslated. Amharic needs native-speaker/clinical review, and provider-generated errors may remain English. Calendar dates remain Gregorian.
+
+The original discovery ledger remains authoritative about source files not yet exhaustively reviewed. This pass does not claim to have read every line of the archive or reproduced every original business rule.

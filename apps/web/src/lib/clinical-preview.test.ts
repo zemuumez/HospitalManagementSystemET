@@ -59,3 +59,8 @@ test("unavailable slots and inconsistent dates are rejected", () => {
     "",
   );
 });
+
+test("case-only forms still offer cases without a patient selector", () => {
+  assert.ok(dependentOptions("case_id", {})!.length > 0);
+  assert.deepEqual(dependentOptions("case_id", { patient_id: "" }), []);
+});

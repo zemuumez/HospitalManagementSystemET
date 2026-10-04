@@ -1,4 +1,9 @@
 import { groups, groupScreens, screenHref } from "./legacy";
+import tabRoles from "./role-tabs.json";
+export function roleCanSeeScreen(role: string, id: string) {
+  const allowed = (tabRoles as Record<string, string[]>)[id];
+  return role === "Admin" || !allowed || allowed.includes(role);
+}
 export type RoleLink = { title: string; href: string; group?: string };
 // Ordering and employee/patient destinations follow layouts/menu.blade.php.
 const menus: Record<string, string[]> = {
@@ -235,7 +240,7 @@ export function roleNavigation(role: string): RoleLink[] {
       "Live Meetings": "live-consultations-live-meetings",
       Complaint: "complaints",
     };
-    const first = groupScreens(title)[0];
+    const first = groupScreens(title).find((s) => roleCanSeeScreen(role, s.id));
     return {
       title,
       group: title,
