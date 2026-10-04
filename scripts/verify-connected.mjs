@@ -214,7 +214,7 @@ try {
   await dialog.getByLabel("Unit Price (ETB)", { exact: true }).fill("3.33");
   // Issued invoices are immutable. Persistent posting is verified in the
   // disposable-schema Go suite; this shared-database browser test stops before issue.
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   console.log(
     "PASS: browser charge account creation and invoice form inputs (posting tested in isolated schema).",
   );

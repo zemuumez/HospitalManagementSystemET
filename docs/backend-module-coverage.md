@@ -44,7 +44,7 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Schedules (`schedules`) | Doctors | Weekly periods and slots; holidays/absence UI pending | Open |
 | Doctor Holidays (`doctor-holiday`) | Doctors | Preview only; typed backend, integration and workflow QA pending | Open |
 | Lunch Breaks (`lunch-breaks`) | Doctors | Preview only; typed backend, integration and workflow QA pending | Open |
-| Prescriptions (`prescriptions`) | Prescriptions | Preview only; typed backend, integration and workflow QA pending | Open |
+| Prescriptions (`prescriptions`) | Prescriptions | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
 | Diagnosis Tests (`patient-diagnosis-test`) | Diagnosis | Preview only; typed backend, integration and workflow QA pending | Open |
 | Diagnosis Categories (`diagnosis-categories`) | Diagnosis | Preview only; typed backend, integration and workflow QA pending | Open |
 | Enquiries (`enquiries`) | Enquiries | Preview only; typed backend, integration and workflow QA pending | Open |
@@ -70,9 +70,9 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Google Meet Consultations (`goole-meet-consultation`) | Live Consultations | Preview only; typed backend, integration and workflow QA pending | Open |
 | Medicine Categories (`categories`) | Medicine | Preview only; typed backend, integration and workflow QA pending | Open |
 | Medicine Brands (`brands`) | Medicine | Preview only; typed backend, integration and workflow QA pending | Open |
-| Medicines (`medicines`) | Medicine | Preview only; typed backend, integration and workflow QA pending | Open |
-| Medicine Purchases (`purchase-medicines`) | Medicine | Preview only; typed backend, integration and workflow QA pending | Open |
-| Used Medicines (`used-medicine`) | Medicine | Preview only; typed backend, integration and workflow QA pending | Open |
+| Medicines (`medicines`) | Medicine | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
+| Medicine Purchases (`purchase-medicines`) | Medicine | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
+| Used Medicines (`used-medicine`) | Medicine | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
 | Medicine Bills (`medicine-bills`) | Medicine | Preview only; typed backend, integration and workflow QA pending | Open |
 | Patients (`patients`) | Patients | Essential registration and portal/doctor linkage; full fields/edit pending | Open |
 | Patient Cases (`patient-cases`) | Patients | Create/list with patient and doctor; edit/closure/full case fields pending | Open |
@@ -110,12 +110,12 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | IPD Consultant Registers (`ipd-consultant-registers`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
 | IPD Operation (`ipd-operation`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
 | IPD Charges (`ipd-charges`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
-| IPD Prescriptions (`ipd-prescriptions`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
+| IPD Prescriptions (`ipd-prescriptions`) | Clinical Records | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
 | IPD Timelines (`ipd-timelines`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
 | IPD Payments (`ipd-payments`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
 | IPD Bills (`ipd-bills`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
 | OPD Diagnoses (`opd-diagnoses`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
-| OPD Prescriptions (`opd-prescriptions`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
+| OPD Prescriptions (`opd-prescriptions`) | Clinical Records | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
 | OPD Timelines (`opd-timelines`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
 | Attendance (`attendance`) | Attendance | Preview only; typed backend, integration and workflow QA pending | Open |
 | Manage Attendance (`manage-attendance`) | Manage Attendance | Preview only; typed backend, integration and workflow QA pending | Open |

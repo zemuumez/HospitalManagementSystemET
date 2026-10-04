@@ -20,6 +20,13 @@ type Actor struct {
 
 func (a Actor) Can(permission string) bool {
 	switch permission {
+	case "pharmacy.catalog":
+		return a.Role == "admin" || a.Role == "pharmacist" || a.Role == "doctor"
+	case "pharmacy.manage":
+		return a.Role == "admin" || a.Role == "pharmacist"
+	case "medication.read":
+		return a.Role == "admin" || a.Role == "pharmacist" || a.Role == "doctor" || a.Role == "patient"
+
 	case "billing.read":
 		return a.Role == "admin" || a.Role == "accountant" || a.Role == "patient"
 	case "billing.manage":
@@ -46,7 +53,7 @@ func (a Actor) Can(permission string) bool {
 }
 func (a Actor) Permissions() []string {
 	result := []string{}
-	for _, p := range []string{"patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book", "staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage"} {
+	for _, p := range []string{"pharmacy.catalog", "pharmacy.manage", "medication.read", "patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book", "staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage"} {
 		if a.Can(p) {
 			result = append(result, p)
 		}

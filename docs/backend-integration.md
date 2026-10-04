@@ -1,3 +1,5 @@
+> Current direction: finish Section 3 backend work before further frontend integration. Issued invoice protection and pharmacy medication/stock APIs are now added; see [pharmacy contract](backend-pharmacy-contract.md) and the [delivery tracker](backend-delivery-checklist.md). Earlier integration checkpoints below remain historical evidence.
+
 # Backend integration progress
 
 ## Verified step 1: identities and scheduling

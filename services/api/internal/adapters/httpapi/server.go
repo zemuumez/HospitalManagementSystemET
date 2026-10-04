@@ -21,6 +21,7 @@ type Server struct {
 	Scheduling application.Scheduling
 	Clinical   application.Clinical
 	Billing    application.Billing
+	Pharmacy   application.Pharmacy
 	Actors     ActorStore
 	AuthURL    string
 	Origin     string
@@ -114,6 +115,9 @@ func (s Server) Handler() http.Handler {
 		a, err := s.identify(r)
 		if err != nil {
 			write(w, 401, map[string]string{"error": "Sign in to continue"})
+			return
+		}
+		if s.pharmacy(w, r, a) {
 			return
 		}
 		if s.billing(w, r, a) {

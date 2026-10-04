@@ -111,6 +111,7 @@ Manual payment forms record completed money movements; they do not send bank tra
 | Notes/discharge | Encounter `/notes` and `/discharge` | Encounter details | Attachments, amendments, templates, print/PDF |
 | Messaging | `/v1/messages` | Communications | Preferences, callbacks, scheduled delivery, reconciliation |
 | Billing | `/v1/charge-accounts`, `/v1/invoices`, invoice detail/payments, billing patient index | Accounts, Invoices, portal invoices | Gateways, taxes, voiding/corrections, print, reconciliation, source charges |
+| Pharmacy | `/v1/medicines`, `/v1/medicine-batches`, `/v1/medication-orders`, `/v1/pharmacy-movements` | None; backend-first | Full document/master parity, billing linkage; [contract](backend-pharmacy-contract.md) |
 | Other original modules | No completed API yet | Marked frontend previews | See module coverage appendix |
 
 The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The complete original-screen inventory is in [backend-module-coverage.md](backend-module-coverage.md).
@@ -185,7 +186,8 @@ Backend-first progress:
 - [ ] Bed-type master data, maintenance/unavailable states, transfers and occupancy history.
 - [ ] Nursing/team access, vitals and observations with units/ranges and timestamps.
 - [ ] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments.
-- [ ] Prescriptions with medicine references, dose, route, frequency, duration, instructions and signed versions.
+- [x] Signed encounter medication orders with medicine references, dose, route, frequency, duration, instructions and explicit quantity; assigned-doctor signing and retained cancellation.
+- [ ] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF.
 - [ ] Encounter charges/payments and invoice linkage; discharge financial policy must be explicit.
 - [ ] Admission packages/insurance/guardians and full original admission fields.
 - [ ] Discharge summary templates, signing, print/PDF and post-discharge correction/addendum workflow.
@@ -204,8 +206,9 @@ Backend-first progress:
 ### G. Pharmacy, blood bank and inventory
 
 - [ ] Medicines, categories, brands, units, suppliers, purchases and batches/expiry.
-- [ ] Append-only stock movements; transactional no-negative-stock checks and concurrent dispensing tests.
-- [ ] Prescription-to-dispensation linkage; partial dispensing, returns and cancellation rules.
+- [x] Pharmacy append-only stock movements; transactional no-negative-stock checks, commit-time balance reconciliation and concurrent dispensing tests (migration 006). General inventory is tracked separately below.
+- [x] Signed medication-order-to-dispensation linkage, partial dispensing limits across batches, retained cancellation and bounded quarantined returns.
+- [ ] Full prescription document linkage, return assessment, recalls and replacement/refill workflows.
 - [ ] Medicine bills, payments, discounts and reversals linked to the financial ledger.
 - [ ] Blood groups, donors, donations, components, screening, inventory and issued units.
 - [ ] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels.
@@ -346,3 +349,7 @@ Next implementation: prescriptions, pharmacy/inventory movements and their billi
 Migration 005 seals issued invoices, prevents snapshot edits/deletion and late line insertion, and checks line totals at transaction commit. Payment/refund updates remain supported and passed the existing concurrency suite. The legacy InvoiceRepository permits destructive invoice updates; immutable issued records are an intentional accounting-integrity change. A dedicated correction/void workflow remains open.
 
 Verification: Go tests with `HMS_TEST_DATABASE_URL` enabled (fresh schema, all migrations, invoice mutation rejection, incomplete-commit rejection, payments/refunds and HTTP checks) and `go vet ./...` passed. The shared-development-database browser suite now exercises invoice form entry without issuing an undeletable test invoice; database posting coverage stays in disposable schemas. Earlier 156-check browser results are historical, not a claim of a new full browser run.
+
+### Backend-first increment: pharmacy and signed medication core
+
+See [pharmacy contracts, source differences and remaining work](backend-pharmacy-contract.md). Migration 006, typed domain/application/repository code and authenticated Go routes implement catalog creation/search, batch receipts, signed encounter medication orders, cancellation, partial dispensing, returns and disposal. All Go tests with isolated PostgreSQL enabled and vet passed. New frontend integration is deferred. Completed core items are split from remaining full-document/master-data parity above; Section 3 is still incomplete.
