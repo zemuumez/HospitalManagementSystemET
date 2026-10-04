@@ -26,7 +26,7 @@ func (s Store) Patients(ctx context.Context, a domain.Actor, search string, page
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, `SELECT id,medical_record_number,given_name,family_name,date_of_birth::text,phone,created_at,COALESCE(user_id,''),COALESCE(clinician_user_id,'') FROM patient WHERE `+scope+` AND ($3='' OR strpos(lower(given_name || ' ' || family_name),lower($3))>0 OR medical_record_number::text=$3) ORDER BY created_at DESC,id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
+	rows, err := tx.Query(ctx, `SELECT id,medical_record_number,given_name,family_name,COALESCE(date_of_birth::text,''),phone,created_at,COALESCE(user_id,''),COALESCE(clinician_user_id,'') FROM patient WHERE `+scope+` AND ($3='' OR strpos(lower(given_name || ' ' || family_name),lower($3))>0 OR medical_record_number::text=$3) ORDER BY created_at DESC,id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (s Store) RegisterPatient(ctx context.Context, a domain.Actor, in domain.Pa
 	}
 	defer tx.Rollback(ctx)
 	var mrn int64
-	err = tx.QueryRow(ctx, `INSERT INTO patient(given_name,family_name,date_of_birth,phone) VALUES($1,$2,$3,$4) RETURNING id,medical_record_number,created_at`, in.GivenName, in.FamilyName, in.DateOfBirth, in.Phone).Scan(&p.ID, &mrn, &p.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO patient(given_name,family_name,date_of_birth,phone) VALUES($1,$2,NULLIF($3,'')::date,$4) RETURNING id,medical_record_number,created_at`, in.GivenName, in.FamilyName, in.DateOfBirth, in.Phone).Scan(&p.ID, &mrn, &p.CreatedAt)
 	if err != nil {
 		return p, err
 	}

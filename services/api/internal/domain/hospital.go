@@ -79,9 +79,14 @@ func (p *PatientInput) Validate(now time.Time) error {
 	p.GivenName = strings.TrimSpace(p.GivenName)
 	p.FamilyName = strings.TrimSpace(p.FamilyName)
 	p.Phone = strings.TrimSpace(p.Phone)
-	dob, err := time.Parse("2006-01-02", p.DateOfBirth)
-	if err != nil || dob.After(now) || dob.Before(now.AddDate(-150, 0, 0)) {
-		return ErrValidation
+	p.DateOfBirth = strings.TrimSpace(p.DateOfBirth)
+	if p.DateOfBirth != "" {
+		local := now.In(HospitalLocation)
+		today := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, HospitalLocation)
+		dob, err := time.ParseInLocation("2006-01-02", p.DateOfBirth, HospitalLocation)
+		if err != nil || dob.After(today) || dob.Before(today.AddDate(-150, 0, 0)) {
+			return ErrValidation
+		}
 	}
 	if len([]rune(p.GivenName)) < 1 || len([]rune(p.GivenName)) > 80 || len([]rune(p.FamilyName)) < 1 || len([]rune(p.FamilyName)) > 80 {
 		return ErrValidation

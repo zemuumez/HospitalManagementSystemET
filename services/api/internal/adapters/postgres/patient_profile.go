@@ -8,7 +8,7 @@ import (
 	"hms.local/api/internal/domain"
 )
 
-const profileSelect = `SELECT p.id,p.medical_record_number,p.given_name,p.family_name,p.date_of_birth::text,p.phone,d.email,d.gender,d.blood_group,d.address1,d.address2,d.city,d.region,d.country,d.postal_code,d.emergency_name,d.emergency_phone,d.emergency_relationship,d.active,d.sms_consent,d.email_consent,d.version FROM patient p JOIN patient_profile d ON d.patient_id=p.id `
+const profileSelect = `SELECT p.id,p.medical_record_number,p.given_name,p.family_name,COALESCE(p.date_of_birth::text,''),p.phone,d.email,d.gender,d.blood_group,d.address1,d.address2,d.city,d.region,d.country,d.postal_code,d.emergency_name,d.emergency_phone,d.emergency_relationship,d.active,d.sms_consent,d.email_consent,d.version FROM patient p JOIN patient_profile d ON d.patient_id=p.id `
 
 func scanProfile(row pgx.Row) (domain.PatientProfile, error) {
 	var p domain.PatientProfile
@@ -45,7 +45,7 @@ func (s Store) UpdatePatientProfile(ctx context.Context, a domain.Actor, id stri
 	if before.Version != i.Version {
 		return before, domain.ErrStale
 	}
-	if _, e = tx.Exec(ctx, `UPDATE patient SET given_name=$2,family_name=$3,date_of_birth=$4,phone=$5 WHERE id=$1`, id, i.GivenName, i.FamilyName, i.DateOfBirth, i.Phone); e != nil {
+	if _, e = tx.Exec(ctx, `UPDATE patient SET given_name=$2,family_name=$3,date_of_birth=NULLIF($4,'')::date,phone=$5 WHERE id=$1`, id, i.GivenName, i.FamilyName, i.DateOfBirth, i.Phone); e != nil {
 		return before, e
 	}
 	if _, e = tx.Exec(ctx, `UPDATE patient_profile SET email=$2,gender=$3,blood_group=$4,address1=$5,address2=$6,city=$7,region=$8,country=$9,postal_code=$10,emergency_name=$11,emergency_phone=$12,emergency_relationship=$13,active=$14,sms_consent=$15,email_consent=$16,version=version+1 WHERE patient_id=$1`, id, i.Email, i.Gender, i.BloodGroup, i.Address1, i.Address2, i.City, i.Region, i.Country, i.PostalCode, i.EmergencyName, i.EmergencyPhone, i.EmergencyRelationship, i.Active, i.SMSConsent, i.EmailConsent); e != nil {

@@ -110,4 +110,38 @@ func testPatientProfiles(t *testing.T, db *pgxpool.Pool, store Store, actors []d
 			t.Fatalf("profile HTTP wanted %d got %d: %s", tc.want, w.Code, w.Body.String())
 		}
 	}
+	unknown, e := h.Register(ctx, admin, domain.PatientInput{GivenName: "UnknownDOB", FamilyName: "Synthetic"})
+	if e != nil || unknown.DateOfBirth != "" {
+		t.Fatal(unknown, e)
+	}
+	unknownProfile, e := h.PatientProfile(ctx, admin, unknown.ID)
+	if e != nil || unknownProfile.DateOfBirth != "" {
+		t.Fatal(unknownProfile, e)
+	}
+	var isNull bool
+	if e = db.QueryRow(ctx, `SELECT date_of_birth IS NULL FROM patient WHERE id=$1`, unknown.ID).Scan(&isNull); e != nil || !isNull {
+		t.Fatal("DOB must stay unknown", e)
+	}
+	fix := unknownProfile.PatientProfileInput
+	fix.DateOfBirth = "1990-01-02"
+	fix.Reason = "Verified date supplied"
+	fixed, e := h.UpdatePatientProfile(ctx, admin, unknown.ID, fix)
+	if e != nil || fixed.DateOfBirth != fix.DateOfBirth {
+		t.Fatal(fixed, e)
+	}
+	fix = fixed.PatientProfileInput
+	fix.DateOfBirth = ""
+	fix.Reason = "Entered against wrong identity"
+	if _, e = h.UpdatePatientProfile(ctx, admin, unknown.ID, fix); e != nil {
+		t.Fatal(e)
+	}
+	revisions, e = h.PatientRevisions(ctx, admin, unknown.ID, 1)
+	if e != nil || len(revisions) != 2 || revisions[0].Before.DateOfBirth != "1990-01-02" || revisions[0].After.DateOfBirth != "" {
+		t.Fatal(revisions, e)
+	}
+	listed, e := h.Patients(ctx, admin, "UnknownDOB", 1)
+	if e != nil || len(listed) != 1 || listed[0].DateOfBirth != "" {
+		t.Fatal(listed, e)
+	}
+
 }

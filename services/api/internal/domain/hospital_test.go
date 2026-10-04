@@ -42,3 +42,19 @@ func TestMessagesRejectHeaderInjectionAndInvalidNumbers(t *testing.T) {
 		}
 	}
 }
+
+func TestPatientUnknownDOBAndHospitalDateBoundary(t *testing.T) {
+	now := time.Date(2026, 10, 4, 22, 30, 0, 0, time.UTC) // October 5 in Addis Ababa.
+	for _, dob := range []string{"", "2026-10-05", "1876-10-05"} {
+		p := PatientInput{GivenName: "Test", FamilyName: "Patient", DateOfBirth: dob}
+		if e := p.Validate(now); e != nil {
+			t.Fatal(dob, e)
+		}
+	}
+	for _, dob := range []string{"2026-10-06", "1876-10-04", "2025-02-29"} {
+		p := PatientInput{GivenName: "Test", FamilyName: "Patient", DateOfBirth: dob}
+		if p.Validate(now) == nil {
+			t.Fatal("invalid date", dob)
+		}
+	}
+}

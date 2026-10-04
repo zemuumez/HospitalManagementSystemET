@@ -169,7 +169,8 @@ Backend-first progress:
 
 - [x] Patient creation, generated MRN, scoped list/search and explicit portal linkage.
 - [x] Patient demographic profile API: contact email, gender, blood group, address/contact details, administrative status and emergency contact (migration 008; [contract](backend-patient-profile-contract.md)).
-- [ ] Remaining patient source fields, custom fields/photos, optional/unknown DOB policy and complete original form parity.
+- [x] Optional/unknown patient DOB persisted as SQL NULL, with audited correction and EAT calendar-day boundary validation matching the source nullable DOB rule (migration 025).
+- [ ] Remaining patient source fields, custom fields/photos and complete original form parity.
 - [x] Patient detail/edit with optimistic concurrency and retained before/after audit history; no patient-delete API, retained clinical/revision references prevent destructive record deletion.
 - [ ] Duplicate detection, merge/correction policy and imported identifier preservation.
 - [ ] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management.
