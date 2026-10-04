@@ -130,7 +130,7 @@ func (s Store) Slots(ctx context.Context, id string, day, now time.Time) ([]time
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.Query(ctx, `SELECT starts_at,ends_at FROM appointment WHERE doctor_id=$1 AND status<>'cancelled' AND starts_at<$3 AND ends_at>$2 UNION ALL SELECT starts_at,ends_at FROM doctor_absence WHERE doctor_id=$1 AND starts_at<$3 AND ends_at>$2`, id, day, day.AddDate(0, 0, 1))
+	rows, err := s.DB.Query(ctx, `SELECT starts_at,ends_at FROM appointment WHERE doctor_id=$1 AND status<>'cancelled' AND starts_at<$3 AND ends_at>$2 UNION ALL SELECT starts_at,ends_at FROM doctor_absence WHERE doctor_id=$1 AND cancelled_at IS NULL AND starts_at<$3 AND ends_at>$2`, id, day, day.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,11 @@ func (s Store) Book(ctx context.Context, actor domain.Actor, i domain.Appointmen
 	}
 	old, err := scanAppointment(tx.QueryRow(ctx, `SELECT `+appointmentColumns+appointmentJoin+`WHERE a.created_by=$1 AND a.request_key=$2`, actor.ID, key))
 	if err == nil {
-		if old.PatientID != i.PatientID || old.DoctorID != i.DoctorID || !old.StartsAt.Equal(i.StartsAt) || old.Problem != i.Problem || old.NotifySMS != i.NotifySMS {
+		var original time.Time
+		if err = tx.QueryRow(ctx, `SELECT original_starts_at FROM appointment WHERE id=$1`, old.ID).Scan(&original); err != nil {
+			return empty, err
+		}
+		if old.PatientID != i.PatientID || old.DoctorID != i.DoctorID || !original.Equal(i.StartsAt) || old.Problem != i.Problem || old.NotifySMS != i.NotifySMS {
 			return empty, domain.ErrConflict
 		}
 		return old, tx.Commit(ctx)
@@ -255,7 +259,7 @@ func (s Store) Book(ctx context.Context, actor domain.Actor, i domain.Appointmen
 		return empty, domain.ErrStale
 	}
 	var occupied bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM appointment WHERE (doctor_id=$1 OR patient_id=$2) AND status<>'cancelled' AND starts_at<$4 AND ends_at>$3) OR EXISTS(SELECT 1 FROM doctor_absence WHERE doctor_id=$1 AND starts_at<$4 AND ends_at>$3)`, i.DoctorID, i.PatientID, i.StartsAt, end).Scan(&occupied)
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM appointment WHERE (doctor_id=$1 OR patient_id=$2) AND status<>'cancelled' AND starts_at<$4 AND ends_at>$3) OR EXISTS(SELECT 1 FROM doctor_absence WHERE doctor_id=$1 AND cancelled_at IS NULL AND starts_at<$4 AND ends_at>$3)`, i.DoctorID, i.PatientID, i.StartsAt, end).Scan(&occupied)
 	if err != nil {
 		return empty, err
 	}

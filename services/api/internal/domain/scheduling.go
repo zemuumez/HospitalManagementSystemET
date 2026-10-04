@@ -111,3 +111,37 @@ func CanTransition(role, from, to string, start, now time.Time) bool {
 	}
 	return false
 }
+
+type AbsenceInput struct {
+	DoctorID string    `json:"doctorId"`
+	StartsAt time.Time `json:"startsAt"`
+	EndsAt   time.Time `json:"endsAt"`
+	Reason   string    `json:"reason"`
+}
+type DoctorAbsence struct {
+	AbsenceInput
+	ID           string     `json:"id"`
+	Version      int        `json:"version"`
+	CancelledAt  *time.Time `json:"cancelledAt"`
+	CancelReason string     `json:"cancelReason"`
+}
+type AbsenceCancel struct {
+	Version int    `json:"version"`
+	Reason  string `json:"reason"`
+}
+type RescheduleInput struct {
+	StartsAt time.Time `json:"startsAt"`
+	Version  int       `json:"version"`
+	Reason   string    `json:"reason"`
+}
+type RescheduleEvent struct {
+	ID         string    `json:"id"`
+	FromStart  time.Time `json:"fromStart"`
+	FromEnd    time.Time `json:"fromEnd"`
+	ToStart    time.Time `json:"toStart"`
+	ToEnd      time.Time `json:"toEnd"`
+	ActorID    string    `json:"actorId"`
+	Reason     string    `json:"reason"`
+	Version    int       `json:"version"`
+	RecordedAt time.Time `json:"recordedAt"`
+}

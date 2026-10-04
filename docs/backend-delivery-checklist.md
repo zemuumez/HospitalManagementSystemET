@@ -174,8 +174,10 @@ Backend-first progress:
 ### D. Scheduling and front desk
 
 - [x] Core weekly schedules, slots, atomic booking and status transitions.
-- [ ] Hospital opening hours, holiday exceptions and doctor absence/break CRUD.
-- [ ] Safe rescheduling and cancellation reasons/history; preserve notification/payment associations.
+- [x] Scoped doctor absence creation/cancellation and weekly breaks, with availability checks and concurrent booking protection (migration 013).
+- [ ] Hospital opening hours, date-specific overrides and full original holiday/absence edit parity.
+- [x] Same-doctor rescheduling with version/conflict checks, retained time-change reasons/history and original booking idempotency.
+- [ ] Appointment cancellation reasons/history and rescheduling notification/payment adjustments.
 - [ ] Appointment fees, transaction records, payment states and refunds.
 - [ ] Calendar views and patient queues backed by server data; concurrent queue token allocation.
 - [ ] Scheduled reminders with durable jobs, deduplication, preferences and timezone handling.
@@ -403,3 +405,7 @@ Migration 011 separates original admission bed from the current bed and adds ret
 ### Message worker crash recovery
 
 Migration 012 adds 45-second ownership leases and attempt counters. The worker renews leases while dispatching with a 20-second send context; stale completions cannot overwrite a recovered row. Expired processing rows become uncertain in bounded batches and are never automatically resent. Legacy processing rows become uncertain during migration. Go tests/vet and live Mailpit/captured-SMS integration passed. Local migrations 009-012 are applied, and the API and worker are running the new builds; readiness and the authentication/scheduling/messaging regression passed again. External provider credentials remain blank.
+
+### Doctor absences and retained rescheduling
+
+Migration 013 supports future time-range absences, cancellation reasons and versions, and immutable reschedule history. Doctor absence reasons are visible only to admin/the doctor. Leave cannot overlap active bookings; booking/rescheduling/leave share the doctor lock. Future booked appointments may move within the same doctor's schedule, preserving original booking identity and time for retries. Go unit/database/HTTP tests and vet passed, including competing leave/booking and reschedule requests. Notification updates, cross-doctor reassignment, original calendar/holiday UI and schedule override parity remain pending. [Contract](backend-scheduling-changes.md).

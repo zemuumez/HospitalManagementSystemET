@@ -378,5 +378,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testDiagnostics(t, db, store, actors, cases)
 	testInventory(t, db, store, actors)
 	testDispatch(t, db, store)
+	testSchedulingChanges(t, db, store, actors, patients)
 
 }
