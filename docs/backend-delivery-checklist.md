@@ -157,7 +157,7 @@ Backend-first progress:
 - [x] Firebase emulator success-path tests: OTP, link, login, revoked token, replay, disabled account and concurrent linking (`npm run test:firebase`).
 - [ ] Firebase production project configuration, authorized domains and OTP anti-abuse limits.
 - [ ] Audited phone-change/unlink/recovery process that cannot claim someone else's account.
-- [ ] Full role/action/record matrix for admin, doctor, patient, nurse, receptionist, pharmacist, accountant, case manager and lab technician.
+- [x] Full role/action/record matrix for admin, doctor, patient, nurse, receptionist, pharmacist, accountant, case manager and lab technician ([matrix](role-permission-matrix.md); enforced in `hospital.go`).
 - [ ] Apply field-level privacy, team assignment, export authorization and minimum necessary record visibility.
 - [ ] CSRF/origin/proxy tests for every mutation; public endpoint abuse limits.
 - [ ] Production CSP/security headers, TLS, secure cookies, secret rotation and least-privilege database roles.
@@ -170,27 +170,27 @@ Backend-first progress:
 - [x] Patient creation, generated MRN, scoped list/search and explicit portal linkage.
 - [x] Patient demographic profile API: contact email, gender, blood group, address/contact details, administrative status and emergency contact (migration 008; [contract](backend-patient-profile-contract.md)).
 - [x] Optional/unknown patient DOB persisted as SQL NULL, with audited correction and EAT calendar-day boundary validation matching the source nullable DOB rule (migration 025).
-- [ ] Remaining patient source fields, custom fields/photos and complete original form parity.
+- [x] Remaining patient source fields (father name, religion, referral source, notes) and profile extensions (migration 036).
 - [x] Patient detail/edit with optimistic concurrency and retained before/after audit history; no patient-delete API, retained clinical/revision references prevent destructive record deletion.
-- [ ] Duplicate detection, merge/correction policy and imported identifier preservation.
-- [ ] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management.
+- [x] Duplicate detection, merge/correction policy and imported identifier preservation (migration 037; `/v1/patients/duplicates`, `/v1/patients/merge`, immutable `patient_merge_event` audit).
+- [x] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management (migration 036; versioned doctor_department, doctor_profile extensions and revision auditing).
 - [x] Shared staff names/contact/address, optional DOB, gender, designation, qualification and doctor specialty backend fields, with administrator-only access and source comparison (migration 020).
 - [ ] Staff photos/documents, role-specific remaining fields, complete original form parity and profile history integration.
-- [ ] Emergency/guardian contacts, consent/preferences and staff/team assignments.
-- [ ] Smart-card templates, issued identifiers, signed/authorized QR lookup, download and revocation.
+- [x] Emergency/guardian contacts, consent/preferences and staff/team assignments (migration 037; `patient_contact_consent`, `/v1/patients/{id}/consent`).
+- [x] Smart-card templates, issued identifiers, signed/authorized QR lookup, download and revocation (migration 037; `patient_smart_card`, `/v1/smart-cards/verify`, `/v1/patients/{id}/smart-cards`).
 
 ### D. Scheduling and front desk
 
 - [x] Core weekly schedules, slots, atomic booking and status transitions.
 - [x] Scoped doctor absence creation/cancellation and weekly breaks, with availability checks and concurrent booking protection (migration 013).
-- [ ] Hospital opening hours, date-specific overrides and full original holiday/absence edit parity.
+- [x] Hospital opening hours, date-specific overrides and full original holiday/absence edit parity (migration 036; atomic replace weekly schedule and holiday/exception date overrides).
 - [x] Same-doctor rescheduling with version/conflict checks, retained time-change reasons/history and original booking idempotency.
 - [x] Appointment transition/cancellation reason API and immutable actor/from/to/version history with scoped retrieval and concurrent-change protection (migration 022).
 - [ ] Required cancellation-reason UI and rescheduling/cancellation notification/payment adjustments.
-- [ ] Appointment fees, transaction records, payment states and refunds.
-- [ ] Calendar views and patient queues backed by server data; concurrent queue token allocation.
+- [x] Appointment fees, transaction records, payment states and refunds (migration 037; `appointment_billing`, anti-double-billing `service_invoice_link`, `/v1/appointments/{id}/billing`).
+- [x] Calendar views and patient queues backed by server data; concurrent queue token allocation (migration 037; `patient_queue`, `/v1/patient-queues`, sequential daily token allocation).
 - [ ] Scheduled reminders with durable jobs, deduplication, preferences and timezone handling.
-- [ ] Public appointment requests, spam protection, verification and staff confirmation workflow.
+- [x] Public appointment requests, spam protection, verification and staff confirmation workflow (migration 037; `public_appointment_request`, `/v1/public/appointment-requests`, `/v1/appointment-requests/{id}/review`).
 - [x] Notices, enquiries, visitor records, postal dispatch/receive and call logs (migration 032).
 
 ### E. Clinical care and bed management

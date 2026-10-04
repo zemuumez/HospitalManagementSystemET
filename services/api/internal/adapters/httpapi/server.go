@@ -29,6 +29,9 @@ type Server struct {
 	LiveConsultation application.LiveConsultationService
 	PharmacyBloodBank application.PharmacyBloodBankService
 	FinancePayroll application.FinancePayrollService
+	MasterData     application.MasterDataService
+	PatientExt     application.PatientExtensionsService
+	AppointmentOps application.AppointmentOpsService
 	App            application.Hospital
 	Scheduling     application.Scheduling
 	Clinical       application.Clinical
@@ -146,6 +149,12 @@ func (s Server) Handler() http.Handler {
 		if s.paymentWebhook(w, r) {
 			return
 		}
+		if s.publicPatientExtensions(w, r) {
+			return
+		}
+		if s.publicAppointmentOps(w, r) {
+			return
+		}
 		if r.Method != "GET" && r.Header.Get("Origin") != s.Origin {
 			write(w, 403, map[string]string{"error": "Request origin is not allowed", "code": "ORIGIN_DENIED"})
 			return
@@ -180,6 +189,15 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.financePayroll(w, r, a) {
+			return
+		}
+		if s.masterData(w, r, a) {
+			return
+		}
+		if s.patientExtensions(w, r, a) {
+			return
+		}
+		if s.appointmentOps(w, r, a) {
 			return
 		}
 		if s.audit(w, r, a) {

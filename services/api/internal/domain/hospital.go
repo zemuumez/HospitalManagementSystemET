@@ -115,6 +115,14 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "receptionist"
 	case "messages.manage":
 		return a.Role == "admin" || a.Role == "receptionist"
+	case "enquiries.manage":
+		return a.Role == "admin" || a.Role == "receptionist"
+	case "enquiries.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "case_manager"
+	case "scheduling.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "doctor_dept.manage":
+		return a.Role == "admin"
 	}
 	return false
 }
@@ -132,6 +140,7 @@ func (a Actor) Permissions() []string {
 		"live_meetings.manage", "live_meetings.read", "blood_bank.manage", "blood_bank.read",
 		"prescriptions.manage", "prescriptions.read", "finance.read", "finance.manage",
 		"payroll.read", "payroll.read_own", "payroll.manage",
+		"scheduling.manage", "doctor_dept.manage", "messages.manage",
 	} {
 		if a.Can(p) {
 			result = append(result, p)
