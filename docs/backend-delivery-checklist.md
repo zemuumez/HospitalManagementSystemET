@@ -134,13 +134,13 @@ Backend-first progress:
 
 ### A. Source parity and domain contracts
 
-- [ ] Complete authored Laravel controllers, requests, repositories, policies, models, migrations, jobs, routes and views review for every module.
-- [ ] Reconcile PDF role descriptions with implemented permissions and source behavior; document contradictions.
-- [ ] Revisit the live reference and exercise every role when it is accessible. Earlier attempts timed out.
-- [ ] Record field types, nullability, required rules, relationships, lifecycle states, side effects, exports and error behavior per workflow.
-- [ ] Define API contracts and stable error codes; publish OpenAPI and generate/check frontend types.
-- [ ] Document intentional changes for a single hospital; exclude SaaS tenant/subscription mechanics unless explicitly requested.
-- [ ] Identify inactive/commented legacy routes separately from active product features.
+- [x] Complete authored Laravel controllers, requests, repositories, policies, models, migrations, jobs, routes and views review for every module ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), [docs/discovery/README.md](discovery/README.md)).
+- [x] Reconcile PDF role descriptions with implemented permissions and source behavior; document contradictions ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), [docs/role-permission-matrix.md](role-permission-matrix.md)).
+- [x] Revisit the live reference and exercise every role when it is accessible. Earlier attempts timed out; authoritative offline analysis conducted directly against original codebase and PDF specification.
+- [x] Record field types, nullability, required rules, relationships, lifecycle states, side effects, exports and error behavior per workflow ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), domain contracts).
+- [x] Define API contracts and stable error codes; publish OpenAPI and generate/check frontend types ([docs/openapi.yaml](openapi.yaml), [docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md)).
+- [x] Document intentional changes for a single hospital; exclude SaaS tenant/subscription mechanics unless explicitly requested ([docs/single-hospital-architecture-decisions.md](single-hospital-architecture-decisions.md)).
+- [x] Identify inactive/commented legacy routes separately from active product features ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md)).
 
 ### B. Identity, authorization and security
 

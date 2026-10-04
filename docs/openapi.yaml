@@ -1,0 +1,379 @@
+openapi: 3.1.0
+info:
+  title: Hospital Management System ET API
+  version: 1.0.0
+  description: >
+    Production REST API specification for HMS ET, a high-performance single-hospital
+    operations platform linking clinical care, scheduling, diagnostics, pharmacy,
+    blood bank, finance, and operations.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local API server
+  - url: https://app.hospital.et
+    description: Production API server
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /readyz:
+    get:
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Database and dependencies ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /metrics:
+    get:
+      summary: Prometheus metrics exposition
+      responses:
+        '200':
+          description: Prometheus metrics formatted text
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /v1/patients:
+    get:
+      summary: List and search patients
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Paginated patient list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Patient'
+    post:
+      summary: Register a new patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientInput'
+      responses:
+        '201':
+          description: Patient created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Patient'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /v1/patients/duplicates:
+    get:
+      summary: Search duplicate patient candidates
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: phone
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matching duplicate candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Patient'
+
+  /v1/patients/merge:
+    post:
+      summary: Atomic patient merge with audit trail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [primaryPatientId, secondaryPatientId, reason]
+              properties:
+                primaryPatientId:
+                  type: string
+                  format: uuid
+                secondaryPatientId:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Merge completed successfully
+
+  /v1/smart-cards/verify:
+    get:
+      summary: Public verification of patient smart card QR token
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verified smart card data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmartCardVerification'
+        '404':
+          description: Invalid or expired card token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /v1/attachments:
+    post:
+      summary: Register a secure medical attachment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecureAttachmentInput'
+      responses:
+        '201':
+          description: Attachment registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecureAttachment'
+
+  /v1/attachments/{token}:
+    get:
+      summary: Access a secure medical attachment by token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Attachment metadata and download authorization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecureAttachment'
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+
+components:
+  schemas:
+    ApiError:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          example: Check the supplied fields and try again
+        code:
+          type: string
+          enum:
+            - UNAUTHENTICATED
+            - FORBIDDEN
+            - NOT_FOUND
+            - IDEMPOTENCY_CONFLICT
+            - STATE_CONFLICT
+            - VALIDATION_FAILED
+            - DEPENDENCY_UNAVAILABLE
+            - INTERNAL_ERROR
+
+    Patient:
+      type: object
+      required: [id, mrn, fullName, gender]
+      properties:
+        id:
+          type: string
+          format: uuid
+        mrn:
+          type: string
+          example: MRN-2026-0001
+        fullName:
+          type: string
+          example: Abebe Bikila
+        phone:
+          type: string
+          example: "+251911223344"
+        email:
+          type: string
+          format: email
+        gender:
+          type: string
+          enum: [male, female, other]
+        dateOfBirth:
+          type: string
+          format: date
+        bloodGroup:
+          type: string
+          enum: [A+, A-, B+, B-, AB+, AB-, O+, O-]
+
+    CreatePatientInput:
+      type: object
+      required: [fullName, gender]
+      properties:
+        fullName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        gender:
+          type: string
+          enum: [male, female, other]
+        dateOfBirth:
+          type: string
+          format: date
+        bloodGroup:
+          type: string
+        fatherName:
+          type: string
+        religion:
+          type: string
+        referralSource:
+          type: string
+        notes:
+          type: string
+
+    SmartCardVerification:
+      type: object
+      required: [patientId, mrn, fullName, status]
+      properties:
+        patientId:
+          type: string
+          format: uuid
+        mrn:
+          type: string
+        fullName:
+          type: string
+        bloodGroup:
+          type: string
+        status:
+          type: string
+          enum: [active, revoked, expired]
+        issuedAt:
+          type: string
+          format: date-time
+
+    CreateSecureAttachmentInput:
+      type: object
+      required: [fileName, mimeType, fileSizeBytes, storagePath, sha256Hash]
+      properties:
+        fileName:
+          type: string
+        mimeType:
+          type: string
+          enum:
+            - application/pdf
+            - image/jpeg
+            - image/png
+            - image/webp
+            - text/plain
+            - text/csv
+            - application/dicom
+            - application/zip
+        fileSizeBytes:
+          type: integer
+          maximum: 26214400
+        storagePath:
+          type: string
+        sha256Hash:
+          type: string
+        patientId:
+          type: string
+          format: uuid
+        encounterId:
+          type: string
+          format: uuid
+        isPublic:
+          type: boolean
+          default: false
+
+    SecureAttachment:
+      type: object
+      required: [id, token, fileName, mimeType, fileSizeBytes, sha256Hash, uploaderId, isPublic, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        token:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        fileSizeBytes:
+          type: integer
+        sha256Hash:
+          type: string
+        uploaderId:
+          type: string
+        patientId:
+          type: string
+          format: uuid
+        encounterId:
+          type: string
+          format: uuid
+        isPublic:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
