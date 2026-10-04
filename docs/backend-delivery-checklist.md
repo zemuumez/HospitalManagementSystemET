@@ -159,7 +159,8 @@ Backend-first progress:
 - [ ] Apply field-level privacy, team assignment, export authorization and minimum necessary record visibility.
 - [ ] CSRF/origin/proxy tests for every mutation; public endpoint abuse limits.
 - [ ] Production CSP/security headers, TLS, secure cookies, secret rotation and least-privilege database roles.
-- [ ] Immutable/retained audit policy, redacted application logs and privileged audit review UI.
+- [x] Database audit update/delete/truncate protection, redacted request logs and administrator-only cursor-paginated audit review API with self-audit (migration 019; tampering, pagination and role tests).
+- [ ] Privileged audit review UI, approved retention duration, off-host archival and production least-privilege deployment.
 - [ ] Independent security assessment, dependency scanning and remediation before production.
 
 ### C. Patient and staff master data

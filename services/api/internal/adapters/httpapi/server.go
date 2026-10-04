@@ -17,6 +17,7 @@ type ActorStore interface {
 	Actor(context.Context, string) (domain.Actor, error)
 }
 type Server struct {
+	Audit          application.Audit
 	OnlinePayments application.OnlinePayments
 	Inventory      application.Inventory
 	App            application.Hospital
@@ -143,6 +144,9 @@ func (s Server) Handler() http.Handler {
 		a, err := s.identify(r)
 		if err != nil {
 			write(w, 401, map[string]string{"error": "Sign in to continue", "code": "UNAUTHENTICATED"})
+			return
+		}
+		if s.audit(w, r, a) {
 			return
 		}
 		if s.inventory(w, r, a) {
