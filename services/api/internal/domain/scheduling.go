@@ -85,6 +85,7 @@ type Appointment struct {
 	Version     int       `json:"version"`
 }
 type AppointmentChange struct {
+	Reason  string `json:"reason"`
 	Status  string `json:"status"`
 	Version int    `json:"version"`
 }
@@ -144,4 +145,14 @@ type RescheduleEvent struct {
 	Reason     string    `json:"reason"`
 	Version    int       `json:"version"`
 	RecordedAt time.Time `json:"recordedAt"`
+}
+
+type AppointmentStatusEvent struct {
+	ID             string    `json:"id"`
+	PreviousStatus string    `json:"previousStatus"`
+	NextStatus     string    `json:"nextStatus"`
+	ActorID        string    `json:"actorId"`
+	Reason         string    `json:"reason"`
+	Version        int       `json:"version"`
+	RecordedAt     time.Time `json:"recordedAt"`
 }

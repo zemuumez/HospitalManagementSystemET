@@ -8,6 +8,7 @@ import (
 )
 
 type SchedulingRepository interface {
+	AppointmentStatusHistory(context.Context, domain.Actor, string, int) ([]domain.AppointmentStatusEvent, error)
 	Absences(context.Context, domain.Actor, string, int) ([]domain.DoctorAbsence, error)
 	CreateAbsence(context.Context, domain.Actor, domain.AbsenceInput) (domain.DoctorAbsence, error)
 	CancelAbsence(context.Context, domain.Actor, string, domain.AbsenceCancel) (domain.DoctorAbsence, error)
@@ -75,9 +76,10 @@ func (s Scheduling) Change(ctx context.Context, a domain.Actor, id string, c dom
 	if !a.Can("appointments.read") {
 		return domain.Appointment{}, domain.ErrForbidden
 	}
-	if !domain.UUIDPattern.MatchString(id) || c.Version < 1 {
+	if !domain.UUIDPattern.MatchString(id) || c.Version < 1 || c.Version > 1000000000 || len([]rune(strings.TrimSpace(c.Reason))) > 1000 || strings.ContainsRune(c.Reason, 0) {
 		return domain.Appointment{}, domain.ErrValidation
 	}
+	c.Reason = strings.TrimSpace(c.Reason)
 	return s.Store.ChangeAppointment(ctx, a, id, c, s.Now())
 }
 
@@ -131,4 +133,14 @@ func (s Scheduling) RescheduleHistory(ctx context.Context, a domain.Actor, id st
 		return nil, domain.ErrValidation
 	}
 	return s.Store.RescheduleHistory(ctx, a, id, page)
+}
+
+func (s Scheduling) StatusHistory(ctx context.Context, a domain.Actor, id string, page int) ([]domain.AppointmentStatusEvent, error) {
+	if !a.Can("appointments.read") {
+		return nil, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) || page < 1 || page > 1000 {
+		return nil, domain.ErrValidation
+	}
+	return s.Store.AppointmentStatusHistory(ctx, a, id, page)
 }

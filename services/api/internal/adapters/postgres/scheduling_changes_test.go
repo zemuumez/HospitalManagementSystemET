@@ -114,6 +114,28 @@ func testSchedulingChanges(t *testing.T, db *pgxpool.Pool, store Store, actors [
 	if !((errs[0] == nil && errors.Is(errs[1], domain.ErrStale)) || (errs[1] == nil && errors.Is(errs[0], domain.ErrStale))) {
 		t.Fatal("absence booking race", errs)
 	}
+	cancellation := domain.AppointmentChange{Status: "cancelled", Version: retry.Version, Reason: "Patient requested another day"}
+	wg.Add(2)
+	for n := 0; n < 2; n++ {
+		go func(index int) { defer wg.Done(); _, errs[index] = s.Change(ctx, actors[3], app.ID, cancellation) }(n)
+	}
+	wg.Wait()
+	if !((errs[0] == nil && errors.Is(errs[1], domain.ErrStale)) || (errs[1] == nil && errors.Is(errs[0], domain.ErrStale))) {
+		t.Fatal("cancellation race", errs)
+	}
+	statusHistory, e := s.StatusHistory(ctx, actors[3], app.ID, 1)
+	if e != nil || len(statusHistory) != 1 || statusHistory[0].Reason != cancellation.Reason || statusHistory[0].PreviousStatus != "booked" || statusHistory[0].NextStatus != "cancelled" || statusHistory[0].ActorID != "patient" {
+		t.Fatal(statusHistory, e)
+	}
+	if _, e = s.StatusHistory(ctx, actors[2], app.ID, 1); !errors.Is(e, domain.ErrNotFound) {
+		t.Fatal(e)
+	}
+	if _, e = db.Exec(ctx, `DELETE FROM appointment_status_event WHERE appointment_id=$1`, app.ID); e == nil {
+		t.Fatal("status history deleted")
+	}
+	if _, e = s.Change(ctx, actors[0], app.ID, domain.AppointmentChange{Status: "cancelled", Version: 1, Reason: strings.Repeat("x", 1001)}); !errors.Is(e, domain.ErrValidation) {
+		t.Fatal(e)
+	}
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := strings.TrimPrefix(r.Header.Get("Cookie"), "session=")
 		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))
@@ -124,6 +146,8 @@ func testSchedulingChanges(t *testing.T, db *pgxpool.Pool, store Store, actors [
 		method, path, actor, body string
 		want                      int
 	}{
+		{"GET", "/v1/appointments/" + app.ID + "/status-history", "patient", "", 200},
+		{"GET", "/v1/appointments/" + app.ID + "/status-history", "other-doctor", "", 404},
 		{"GET", "/v1/doctor-absences?doctorId=doctor", "doctor", "", 200},
 		{"GET", "/v1/doctor-absences?doctorId=doctor", "patient", "", 403},
 		{"GET", "/v1/appointments/" + app.ID + "/reschedule-history", "patient", "", 200},

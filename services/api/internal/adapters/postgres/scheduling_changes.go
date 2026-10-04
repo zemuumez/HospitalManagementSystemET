@@ -175,3 +175,36 @@ func (s Store) RescheduleHistory(ctx context.Context, a domain.Actor, id string,
 	}
 	return out, tx.Commit(ctx)
 }
+
+func (s Store) AppointmentStatusHistory(ctx context.Context, a domain.Actor, id string, page int) ([]domain.AppointmentStatusEvent, error) {
+	tx, e := s.DB.Begin(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer tx.Rollback(ctx)
+	if _, e = scanAppointment(tx.QueryRow(ctx, `SELECT `+appointmentColumns+appointmentJoin+` WHERE `+appointmentScope+` AND a.id=$3`, a.Role, a.ID, id)); e != nil {
+		return nil, e
+	}
+	rows, e := tx.Query(ctx, `SELECT id,previous_status,next_status,actor_id,reason,version,recorded_at FROM appointment_status_event WHERE appointment_id=$1 ORDER BY version DESC LIMIT 25 OFFSET $2`, id, (page-1)*25)
+	if e != nil {
+		return nil, e
+	}
+	out := []domain.AppointmentStatusEvent{}
+	for rows.Next() {
+		var v domain.AppointmentStatusEvent
+		if e = rows.Scan(&v.ID, &v.PreviousStatus, &v.NextStatus, &v.ActorID, &v.Reason, &v.Version, &v.RecordedAt); e != nil {
+			rows.Close()
+			return nil, e
+		}
+		out = append(out, v)
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, e
+	}
+	if e = pharmacyAudit(ctx, tx, a, "appointment.status_history_viewed", id); e != nil {
+		return nil, e
+	}
+	return out, tx.Commit(ctx)
+}

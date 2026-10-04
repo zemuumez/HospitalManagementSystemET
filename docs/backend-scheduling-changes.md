@@ -11,3 +11,9 @@ Source reviewed for this increment: Laravel `DoctorHoliday` and `HolidayReposito
 Booking, leave and rescheduling take the same doctor-row lock. Rescheduling then locks the patient and appointment in that order. Existing status-change behavior remains. Cancelled absence no longer blocks slot discovery or booking. A move does not yet enqueue an SMS/email update; staff must communicate changes until the notification workflow is connected. Cross-doctor reassignment, reminder job cancellation/replacement and per-date schedule overrides remain open. No new UI integration was added.
 
 Tests cover busy leave rejection, doctor ownership, cancellation versions, hidden unavailable slots, immutable original booking/history, concurrent rescheduling, competing absence/booking, patient history scope, strict HTTP inputs and role denial.
+
+## Status and cancellation history
+
+Migration 022 adds retained status events to every successful `PATCH /v1/appointments/{id}` transition. The body now accepts optional `reason` (up to 1,000 characters) alongside status/version. Each event stores prior/new status, actor, reason, resulting version and server timestamp in the same transaction as the appointment change. Blank reasons remain supported for existing connected clients; they are stored honestly as blank, not replaced with invented reasons. Required reason capture in the UI is Section 4 work.
+
+`GET /v1/appointments/{id}/status-history?page=1` returns 25 events ordered by version, with the same record scope as the appointment. Existing pre-migration transitions are not reconstructed because their original reasons are unknown. PostgreSQL prevents event update/delete. Duplicate concurrent cancellations produce one success, one stale conflict and one history row. State transition, patient ownership and future-cancellation rules remain enforced. Notification/payment adjustments remain separate pending work.

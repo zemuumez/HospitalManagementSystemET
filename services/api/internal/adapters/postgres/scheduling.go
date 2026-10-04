@@ -311,6 +311,9 @@ func (s Store) ChangeAppointment(ctx context.Context, actor domain.Actor, id str
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_event(actor_id,action,resource_id) VALUES($1,$2,$3)`, actor.ID, "appointment."+c.Status, id); err != nil {
 		return a, err
 	}
+	if _, err = tx.Exec(ctx, `INSERT INTO appointment_status_event(appointment_id,previous_status,next_status,actor_id,reason,version) VALUES($1,$2,$3,$4,$5,$6)`, id, a.Status, c.Status, actor.ID, c.Reason, a.Version+1); err != nil {
+		return a, err
+	}
 	a.Status = c.Status
 	a.Version++
 	return a, tx.Commit(ctx)

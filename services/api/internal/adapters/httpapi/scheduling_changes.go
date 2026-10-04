@@ -58,6 +58,13 @@ func (s Server) schedulingChanges(w http.ResponseWriter, r *http.Request, a doma
 			} else {
 				write(w, 200, out)
 			}
+		} else if parts[1] == "status-history" && r.Method == "GET" {
+			out, e := s.Scheduling.StatusHistory(r.Context(), a, parts[0], page)
+			if e != nil {
+				fail(w, e)
+			} else {
+				write(w, 200, map[string]any{"events": out, "page": page, "pageSize": 25})
+			}
 		} else if parts[1] == "reschedule-history" && r.Method == "GET" {
 			out, e := s.Scheduling.RescheduleHistory(r.Context(), a, parts[0], page)
 			if e != nil {

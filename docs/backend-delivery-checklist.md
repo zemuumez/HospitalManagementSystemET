@@ -183,7 +183,8 @@ Backend-first progress:
 - [x] Scoped doctor absence creation/cancellation and weekly breaks, with availability checks and concurrent booking protection (migration 013).
 - [ ] Hospital opening hours, date-specific overrides and full original holiday/absence edit parity.
 - [x] Same-doctor rescheduling with version/conflict checks, retained time-change reasons/history and original booking idempotency.
-- [ ] Appointment cancellation reasons/history and rescheduling notification/payment adjustments.
+- [x] Appointment transition/cancellation reason API and immutable actor/from/to/version history with scoped retrieval and concurrent-change protection (migration 022).
+- [ ] Required cancellation-reason UI and rescheduling/cancellation notification/payment adjustments.
 - [ ] Appointment fees, transaction records, payment states and refunds.
 - [ ] Calendar views and patient queues backed by server data; concurrent queue token allocation.
 - [ ] Scheduled reminders with durable jobs, deduplication, preferences and timezone handling.
