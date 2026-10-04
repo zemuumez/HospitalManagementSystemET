@@ -17,6 +17,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.cwd();
 const firebaseMode = process.argv.includes("--firebase");
+const integrationMode = process.argv.includes("--integration");
 const recoveryMode = process.argv.includes("--recovery");
 const dsn = new URL(process.env.DATABASE_URL);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
@@ -166,7 +167,7 @@ try {
       emulator,
     );
   }
-  if (recoveryMode) {
+  if (recoveryMode || integrationMode) {
     Object.assign(env, {
       SMTP_HOST: "127.0.0.1",
       SMTP_PORT: "1025",
@@ -174,6 +175,11 @@ try {
       SMTP_USER: "",
       SMTP_PASSWORD: "",
       MAIL_FROM: "noreply@hms.local",
+      SMTP_FROM: "noreply@hms.local",
+      SMS_PROVIDER: "capture",
+      TWILIO_ACCOUNT_SID: "",
+      TWILIO_AUTH_TOKEN: "",
+      TWILIO_FROM: "",
     });
   }
   const binary = resolve(
@@ -187,6 +193,19 @@ try {
     windowsHide: true,
   });
   const api = start(binary, [], env, root, "api");
+  if (integrationMode) {
+    const workerBinary = resolve(
+      root,
+      `services/api/bin/qa-worker${process.platform === "win32" ? ".exe" : ""}`,
+    );
+    execFileSync("go", ["build", "-o", workerBinary, "./cmd/worker"], {
+      cwd: resolve(root, "services/api"),
+      env,
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    start(workerBinary, [], env, root, "worker");
+  }
   const web = start(
     process.execPath,
     [
@@ -209,11 +228,13 @@ try {
     const test = spawn(
       process.execPath,
       [
-        firebaseMode
-          ? "scripts/verify-firebase.mjs"
-          : recoveryMode
-            ? "scripts/verify-recovery.mjs"
-            : "scripts/verify-connected.mjs",
+        integrationMode
+          ? "scripts/integration.mjs"
+          : firebaseMode
+            ? "scripts/verify-firebase.mjs"
+            : recoveryMode
+              ? "scripts/verify-recovery.mjs"
+              : "scripts/verify-connected.mjs",
       ],
       {
         cwd: root,

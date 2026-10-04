@@ -73,13 +73,6 @@ jobs:
         run: npm audit --audit-level=high
       - name: Install test browser
         run: npx playwright install --with-deps chromium
-      - name: Start isolated services
-        run: |
-          mkdir -p .local
-          services/api/bin/api > .local/api-ci.log 2>&1 &
-          services/api/bin/worker > .local/worker-ci.log 2>&1 &
-          npm run dev > .local/web-ci.log 2>&1 &
-          node --input-type=module -e 'for(let n=0;n<90;n++){try{const r=await fetch("http://127.0.0.1:3000/login");if(r.ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,1000))}process.exit(1)'
       - name: Authentication and API integration
         run: npm run test:integration
       - name: Existing connected browser regression

@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { hashPassword } from "better-auth/crypto";
 
-// Requires local API/web/worker/Mailpit. Fixtures are synthetic and removed afterward.
+// The wrapper owns isolated services and drops the entire generated schema.
+const schema = process.env.HMS_TEST_ISOLATED_SCHEMA;
+assert.match(schema || "", /^hms_browser_[a-f0-9]{24}$/);
 const base = process.env.BETTER_AUTH_URL;
 if (!base || !new URL(base).hostname.match(/^(127\.0\.0\.1|localhost)$/))
   throw new Error("Integration checks require a loopback web server");
@@ -63,6 +65,10 @@ async function expectStatus(path, status, options) {
   assert.equal(r.status, status, `${path}: ${await r.text()}`);
 }
 try {
+  assert.equal(
+    (await db.query("SELECT current_schema() AS name")).rows[0].name,
+    schema,
+  );
   await expectStatus("/api/hms/patients", 401);
   const admin = await fixture("admin");
   const patient = await fixture("patient");
@@ -368,25 +374,5 @@ try {
     "PASS: session auth, CSRF, role denial, patient/doctor record scope and aggregates, validation, disablement, invalid Firebase proof, concurrent message deduplication, captured SMS, Mailpit email/reset, logout revocation.",
   );
 } finally {
-  await db.query("DELETE FROM appointment WHERE created_by=ANY($1::text[])", [
-    ids,
-  ]);
-  await db.query("DELETE FROM doctor_absence WHERE doctor_id=ANY($1::text[])", [
-    ids,
-  ]);
-  await db.query("DELETE FROM doctor_hours WHERE doctor_id=ANY($1::text[])", [
-    ids,
-  ]);
-  await db.query("DELETE FROM doctor_profile WHERE user_id=ANY($1::text[])", [
-    ids,
-  ]);
-  await db.query("DELETE FROM patient WHERE id=ANY($1::uuid[])", [patients]);
-  await db.query("DELETE FROM message_outbox WHERE actor_id=ANY($1::text[])", [
-    ids,
-  ]);
-  await db.query("DELETE FROM audit_event WHERE actor_id=ANY($1::text[])", [
-    ids,
-  ]);
-  await db.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [ids]);
   await db.end();
 }
