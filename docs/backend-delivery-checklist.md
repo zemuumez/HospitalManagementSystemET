@@ -257,7 +257,8 @@ Backend-first progress:
 - [ ] No public patient-upload buckets or predictable unauthenticated file URLs.
 - [ ] Migration/import mapping from Laravel, trial runs, reconciliation reports and rollback plan.
 - [ ] Pagination/filtering/search/export for every list; avoid unbounded option loaders.
-- [ ] Background workers with leases/heartbeats, crash recovery, retries and observability.
+- [x] Message worker ownership leases/heartbeats, bounded sends, expired-claim recovery to uncertain and stale-worker fencing; concurrency and live development-delivery tests (migration 012).
+- [ ] Approved retry/reconciliation workflow, provider callbacks, scheduler workers and production worker monitoring.
 - [x] Structured request logs excluding sensitive inputs, generated request IDs, liveness and database readiness checks; unit tests.
 - [ ] Metrics, alerting and production observability deployment.
 - [ ] Database indexes/query plans, connection limits, load tests and capacity targets.
@@ -398,3 +399,7 @@ The first GitHub Actions run for `3eed632` completed successfully: migrations, G
 ### Bed maintenance and transfer increment
 
 Migration 011 separates original admission bed from the current bed and adds retained occupancy/state events. Active IPD encounters can transfer through admin/reception/assigned-doctor APIs, with version checks and occupied/unavailable destination rejection. Maintenance cannot disable an occupied bed. Admission retries continue to match the original request after transfers. Existing encounters receive an explicit migration baseline, not fabricated historical events. Bed tariff snapshots are retained; time-based bed billing remains pending. Go PostgreSQL/HTTP tests and vet passed, including concurrent transfer rejection, history immutability and unauthorized access. See [contract](backend-bed-contract.md).
+
+### Message worker crash recovery
+
+Migration 012 adds 45-second ownership leases and attempt counters. The worker renews leases while dispatching with a 20-second send context; stale completions cannot overwrite a recovered row. Expired processing rows become uncertain in bounded batches and are never automatically resent. Legacy processing rows become uncertain during migration. Go tests/vet and live Mailpit/captured-SMS integration passed. Local migrations 009-012 are applied, and the API and worker are running the new builds; readiness and the authentication/scheduling/messaging regression passed again. External provider credentials remain blank.

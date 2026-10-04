@@ -22,6 +22,9 @@ type Result struct {
 }
 
 func Send(ctx context.Context, channel, to, subject, body string) (Result, error) {
+	if channel != "sms" && channel != "email" {
+		return Result{Status: "failed"}, errors.New("unknown message channel")
+	}
 	if channel == "sms" {
 		provider := os.Getenv("SMS_PROVIDER")
 		if provider == "" || provider == "capture" {
@@ -49,6 +52,9 @@ func Send(ctx context.Context, channel, to, subject, body string) (Result, error
 			return Result{Status: "uncertain"}, errors.New("SMS provider outcome uncertain")
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode >= 500 {
+			return Result{Status: "uncertain"}, errors.New("SMS provider outcome uncertain")
+		}
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			return Result{Status: "failed"}, errors.New("SMS provider rejected request")
 		}

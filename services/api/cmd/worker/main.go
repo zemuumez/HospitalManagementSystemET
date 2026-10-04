@@ -6,6 +6,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"hms.local/api/internal/adapters/delivery"
+	"hms.local/api/internal/adapters/postgres"
+	"hms.local/api/internal/application"
+	"hms.local/api/internal/domain"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -25,9 +28,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	dispatcher := application.Dispatcher{Store: postgres.Store{DB: db}, Transport: transport{}}
 	slog.Info("Communications worker running")
 	for ctx.Err() == nil {
-		if err = process(ctx, db); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		if err = dispatcher.Process(ctx); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			slog.Error("Message processing failed; no automatic redelivery")
 		}
 		select {
@@ -37,23 +41,10 @@ func main() {
 		}
 	}
 }
-func process(ctx context.Context, db *pgxpool.Pool) error {
-	var id, channel, to, subject, body string
-	// Atomic claim prevents multiple workers from dispatching the same queued row.
-	err := db.QueryRow(ctx, `UPDATE message_outbox SET status='processing',updated_at=now() WHERE id=(SELECT id FROM message_outbox WHERE status='pending' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,channel,recipient,subject,body`).Scan(&id, &channel, &to, &subject, &body)
-	if err != nil {
-		return err
-	}
-	result, sendErr := delivery.Send(ctx, channel, to, subject, body)
-	// A crash or network ambiguity must be reconciled, not blindly retried.
-	finish, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	_, err = db.Exec(finish, `UPDATE message_outbox SET status=$2,provider_id=$3,updated_at=now() WHERE id=$1`, id, result.Status, result.ProviderID)
-	if err != nil {
-		return err
-	}
-	if sendErr != nil {
-		slog.Warn("Message delivery requires review", "message_id", id, "status", result.Status)
-	}
-	return nil
+
+type transport struct{}
+
+func (transport) Send(ctx context.Context, m domain.MessageLease) (string, string, error) {
+	result, err := delivery.Send(ctx, m.Channel, m.Recipient, m.Subject, m.Body)
+	return result.Status, result.ProviderID, err
 }
