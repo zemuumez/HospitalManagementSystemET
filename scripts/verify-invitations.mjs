@@ -221,6 +221,28 @@ try {
     ).status,
     400,
   );
+  await db.query('DELETE FROM "rateLimit"');
+  const receptionist = await account("receptionist");
+  r = await fetch(base + "/api/hms/messages", {
+    headers: { cookie: receptionist.cookie },
+  });
+  assert.equal(r.status, 200);
+  const operational = await r.json();
+  assert.equal(
+    JSON.stringify(operational).includes(email),
+    false,
+    "identity email metadata excluded from operational messages",
+  );
+  assert.equal(JSON.stringify(operational).includes(nextEmail), false);
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int AS count FROM message_outbox WHERE audience='identity'",
+      )
+    ).rows[0].count,
+    3,
+    "identity delivery remains queued/sent",
+  );
   console.log(
     "PASS: invitation administrator/origin controls, Mailpit delivery, inactive pending identity, password policy, verified email, concurrent single-use acceptance, normal session/Go role, expiry, renewal, revocation and retained audit.",
   );

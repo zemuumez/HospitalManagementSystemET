@@ -96,7 +96,7 @@ func (s Store) Enqueue(ctx context.Context, a domain.Actor, in domain.MessageInp
 	return m, tx.Commit(ctx)
 }
 func (s Store) Messages(ctx context.Context) ([]domain.Message, error) {
-	rows, err := s.DB.Query(ctx, `SELECT id,channel,recipient,status,created_at FROM message_outbox ORDER BY created_at DESC LIMIT 25`)
+	rows, err := s.DB.Query(ctx, `SELECT id,channel,recipient,status,created_at FROM message_outbox WHERE audience='operational' ORDER BY created_at DESC LIMIT 25`)
 	if err != nil {
 		return nil, err
 	}

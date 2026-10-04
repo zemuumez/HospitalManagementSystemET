@@ -52,7 +52,7 @@ async function issue(
   );
   link.searchParams.set("token", token);
   await db.query(
-    "INSERT INTO message_outbox(actor_id,channel,recipient,subject,body,idempotency_key) VALUES($1,'email',$2,$3,$4,$5)",
+    "INSERT INTO message_outbox(actor_id,channel,recipient,subject,body,idempotency_key,audience) VALUES($1,'email',$2,$3,$4,$5,'identity')",
     [
       actor,
       email,
