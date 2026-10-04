@@ -10,7 +10,7 @@
     "typecheck": "npm run typecheck --workspace @hms/web",
     "test": "npm run test --workspace @hms/web",
     "test:integration": "node --env-file=apps/web/.env.local scripts/integration.mjs",
-    "test:connected": "node --env-file=apps/web/.env.local scripts/verify-connected.mjs",
+    "test:connected": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs",
     "format:check": "prettier --check \"apps/web/src/**/*.{ts,tsx,css}\" \"apps/web/scripts/*.ts\" \"scripts/*.mjs\"",
     "db:migrate": "npm run db:migrate --workspace @hms/web",
     "admin:create": "npm run admin:create --workspace @hms/web",

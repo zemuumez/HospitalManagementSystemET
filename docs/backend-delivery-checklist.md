@@ -389,3 +389,7 @@ Stable Go API error codes and tested request logging/readiness are documented in
 Migration 010 provides general inventory with immutable movements, original-issue return tracking, exact fractional quantities, low-stock queries, versioned catalog edits and commit-time reconciliation. [Detailed contract](backend-inventory-contract.md). Go tests ran uncached with PostgreSQL enabled and passed; vet passed. Request redaction/readiness/error-code checks passed in the same run.
 
 The first GitHub Actions run for `3eed632` completed successfully: migrations, Go checks, npm checks/build/typecheck, dependency audit, live API/Mailpit/capture checks and connected Chrome regression. This is evidence for the configured CI gates, not completion of every module or a security certification.
+
+### Isolated browser workflow verification
+
+`npm run test:connected` now builds a separate API and copies the web application into an ignored QA directory, with private loopback ports, a generated authentication secret and a fresh random PostgreSQL schema. The test checks its schema before creating fixtures. Finally it stops its child services and drops only its generated schema; it does not delete clinical/financial records from the development database. Browser invoice issuance and exact persisted totals are restored. Staff, schedule, patient, appointment, invoice, admission and discharge journeys passed on 2026-10-04. No additional Section 4 UI integration was added.

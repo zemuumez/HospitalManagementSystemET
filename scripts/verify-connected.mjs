@@ -23,6 +23,12 @@ const id = randomUUID(),
   family = `Browser${id.slice(0, 8)}`;
 let browser;
 try {
+  const schema = process.env.HMS_TEST_ISOLATED_SCHEMA;
+  assert.match(schema || "", /^hms_browser_[a-f0-9]{24}$/);
+  assert.equal(
+    (await db.query("SELECT current_schema() AS name")).rows[0].name,
+    schema,
+  );
   await db.query('INSERT INTO "user"(id,name,email) VALUES($1,$2,$3)', [
     id,
     "Browser integration admin",
@@ -72,7 +78,7 @@ try {
   await dialog.getByRole("button", { name: "Search", exact: true }).click();
   await dialog
     .getByLabel("Doctor", { exact: true })
-    .selectOption({ label: `Browser test doctor — ${doctorEmail}` });
+    .selectOption({ label: `Browser test doctor \u2014 ${doctorEmail}` });
   await dialog
     .getByLabel("Department", { exact: true })
     .fill("General medicine");
@@ -106,7 +112,7 @@ try {
     .selectOption({ index: 1 });
   await dialog
     .getByLabel("Doctor", { exact: true })
-    .selectOption({ label: "Browser test doctor — General medicine" });
+    .selectOption({ label: "Browser test doctor \u2014 General medicine" });
   await dialog.getByLabel("Date", { exact: true }).fill(day);
   await dialog
     .getByLabel("Available slots (EAT)", { exact: true })
@@ -214,9 +220,33 @@ try {
   await dialog.getByLabel("Unit Price (ETB)", { exact: true }).fill("3.33");
   // Issued invoices are immutable. Persistent posting is verified in the
   // disposable-schema Go suite; this shared-database browser test stops before issue.
+  await dialog
+    .getByRole("button", { name: "Issue invoice", exact: true })
+    .click();
+  await dialog.waitFor({ state: "hidden" });
+  await page.reload();
+  const invoiceRow = page
+    .getByRole("row")
+    .filter({ hasText: `Synthetic ${family}` });
+  await invoiceRow.waitFor();
+  assert.equal(
+    (
+      await db.query("SELECT total_minor FROM invoice WHERE created_by=$1", [
+        id,
+      ])
+    ).rows[0].total_minor,
+    "899",
+  );
+  await invoiceRow.getByRole("button", { name: "View", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Amount (ETB)", { exact: true }).waitFor();
+  await page.screenshot({
+    path: ".local/connected-verification/invoice.png",
+    fullPage: true,
+  });
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   console.log(
-    "PASS: browser charge account creation and invoice form inputs (posting tested in isolated schema).",
+    "PASS: browser charge account and invoice creation, server totals after reload, invoice/payment form details.",
   );
   const signout = await page.request.post(base + "/api/auth/sign-out", {
     headers: { origin: base },
@@ -255,27 +285,5 @@ try {
   );
 } finally {
   await browser?.close();
-  const users = (
-    await db.query('SELECT id FROM "user" WHERE id=$1 OR email=$2', [
-      id,
-      doctorEmail,
-    ])
-  ).rows.map((u) => u.id);
-  await db.query("DELETE FROM appointment WHERE created_by=$1", [id]);
-  await db.query("DELETE FROM encounter WHERE created_by=$1", [id]);
-  await db.query("DELETE FROM patient_case WHERE created_by=$1", [id]);
-  await db.query("DELETE FROM hospital_bed WHERE created_by=$1", [id]);
-  await db.query("DELETE FROM charge_account WHERE created_by=$1", [id]);
-  await db.query("DELETE FROM patient WHERE family_name=$1", [family]);
-  await db.query("DELETE FROM doctor_hours WHERE doctor_id=ANY($1::text[])", [
-    users,
-  ]);
-  await db.query("DELETE FROM doctor_profile WHERE user_id=ANY($1::text[])", [
-    users,
-  ]);
-  await db.query("DELETE FROM audit_event WHERE actor_id=ANY($1::text[])", [
-    users,
-  ]);
-  await db.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [users]);
   await db.end();
 }
