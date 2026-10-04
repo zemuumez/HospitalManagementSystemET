@@ -1,5 +1,7 @@
 # ULSHMS
 
+Current delivery: [Backend, integration and QA checklist](docs/backend-delivery-checklist.md), [original module coverage](docs/backend-module-coverage.md), and [verified backend steps](docs/backend-integration.md).
+
 A single-hospital management system being rebuilt with Next.js, Tailwind CSS and Go. Better Auth owns accounts/sessions; Firebase verifies phone identities; Go owns hospital authorization and workflows.
 
 The current UI is an original-style, frontend-first preview with 116 module routes, separate role/personal-record views, public pages, and synthetic data. See [the four-step frontend review](docs/frontend-four-step-review.md) and [frontend preview and parity limits](docs/frontend-preview.md). The connected foundation includes email sign-in/reset, Firebase phone linking/sign-in preparation, scoped patient registration/directory at `/live-patients`, and operational email/SMS at `/communications`. The other module backends remain pending. See [discovery](docs/discovery/README.md), [delivery plan](docs/discovery/rebuild-plan.md), and the superseding [authentication decision](docs/architecture/001-authentication.md).

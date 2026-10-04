@@ -1,3 +1,7 @@
+# Current backend delivery status
+
+Backend work is now in progress. See the [detailed backend/integration/QA checklist](backend-delivery-checklist.md) and [module coverage inventory](backend-module-coverage.md). Verified commits `bf1d623`, `add59b9` and `21e2f55` add staff access, scheduling, connected patient access and core clinical admissions. Billing is the current next implementation step. The sections below describe earlier checkpoints and are not the current completion status.
+
 # Latest frontend review
 
 The four source-based frontend checkpoints are documented in [the review report](frontend-four-step-review.md). Role menus/personal records, doctor details, dependent clinical forms, source-field Amharic coverage and frontend regression checks have been added. The live demo remains unreachable, and exact PDF/clinical parity is not claimed. Backend integration has not been extended in this pass.
