@@ -88,7 +88,10 @@ type Payment struct {
 }
 
 // A pharmacy invoice derives patient, quantity and price from a real dispensing.
-type PharmacyInvoiceInput struct {
+type SourceInvoiceInput struct {
 	AccountID           string `json:"accountId"`
 	DiscountBasisPoints int64  `json:"discountBasisPoints"`
 }
+
+// PharmacyInvoiceInput retains compatibility with the existing dispensing contract.
+type PharmacyInvoiceInput = SourceInvoiceInput

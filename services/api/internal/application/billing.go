@@ -8,6 +8,7 @@ import (
 )
 
 type BillingRepository interface {
+	BillDiagnostic(context.Context, domain.Actor, string, domain.PharmacyInvoiceInput, string, string) (domain.Invoice, error)
 	BillDispensing(context.Context, domain.Actor, string, domain.PharmacyInvoiceInput, string, string) (domain.Invoice, error)
 	ChargeAccounts(context.Context, int) ([]domain.ChargeAccount, error)
 	CreateChargeAccount(context.Context, domain.Actor, string) (domain.ChargeAccount, error)
@@ -113,4 +114,14 @@ func (b Billing) BillDispensing(ctx context.Context, a domain.Actor, id string, 
 		return domain.Invoice{}, domain.ErrValidation
 	}
 	return b.Store.BillDispensing(ctx, a, id, i, key, b.Now().In(domain.HospitalLocation).Format("2006-01-02"))
+}
+
+func (b Billing) BillDiagnostic(ctx context.Context, a domain.Actor, id string, i domain.PharmacyInvoiceInput, key string) (domain.Invoice, error) {
+	if !a.Can("billing.manage") {
+		return domain.Invoice{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) || !domain.UUIDPattern.MatchString(i.AccountID) || i.DiscountBasisPoints < 0 || i.DiscountBasisPoints >= 10000 || !keyOK(key) {
+		return domain.Invoice{}, domain.ErrValidation
+	}
+	return b.Store.BillDiagnostic(ctx, a, id, i, key, b.Now().In(domain.HospitalLocation).Format("2006-01-02"))
 }

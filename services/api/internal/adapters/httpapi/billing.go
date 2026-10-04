@@ -13,6 +13,21 @@ func (s Server) billing(w http.ResponseWriter, r *http.Request, a domain.Actor) 
 		page, _ = strconv.Atoi(raw)
 	}
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/v1/diagnostic-orders/") && strings.HasSuffix(r.URL.Path, "/invoice") && r.Method == "POST":
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/diagnostic-orders/"), "/")
+		if len(parts) != 2 {
+			return false
+		}
+		var i domain.PharmacyInvoiceInput
+		if !decode(w, r, &i) {
+			return true
+		}
+		out, e := s.Billing.BillDiagnostic(r.Context(), a, parts[0], i, r.Header.Get("Idempotency-Key"))
+		if e != nil {
+			fail(w, e)
+		} else {
+			write(w, 201, out)
+		}
 	case strings.HasPrefix(r.URL.Path, "/v1/pharmacy-movements/") && strings.HasSuffix(r.URL.Path, "/invoice") && r.Method == "POST":
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/pharmacy-movements/"), "/")
 		if len(parts) != 2 {

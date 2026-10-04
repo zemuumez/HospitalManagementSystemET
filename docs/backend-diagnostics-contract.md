@@ -35,3 +35,9 @@ Concurrent transitions and submissions lock the order and compare versions; stal
 Go/database/HTTP tests cover wrong-doctor ordering, order replay, skipped collection, duplicate/invalid parameters and nonfinite results, simultaneous submissions, signed-content tampering, unauthorized signing, unreleased report privacy, amendment reasons and retained release history, result field labels, HTTP Origin and strict JSON. All tests and vet passed with the disposable-schema database suite enabled.
 
 Still required: complete category/unit/catalog CRUD and source fields, sample rejection/recollection, reviewer specialty/team assignment policy, attachments and authorized report PDFs, diagnosis templates, billing source linkage, vaccines and birth/death/operation/investigation workflows. These are not marked complete by this increment.
+
+## Diagnostic billing
+
+`POST /v1/diagnostic-orders/{id}/invoice` accepts `{accountId, discountBasisPoints}` and an Idempotency-Key, for admin/accountant only. The order must be released on first billing. Its encounter supplies the patient, and its immutable test definition supplies the one-unit tariff. The server calculates totals and seals the invoice using the same posting helper as pharmacy. No client-supplied patient, quantity or price is accepted. Concurrent matching calls return the single linked invoice; changed account/discount conflicts. Zero-charge tests do not produce zero-value invoices through this endpoint.
+
+The link is immutable. Later report amendments do not generate a second charge. Bundled lab invoices, prepayment, cancellation credit workflows and new UI integration remain pending. Existing manual invoice payments/refunds apply to the resulting invoice.

@@ -56,28 +56,12 @@ func (s Store) BillDispensing(ctx context.Context, a domain.Actor, movement stri
 	if e != nil {
 		return out, e
 	}
-	e = tx.QueryRow(ctx, `SELECT name FROM charge_account WHERE id=$1 AND active FOR SHARE`, i.AccountID).Scan(&account)
-	if e != nil {
-		return out, clinicalError(e)
-	}
-	subtotal := quantity * *price
-	total := subtotal - (subtotal*i.DiscountBasisPoints+5000)/10000
-	if subtotal > 1000000000000 || total < 1 {
-		return out, domain.ErrValidation
-	}
 	hash := requestHash(struct {
 		Movement string
 		Input    domain.PharmacyInvoiceInput
 	}{movement, i})
-	var id string
-	e = tx.QueryRow(ctx, `INSERT INTO invoice(patient_id,invoice_date,subtotal_minor,discount_basis_points,total_minor,created_by,request_key,request_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, patient, date, subtotal, i.DiscountBasisPoints, total, a.ID, key, hash).Scan(&id)
+	id, e := insertSourceInvoice(ctx, tx, a, patient, name, quantity, *price, i, key, date, hash)
 	if e != nil {
-		return out, clinicalError(e)
-	}
-	if _, e = tx.Exec(ctx, `INSERT INTO invoice_line(invoice_id,position,account_id,account_name,description,quantity,unit_price_minor) VALUES($1,1,$2,$3,$4,$5,$6)`, id, i.AccountID, account, name, quantity, *price); e != nil {
-		return out, e
-	}
-	if _, e = tx.Exec(ctx, `UPDATE invoice SET sealed=true WHERE id=$1`, id); e != nil {
 		return out, e
 	}
 	if _, e = tx.Exec(ctx, `INSERT INTO pharmacy_invoice(movement_id,invoice_id,account_id,discount_basis_points,created_by) VALUES($1,$2,$3,$4,$5)`, movement, id, i.AccountID, i.DiscountBasisPoints, a.ID); e != nil {

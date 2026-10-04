@@ -235,7 +235,8 @@ Backend-first progress:
 - [ ] Expanded reversal/voiding approvals and reconciliation workflows.
 - [ ] Payment provider integrations, signed webhooks, event replay protection and settlement reconciliation.
 - [x] Pharmacy dispensing-to-invoice linkage with captured prices and unique immutable source associations; concurrent duplicate billing tested (migration 007).
-- [ ] IPD/OPD/ambulance/lab charges linked to their source workflows without duplicate billing.
+- [x] Released diagnostic-order invoices derive patient/tariff from the source, retain unique linkage and reject duplicate or changed-source billing (migration 016).
+- [ ] IPD/OPD/ambulance charges, bundled lab bills and broader source-workflow billing.
 - [ ] Expenses, income, account transfers and daily/monthly financial reports.
 - [ ] Insurance, packages, policy details, claims and patient responsibility.
 - [ ] Employee payroll, allowances/deductions, approval, payout and payroll slips.
@@ -419,3 +420,7 @@ Migration 014 backfills master records from existing bed labels and gives every 
 ### Nursing access and retained observations
 
 Migration 015 adds bounded nurse rosters with retained assignment events and typed vitals. Only assigned nurses and the encounter doctor can record; administrators can assign/read but cannot sign measurements. Removing assignment denies subsequent reads and even same-key replays. Corrections retain the earlier observation and cannot fork under competing requests. Go unit/PostgreSQL/HTTP tests and vet passed. [Detailed contract and source differences](backend-nursing-contract.md). Clinical interpretation, wider team delegation and patient release remain open.
+
+### Diagnostic source billing
+
+Migration 016 links released diagnostic orders to one immutable invoice. Admin/accountant billing derives the patient and immutable catalog tariff, with validated account/discount and exact integer totals. Concurrent requests return one invoice; lab staff cannot issue invoices and unreleased orders cannot be billed through this endpoint. Pharmacy and diagnostics now share the source-invoice posting helper. PostgreSQL/HTTP tests and vet passed, including retained source links, exact totals and patient invoice access.

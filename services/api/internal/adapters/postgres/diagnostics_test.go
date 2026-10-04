@@ -42,6 +42,15 @@ func testDiagnostics(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 	if e != nil {
 		t.Fatal(e)
 	}
+	billing := application.Billing{Store: store, Now: time.Now}
+	account, e := billing.CreateAccount(ctx, admin, "Diagnostics")
+	if e != nil {
+		t.Fatal(e)
+	}
+	invoiceInput := domain.PharmacyInvoiceInput{AccountID: account.ID, DiscountBasisPoints: 1000}
+	if _, e = billing.BillDiagnostic(ctx, admin, order.ID, invoiceInput, "diagnostic-invoice-early"); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("unreleased test billed", e)
+	}
 	retry, e := d.Order(ctx, doctor, input, "diagnostic-order-001")
 	if e != nil || retry.ID != order.ID {
 		t.Fatal("diagnostic retry", e)
@@ -148,16 +157,44 @@ func testDiagnostics(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 	if _, e = db.Exec(ctx, `DELETE FROM diagnostic_review WHERE result_id=$1`, result.ID); e == nil {
 		t.Fatal("signed review removed")
 	}
+
+	if _, e = billing.BillDiagnostic(ctx, lab, order.ID, invoiceInput, "lab-forged-invoice"); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal("lab issued invoice", e)
+	}
+	var invoices [2]domain.Invoice
+	for n := 0; n < 2; n++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			invoices[n], errs[n] = billing.BillDiagnostic(ctx, admin, order.ID, invoiceInput, fmt.Sprintf("diagnostic-invoice-race-%d", n))
+		}(n)
+	}
+	wg.Wait()
+	if errs[0] != nil || errs[1] != nil || invoices[0].ID != invoices[1].ID || invoices[0].TotalMinor != 90 {
+		t.Fatal("diagnostic duplicate billing", invoices, errs)
+	}
+	if _, e = billing.Invoice(ctx, patient, invoices[0].ID); e != nil {
+		t.Fatal("patient diagnostic invoice scope", e)
+	}
+	changedInvoice := invoiceInput
+	changedInvoice.DiscountBasisPoints = 2000
+	if _, e = billing.BillDiagnostic(ctx, admin, order.ID, changedInvoice, "diagnostic-invoice-changed"); !errors.Is(e, domain.ErrConflict) {
+		t.Fatal("changed duplicate source billing", e)
+	}
+	if _, e = db.Exec(ctx, `DELETE FROM diagnostic_invoice WHERE order_id=$1`, order.ID); e == nil {
+		t.Fatal("diagnostic invoice link deleted")
+	}
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := strings.TrimPrefix(r.Header.Get("Cookie"), "session=")
 		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))
 	}))
 	defer auth.Close()
-	handler := httpapi.Server{Diagnostics: d, Actors: store, AuthURL: auth.URL, Origin: "http://hospital.test", Client: auth.Client()}.Handler()
+	handler := httpapi.Server{Billing: billing, Diagnostics: d, Actors: store, AuthURL: auth.URL, Origin: "http://hospital.test", Client: auth.Client()}.Handler()
 	for _, tc := range []struct {
 		actor, method, path, body, origin string
 		want                              int
 	}{
+		{"lab", "POST", "/v1/diagnostic-orders/" + order.ID + "/invoice", `{}`, "http://hospital.test", 403},
 		{"patient", "GET", "/v1/diagnostic-orders/" + order.ID + "/results", "", "", 200},
 		{"reception", "GET", "/v1/diagnostic-orders/" + order.ID + "/results", "", "", 403},
 		{"lab", "POST", "/v1/diagnostic-tests", `{"extra":true}`, "http://hospital.test", 400},
