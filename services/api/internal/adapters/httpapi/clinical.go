@@ -13,6 +13,18 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 		page, _ = strconv.Atoi(raw)
 	}
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/v1/beds/") && r.Method == "PATCH":
+		id := strings.TrimPrefix(r.URL.Path, "/v1/beds/")
+		var i domain.BedStateInput
+		if !decode(w, r, &i) {
+			return true
+		}
+		out, e := s.Clinical.SetBedState(r.Context(), a, id, i)
+		if e != nil {
+			fail(w, e)
+		} else {
+			write(w, 200, out)
+		}
 	case r.URL.Path == "/v1/beds" && r.Method == "GET":
 		out, e := s.Clinical.Beds(r.Context(), a, page)
 		if e != nil {
@@ -74,6 +86,24 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 		}
 		id := parts[0]
 		switch {
+		case parts[1] == "bed-history" && r.Method == "GET":
+			out, e := s.Clinical.BedHistory(r.Context(), a, id, page)
+			if e != nil {
+				fail(w, e)
+			} else {
+				write(w, 200, map[string]any{"events": out, "page": page, "pageSize": 25})
+			}
+		case parts[1] == "transfer" && r.Method == "POST":
+			var i domain.BedTransfer
+			if !decode(w, r, &i) {
+				return true
+			}
+			out, e := s.Clinical.TransferBed(r.Context(), a, id, i)
+			if e != nil {
+				fail(w, e)
+			} else {
+				write(w, 200, out)
+			}
 		case parts[1] == "discharge" && r.Method == "POST":
 			var i domain.Discharge
 			if !decode(w, r, &i) {

@@ -8,6 +8,9 @@ import (
 )
 
 type ClinicalRepository interface {
+	SetBedState(context.Context, domain.Actor, string, domain.BedStateInput) (domain.Bed, error)
+	TransferBed(context.Context, domain.Actor, string, domain.BedTransfer) (domain.Encounter, error)
+	BedHistory(context.Context, domain.Actor, string, int) ([]domain.BedEvent, error)
 	Beds(context.Context, int) ([]domain.Bed, error)
 	CreateBed(context.Context, domain.Actor, domain.BedInput) (domain.Bed, error)
 	Cases(context.Context, domain.Actor, int) ([]domain.Case, error)
@@ -111,4 +114,34 @@ func (c Clinical) SignNote(ctx context.Context, a domain.Actor, id string, n dom
 		return domain.ClinicalNote{}, domain.ErrValidation
 	}
 	return c.Store.SignNote(ctx, a, id, n, key)
+}
+
+func (c Clinical) SetBedState(ctx context.Context, a domain.Actor, id string, i domain.BedStateInput) (domain.Bed, error) {
+	if a.Role != "admin" {
+		return domain.Bed{}, domain.ErrForbidden
+	}
+	i.Reason = strings.TrimSpace(i.Reason)
+	if !domain.UUIDPattern.MatchString(id) || i.Version < 1 || len([]rune(i.Reason)) < 1 || len([]rune(i.Reason)) > 2000 || (i.State != "ready" && i.State != "maintenance" && i.State != "unavailable") {
+		return domain.Bed{}, domain.ErrValidation
+	}
+	return c.Store.SetBedState(ctx, a, id, i)
+}
+func (c Clinical) TransferBed(ctx context.Context, a domain.Actor, id string, i domain.BedTransfer) (domain.Encounter, error) {
+	if !a.Can("clinical.admit") {
+		return domain.Encounter{}, domain.ErrForbidden
+	}
+	i.Reason = strings.TrimSpace(i.Reason)
+	if !domain.UUIDPattern.MatchString(id) || !domain.UUIDPattern.MatchString(i.BedID) || i.Version < 1 || len([]rune(i.Reason)) < 1 || len([]rune(i.Reason)) > 2000 {
+		return domain.Encounter{}, domain.ErrValidation
+	}
+	return c.Store.TransferBed(ctx, a, id, i)
+}
+func (c Clinical) BedHistory(ctx context.Context, a domain.Actor, id string, page int) ([]domain.BedEvent, error) {
+	if !a.Can("clinical.read") {
+		return nil, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) || page < 1 || page > 1000 {
+		return nil, domain.ErrValidation
+	}
+	return c.Store.BedHistory(ctx, a, id, page)
 }

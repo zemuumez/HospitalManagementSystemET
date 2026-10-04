@@ -186,7 +186,8 @@ Backend-first progress:
 
 - [x] Case relationships and basic OPD/IPD admission/discharge.
 - [x] Atomic bed occupancy and immutable signed notes.
-- [ ] Bed-type master data, maintenance/unavailable states, transfers and occupancy history.
+- [x] Versioned ready/maintenance/unavailable bed states, scoped transfers and retained admission/transfer/discharge history (migration 011; concurrent and authorization tests).
+- [ ] Bed-type master data, complete original bed assignment fields and historical occupancy reports.
 - [ ] Nursing/team access, vitals and observations with units/ranges and timestamps.
 - [ ] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments.
 - [x] Signed encounter medication orders with medicine references, dose, route, frequency, duration, instructions and explicit quantity; assigned-doctor signing and retained cancellation.
@@ -393,3 +394,7 @@ The first GitHub Actions run for `3eed632` completed successfully: migrations, G
 ### Isolated browser workflow verification
 
 `npm run test:connected` now builds a separate API and copies the web application into an ignored QA directory, with private loopback ports, a generated authentication secret and a fresh random PostgreSQL schema. The test checks its schema before creating fixtures. Finally it stops its child services and drops only its generated schema; it does not delete clinical/financial records from the development database. Browser invoice issuance and exact persisted totals are restored. Staff, schedule, patient, appointment, invoice, admission and discharge journeys passed on 2026-10-04. No additional Section 4 UI integration was added.
+
+### Bed maintenance and transfer increment
+
+Migration 011 separates original admission bed from the current bed and adds retained occupancy/state events. Active IPD encounters can transfer through admin/reception/assigned-doctor APIs, with version checks and occupied/unavailable destination rejection. Maintenance cannot disable an occupied bed. Admission retries continue to match the original request after transfers. Existing encounters receive an explicit migration baseline, not fabricated historical events. Bed tariff snapshots are retained; time-based bed billing remains pending. Go PostgreSQL/HTTP tests and vet passed, including concurrent transfer rejection, history immutability and unauthorized access. See [contract](backend-bed-contract.md).

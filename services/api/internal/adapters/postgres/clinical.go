@@ -20,7 +20,7 @@ func clinicalError(err error) error {
 	return err
 }
 func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
-	rows, e := s.DB.Query(ctx, `SELECT b.id,b.name,b.bed_type,b.charge_minor,NOT EXISTS(SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active') FROM hospital_bed b WHERE b.active ORDER BY b.name,b.id LIMIT 25 OFFSET $1`, (page-1)*25)
+	rows, e := s.DB.Query(ctx, `SELECT b.id,b.name,b.bed_type,b.charge_minor,b.state,b.version,b.state='ready' AND NOT EXISTS(SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active') FROM hospital_bed b WHERE b.active ORDER BY b.name,b.id LIMIT 25 OFFSET $1`, (page-1)*25)
 	if e != nil {
 		return nil, e
 	}
@@ -28,7 +28,7 @@ func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
 	out := []domain.Bed{}
 	for rows.Next() {
 		var b domain.Bed
-		if e = rows.Scan(&b.ID, &b.Name, &b.Type, &b.ChargeMinor, &b.Available); e != nil {
+		if e = rows.Scan(&b.ID, &b.Name, &b.Type, &b.ChargeMinor, &b.State, &b.Version, &b.Available); e != nil {
 			return nil, e
 		}
 		out = append(out, b)
@@ -36,7 +36,7 @@ func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
 	return out, rows.Err()
 }
 func (s Store) CreateBed(ctx context.Context, a domain.Actor, i domain.BedInput) (domain.Bed, error) {
-	b := domain.Bed{BedInput: i, Available: true}
+	b := domain.Bed{BedInput: i, Available: true, State: "ready", Version: 1}
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
 		return b, e
@@ -158,7 +158,11 @@ func (s Store) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInpu
 	}
 	old, err := scanEncounter(tx.QueryRow(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE e.created_by=$1 AND e.request_key=$2`, a.ID, key))
 	if err == nil {
-		if old.Kind != i.Kind || old.CaseID != i.CaseID || old.BedID != i.BedID || !old.AdmittedAt.Equal(i.AdmittedAt) || old.Symptoms != i.Symptoms {
+		var originalBed string
+		if err = tx.QueryRow(ctx, `SELECT COALESCE(admission_bed_id::text,'') FROM encounter WHERE id=$1`, old.ID).Scan(&originalBed); err != nil {
+			return empty, err
+		}
+		if originalBed != i.BedID || old.Kind != i.Kind || old.CaseID != i.CaseID || !old.AdmittedAt.Equal(i.AdmittedAt) || old.Symptoms != i.Symptoms {
 			return empty, domain.ErrConflict
 		}
 		return old, tx.Commit(ctx)
@@ -173,7 +177,7 @@ func (s Store) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInpu
 	}
 	var charge int64
 	if i.Kind == "ipd" {
-		err = tx.QueryRow(ctx, `SELECT charge_minor FROM hospital_bed WHERE id=$1 AND active FOR UPDATE`, i.BedID).Scan(&charge)
+		err = tx.QueryRow(ctx, `SELECT charge_minor FROM hospital_bed WHERE id=$1 AND active AND state='ready' FOR UPDATE`, i.BedID).Scan(&charge)
 		if err != nil {
 			return empty, clinicalError(err)
 		}
@@ -182,6 +186,11 @@ func (s Store) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInpu
 	err = tx.QueryRow(ctx, `INSERT INTO encounter(kind,case_id,patient_id,doctor_id,bed_id,admitted_at,symptoms,bed_charge_minor,created_by,request_key) VALUES($1,$2,$3,$4,NULLIF($5,'')::uuid,$6,$7,$8,$9,$10) RETURNING id`, i.Kind, i.CaseID, patientID, doctorID, i.BedID, i.AdmittedAt, i.Symptoms, charge, a.ID, key).Scan(&id)
 	if err != nil {
 		return empty, clinicalError(err)
+	}
+	if i.Kind == "ipd" {
+		if _, err = tx.Exec(ctx, `INSERT INTO bed_event(encounter_id,kind,to_bed_id,charge_minor,actor_id,encounter_version) VALUES($1,'admission',$2,$3,$4,1)`, id, i.BedID, charge, a.ID); err != nil {
+			return empty, err
+		}
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_event(actor_id,action,resource_id) VALUES($1,'encounter.admitted',$2)`, a.ID, id); err != nil {
 		return empty, err
@@ -210,6 +219,11 @@ func (s Store) Discharge(ctx context.Context, a domain.Actor, id string, d domai
 	}
 	if _, err = tx.Exec(ctx, `UPDATE encounter SET status='discharged',discharged_at=$2,discharge_summary=$3,version=version+1 WHERE id=$1`, id, now, d.Summary); err != nil {
 		return out, err
+	}
+	if out.Kind == "ipd" {
+		if _, err = tx.Exec(ctx, `INSERT INTO bed_event(encounter_id,kind,from_bed_id,charge_minor,actor_id,encounter_version) SELECT id,'discharge',bed_id,COALESCE((SELECT charge_minor FROM bed_event WHERE encounter_id=encounter.id ORDER BY encounter_version DESC LIMIT 1),bed_charge_minor),$2,version FROM encounter WHERE id=$1`, id, a.ID); err != nil {
+			return out, err
+		}
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_event(actor_id,action,resource_id) VALUES($1,'encounter.discharged',$2)`, a.ID, id); err != nil {
 		return out, err

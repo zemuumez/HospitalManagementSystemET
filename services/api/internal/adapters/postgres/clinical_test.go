@@ -140,6 +140,69 @@ func TestClinicalTransactions(t *testing.T) {
 	if e != nil || beds[0].Available {
 		t.Fatal("bed occupancy not reflected", e)
 	}
+
+	transferBed, e := clinic.CreateBed(ctx, actors[0], domain.BedInput{Name: "Transfer", Type: "General", ChargeMinor: 23456})
+	if e != nil {
+		t.Fatal(e)
+	}
+	maintenance, e := clinic.SetBedState(ctx, actors[0], transferBed.ID, domain.BedStateInput{State: "maintenance", Version: 1, Reason: "Cleaning"})
+	if e != nil || maintenance.Available {
+		t.Fatal("maintenance bed available", e)
+	}
+	if _, e = clinic.TransferBed(ctx, actors[0], enc.ID, domain.BedTransfer{BedID: transferBed.ID, Version: 1, Reason: "Move"}); !errors.Is(e, domain.ErrNotFound) {
+		t.Fatal("transfer to maintenance", e)
+	}
+	if _, e = clinic.SetBedState(ctx, actors[0], bed.ID, domain.BedStateInput{State: "unavailable", Version: 1, Reason: "Occupied"}); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("occupied bed disabled", e)
+	}
+	if _, e = clinic.SetBedState(ctx, actors[4], transferBed.ID, domain.BedStateInput{State: "ready", Version: 2, Reason: "Done"}); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal("reception changed maintenance", e)
+	}
+	if _, e = clinic.SetBedState(ctx, actors[0], transferBed.ID, domain.BedStateInput{State: "ready", Version: 1, Reason: "Stale"}); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("stale bed state accepted", e)
+	}
+	if _, e = clinic.SetBedState(ctx, actors[0], transferBed.ID, domain.BedStateInput{State: "ready", Version: 2, Reason: "Clean"}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = clinic.TransferBed(ctx, actors[2], enc.ID, domain.BedTransfer{BedID: transferBed.ID, Version: 1, Reason: "Move"}); !errors.Is(e, domain.ErrNotFound) {
+		t.Fatal("unassigned doctor transfer", e)
+	}
+	transferErrors := make([]error, 2)
+	for n := 0; n < 2; n++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			_, transferErrors[n] = clinic.TransferBed(ctx, actors[0], enc.ID, domain.BedTransfer{BedID: transferBed.ID, Version: 1, Reason: "Move"})
+		}(n)
+	}
+	wg.Wait()
+	if !((transferErrors[0] == nil && errors.Is(transferErrors[1], domain.ErrStale)) || (transferErrors[1] == nil && errors.Is(transferErrors[0], domain.ErrStale))) {
+		t.Fatal("transfer race", transferErrors)
+	}
+	retry, e = clinic.Admit(ctx, actors[0], inputs[winner], "admission-key-000"+string(rune('0'+winner)))
+	if e != nil || retry.ID != enc.ID || retry.BedID != transferBed.ID {
+		t.Fatal("original admission retry after transfer", e)
+	}
+	history, e := clinic.BedHistory(ctx, actors[0], enc.ID, 1)
+	if e != nil || len(history) != 2 || history[0].Kind != "transfer" || history[0].ChargeMinor != 23456 {
+		t.Fatal("transfer history", history, e)
+	}
+	if _, e = clinic.BedHistory(ctx, actors[2], enc.ID, 1); !errors.Is(e, domain.ErrNotFound) {
+		t.Fatal("other doctor history", e)
+	}
+	if _, e = db.Exec(ctx, `DELETE FROM bed_event WHERE encounter_id=$1`, enc.ID); e == nil {
+		t.Fatal("deleted bed history")
+	}
+	if _, e = db.Exec(ctx, `UPDATE bed_state_event SET reason='changed' WHERE bed_id=$1`, transferBed.ID); e == nil {
+		t.Fatal("changed bed state history")
+	}
+	if _, e = db.Exec(ctx, `UPDATE encounter SET admission_bed_id=$2 WHERE id=$1`, enc.ID, transferBed.ID); e == nil {
+		t.Fatal("changed original bed")
+	}
+	enc, e = clinic.TransferBed(ctx, actors[1], enc.ID, domain.BedTransfer{BedID: bed.ID, Version: 2, Reason: "Return to original ward"})
+	if e != nil || enc.Version != 3 {
+		t.Fatal("return transfer", e)
+	}
 	if _, e = clinic.SignNote(ctx, actors[2], enc.ID, domain.NoteInput{Body: "Unauthorized"}, "note-key-00000001"); !errors.Is(e, domain.ErrNotFound) {
 		t.Fatal("unassigned doctor wrote note", e)
 	}
@@ -172,7 +235,7 @@ func TestClinicalTransactions(t *testing.T) {
 	if _, e = clinic.Discharge(ctx, actors[0], enc.ID, domain.Discharge{Version: 1, Summary: "Admin cannot sign discharge"}); !errors.Is(e, domain.ErrForbidden) {
 		t.Fatal("admin signed discharge", e)
 	}
-	out, e := clinic.Discharge(ctx, actors[1], enc.ID, domain.Discharge{Version: 1, Summary: "Synthetic discharge summary"})
+	out, e := clinic.Discharge(ctx, actors[1], enc.ID, domain.Discharge{Version: enc.Version, Summary: "Synthetic discharge summary"})
 	if e != nil || out.Status != "discharged" {
 		t.Fatal(e)
 	}
@@ -269,7 +332,7 @@ func TestClinicalTransactions(t *testing.T) {
 		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))
 	}))
 	defer auth.Close()
-	handler := httpapi.Server{Billing: billing, Actors: store, AuthURL: auth.URL, Origin: "http://hospital.test", Client: auth.Client()}.Handler()
+	handler := httpapi.Server{Clinical: clinic, Billing: billing, Actors: store, AuthURL: auth.URL, Origin: "http://hospital.test", Client: auth.Client()}.Handler()
 	for _, tc := range []struct {
 		actor, body string
 		want        int
@@ -283,6 +346,31 @@ func TestClinicalTransactions(t *testing.T) {
 		if w.Code != tc.want {
 			t.Fatalf("payment HTTP wanted %d got %d: %s", tc.want, w.Code, w.Body.String())
 		}
+	}
+
+	for _, tc := range []struct {
+		method, path, actor, body, origin string
+		want                              int
+	}{
+		{"GET", "/v1/encounters/" + enc.ID + "/bed-history", "admin", "", "", 200},
+		{"GET", "/v1/encounters/" + enc.ID + "/bed-history", "other-doctor", "", "", 404},
+		{"POST", "/v1/encounters/" + enc.ID + "/transfer", "patient", `{}`, "http://hospital.test", 403},
+		{"POST", "/v1/encounters/" + enc.ID + "/transfer", "admin", `{}`, "https://evil.example", 403},
+		{"PATCH", "/v1/beds/" + transferBed.ID, "admin", `{"state":"ready","version":3,"reason":"Check","extra":true}`, "http://hospital.test", 400},
+		{"PATCH", "/v1/beds/" + transferBed.ID, "admin", `{"state":"unavailable","version":3,"reason":"Repairs"}`, "http://hospital.test", 200},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Cookie", "session="+tc.actor)
+		req.Header.Set("Origin", tc.origin)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != tc.want {
+			t.Fatalf("bed HTTP %s wanted %d got %d: %s", tc.path, tc.want, w.Code, w.Body.String())
+		}
+	}
+	history, e = clinic.BedHistory(ctx, actors[0], enc.ID, 1)
+	if e != nil || len(history) != 4 || history[0].Kind != "discharge" {
+		t.Fatal("complete occupancy history", history, e)
 	}
 
 	testPharmacy(t, db, store, actors, cases)

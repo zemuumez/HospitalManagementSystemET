@@ -24,6 +24,8 @@ type Bed struct {
 	BedInput
 	ID        string `json:"id"`
 	Available bool   `json:"available"`
+	State     string `json:"state"`
+	Version   int    `json:"version"`
 }
 type CaseInput struct {
 	PatientID   string `json:"patientId"`
@@ -89,4 +91,26 @@ type ClinicalNote struct {
 	AuthorName string    `json:"authorName"`
 	Body       string    `json:"body"`
 	SignedAt   time.Time `json:"signedAt"`
+}
+
+type BedStateInput struct {
+	State   string `json:"state"`
+	Version int    `json:"version"`
+	Reason  string `json:"reason"`
+}
+type BedTransfer struct {
+	BedID   string `json:"bedId"`
+	Version int    `json:"version"`
+	Reason  string `json:"reason"`
+}
+type BedEvent struct {
+	ID          string    `json:"id"`
+	Kind        string    `json:"kind"`
+	FromBedID   string    `json:"fromBedId"`
+	ToBedID     string    `json:"toBedId"`
+	ChargeMinor int64     `json:"chargeMinor"`
+	ActorID     string    `json:"actorId"`
+	Reason      string    `json:"reason"`
+	RecordedAt  time.Time `json:"recordedAt"`
+	Version     int       `json:"version"`
 }
