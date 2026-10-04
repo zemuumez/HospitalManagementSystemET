@@ -264,7 +264,7 @@ Backend-first progress:
 - [x] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely (migration 031).
 - [x] Hospital general settings, logo/favicon, schedules, language and queue theme persisted (migration 031).
 - [x] Complaints, notices, testimonials moderation and front-office enquiry lifecycle (migrations 031, 032).
-- [ ] Live consultations/meetings, provider tokens/permissions and visit linkage.
+- [x] Live consultations/meetings, provider tokens/permissions and visit linkage (migration 033; [contract](backend-live-consultations-contract.md)).
 - [x] Operational email/SMS outbox and safe development transports.
 - [ ] Delivery callbacks, preferences/consent, templates, localization, scheduled jobs and retry/reconciliation UI.
 - [ ] Production SMTP/SMS setup and controlled delivery tests using approved recipients.

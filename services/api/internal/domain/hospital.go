@@ -83,6 +83,14 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin"
 	case "notices.read":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician" || a.Role == "patient"
+	case "live_consultations.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "live_consultations.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "patient"
+	case "live_meetings.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "live_meetings.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "receptionist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
 	case "appointments.read", "appointments.book":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "patient"
 	case "staff.manage":
@@ -98,7 +106,17 @@ func (a Actor) Can(permission string) bool {
 }
 func (a Actor) Permissions() []string {
 	result := []string{}
-	for _, p := range []string{"diagnostics.catalog", "diagnostics.read", "pharmacy.catalog", "pharmacy.manage", "medication.read", "patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book", "staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage", "attendance.clock", "attendance.read_own", "attendance.manage", "ambulance.manage", "ambulance.read", "ambulance_call.manage", "ambulance_call.read", "services.manage", "services.read", "operations.manage", "operations.read", "settings.manage", "settings.read"} {
+	for _, p := range []string{
+		"diagnostics.catalog", "diagnostics.read", "pharmacy.catalog", "pharmacy.manage", "medication.read",
+		"patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book",
+		"staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage",
+		"attendance.clock", "attendance.read_own", "attendance.manage", "ambulance.manage", "ambulance.read",
+		"ambulance_call.manage", "ambulance_call.read", "services.manage", "services.read", "operations.manage",
+		"operations.read", "settings.manage", "settings.read", "enquiries.read", "enquiries.manage",
+		"complaints.read", "complaints.manage", "complaints.create", "notices.read", "notices.manage",
+		"front_office.manage", "front_office.read", "live_consultations.manage", "live_consultations.read",
+		"live_meetings.manage", "live_meetings.read",
+	} {
 		if a.Can(p) {
 			result = append(result, p)
 		}
