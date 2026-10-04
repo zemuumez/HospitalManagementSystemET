@@ -1,6 +1,6 @@
 # Original module backend and integration coverage
 
-Checkpoint: 2026-10-04, updated through diagnostics/inventory, bed transfers/types, nursing/vitals, rescheduling, worker recovery, optional Stripe and Firebase/recovery verification. See [the master checklist](backend-delivery-checklist.md) for acceptance criteria and QA evidence.
+Checkpoint: 2026-10-04, updated through migrations 001–026, including staff/invitations/MFA, retained audit and clinical corrections, catalog/sample history and optional patient DOB. See [the master checklist](backend-delivery-checklist.md) for acceptance criteria and QA evidence.
 
 This inventory contains 111 source-catalog screens and 5 additional frontend screens. Each row remains open for full field/action parity; a partial backend is not a completed module. Source group/order is retained instead of alphabetic sorting.
 
@@ -8,19 +8,19 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 |---|---|---|---|
 | Patient ID Card Templates (`patient-id-card-template`) | Patient ID Card | Preview only; typed backend, integration and workflow QA pending | Open |
 | Generate Patient ID Card (`generate-patient-id-card`) | Patient ID Card | Preview only; typed backend, integration and workflow QA pending | Open |
-| Users (`users`) | Users | Provision/activate/deactivate; profiles and invitations pending | Open |
-| Admins (`admins`) | Users | Preview only; typed backend, integration and workflow QA pending | Open |
-| Accountants (`accountants`) | Users | Preview only; typed backend, integration and workflow QA pending | Open |
-| Nurses (`nurses`) | Users | Preview only; typed backend, integration and workflow QA pending | Open |
-| Lab Technicians (`lab-technicians`) | Users | Preview only; typed backend, integration and workflow QA pending | Open |
-| Receptionists (`receptionists`) | Users | Preview only; typed backend, integration and workflow QA pending | Open |
-| Pharmacists (`pharmacists`) | Users | Preview only; typed backend, integration and workflow QA pending | Open |
-| Appointments (`appointments`) | Appointments | Booking, rescheduling/history, ownership, status and SMS queue; calendar/fees/reminders and new UI pending | Open |
+| Users (`users`) | Users | Provision/activate/deactivate plus profile/role-change, invitation and MFA backends; new UI/full fields pending | Open |
+| Admins (`admins`) | Users | Shared typed profile/access/invitation backend tested; role-specific full fields and UI pending | Open |
+| Accountants (`accountants`) | Users | Shared typed profile/access/invitation backend tested; role-specific full fields and UI pending | Open |
+| Nurses (`nurses`) | Users | Shared typed profile/access/invitation backend tested; role-specific full fields and UI pending | Open |
+| Lab Technicians (`lab-technicians`) | Users | Shared typed profile/access/invitation backend tested; role-specific full fields and UI pending | Open |
+| Receptionists (`receptionists`) | Users | Shared typed profile/access/invitation backend tested; role-specific full fields and UI pending | Open |
+| Pharmacists (`pharmacists`) | Users | Shared typed profile/access/invitation backend tested; role-specific full fields and UI pending | Open |
+| Appointments (`appointments`) | Appointments | Booking, rescheduling and status/reason history, ownership and SMS queue; calendar/fees/reminders and new UI pending | Open |
 | Appointment Calendars (`appointment-calendars`) | Appointments | Preview only; typed backend, integration and workflow QA pending | Open |
 | Appointment Transaction (`appointment-transaction`) | Appointments | Preview only; typed backend, integration and workflow QA pending | Open |
 | Patient Queues (`patient-queues`) | Appointments | Preview only; typed backend, integration and workflow QA pending | Open |
-| IPD Patients (`ipd-patient-departments`) | IPD / OPD | Admission, transfers/history, nurse assignment/vitals, signed notes and discharge APIs; further submodules/UI pending | Open |
-| OPD Patients (`opd-patient-departments`) | IPD / OPD | Encounter, nurse assignment/vitals, signed notes and discharge APIs; repeat visits/submodules/UI pending | Open |
+| IPD Patients (`ipd-patient-departments`) | IPD / OPD | Admission, transfers/history, nurse assignment/vitals, signed notes, discharge and linked addenda APIs; further submodules/UI pending | Open |
+| OPD Patients (`opd-patient-departments`) | IPD / OPD | Encounter, nurse assignment/vitals, signed notes, discharge and linked addenda APIs; repeat visits/submodules/UI pending | Open |
 | Accounts (`accounts`) | Billing | Connected charge-account creation/list; full original account types and editing pending | Open |
 | Employee Payrolls (`employee-payrolls`) | Billing | Preview only; typed backend, integration and workflow QA pending | Open |
 | Invoices (`invoices`) | Billing | Manual payments/refunds plus pharmacy/diagnostic source billing and optional verified Stripe backend; gateway UI/settlement/taxes/print pending | Open |
@@ -31,7 +31,7 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Manual Payment Approvals (`manual-bill-payments`) | Billing | Preview only; typed backend, integration and workflow QA pending | Open |
 | Bed Status (`bed-status`) | Bed Management | Availability list; original visual bed board integration pending | Open |
 | Bed Assigns (`bed-assigns`) | Bed Management | Admission/transfer/discharge history APIs tested; original assignment UI/fields pending | Open |
-| Beds (`beds`) | Bed Management | Create/list and derived occupancy; types/maintenance/transfers pending | Open |
+| Beds (`beds`) | Bed Management | Create/list, derived occupancy, type references, maintenance states and transfers; full fields/UI pending | Open |
 | Bed Types (`bed-types`) | Bed Management | Stable master IDs, versioned edits/archive tested; UI integration pending | Open |
 | Blood Banks (`blood-banks`) | Blood Bank | Preview only; typed backend, integration and workflow QA pending | Open |
 | Blood Donors (`blood-donors`) | Blood Bank | Preview only; typed backend, integration and workflow QA pending | Open |

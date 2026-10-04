@@ -1,6 +1,35 @@
-# Current backend delivery status
+# Current backend checkpoint
 
-Backend work is now in progress. See the [detailed backend/integration/QA checklist](backend-delivery-checklist.md) and [module coverage inventory](backend-module-coverage.md). Verified commits `bf1d623`, `add59b9` and `21e2f55` add staff access, scheduling, connected patient access and core clinical admissions. The billing core is also implemented and verified: charge accounts, invoice totals, manual payments/refunds and connected invoice screens. Issued invoice protection and the pharmacy/signed-medication core are now implemented and database/API tested. See [pharmacy scope](backend-pharmacy-contract.md). Pharmacy source billing and patient profile detail/edit/revision APIs are also implemented and tested. Remaining Section 3 backend work takes priority over further frontend integration; full backend parity is not complete. The sections below describe earlier checkpoints and are not the current completion status.
+Section 3 remains in progress; Section 4 new frontend integration has not started. All verified increments through `faa5f0d` are committed and pushed. Local migrations 001–026 are applied and the local Go API has been rebuilt/restarted with those changes; readiness returned 200. Real Firebase, SMS and payment credentials remain blank in the production worksheet.
+
+## Implemented and verified backend work
+
+| Area | Working backend scope | Main remaining scope |
+|---|---|---|
+| Identity | Better Auth sessions, admin provisioning/disablement, phone linking/login, real Firebase Auth-emulator tests, password recovery, authenticator MFA and invitations | Phone-change/recovery administration, privileged-action step-up, production setup, new auth UI |
+| Staff and audit | Shared demographic/qualification profiles, retained revisions, guarded role changes, session revocation, immutable audit rows and admin review API | Full role-specific fields/files, care reassignment, history/review screens, production retention/archival |
+| Patients | MRN registration, explicit portal links, scoped search/detail, versioned demographics/contact/consent, revisions, unknown DOB and EAT date boundaries | Duplicate/merge policy, custom fields/photos, smart cards and complete source form parity |
+| Scheduling | Weekly schedules, slots, atomic booking, absences, rescheduling, cancellation/status history | Hospital overrides, queues, fees, reminders, public booking and notifications on changes |
+| Clinical | Cases, IPD/OPD, bed types/states/transfers/history, nursing assignment/vitals/corrections, signed notes/discharge and addenda | Structured prescriptions/discharge, diagnoses/procedures, packages, insurance, follow-ups, odontogram, PDFs/files |
+| Diagnostics | Versioned/retired definitions, typed parameters, scoped orders, sample rejection/recollection, processing/results, sign/release/amendments and source billing | Remaining masters/report fields, files/PDF, specialty policy, vaccination and other reports |
+| Pharmacy/inventory | Batch stock, immutable movements, signed medication orders, bounded dispensing/returns/disposal, source invoices; general inventory ledger | Suppliers/purchases, full bills/credits, recalls, stock approvals/notifications, blood bank |
+| Finance | Immutable invoice snapshots, exact ETB totals, manual payments/refunds, pharmacy/diagnostic links, optional verified Stripe checkout and conflict review queue | Taxes, voids, reconciliation resolution, provider refunds/settlement, payroll, insurance, other source charges |
+| Communications | Durable outbox, Mailpit/captured SMS, optional Twilio, leases/heartbeats, uncertain-crash recovery and stale-worker protection | Callbacks, consent enforcement across workflows, scheduling, retries/reconciliation and live provider tests |
+| Operations | Request IDs/redacted logs, readiness, transactional migrations and hosted CI | Files, CMS/settings, attendance, ambulance, consultations, imports, backups/restore, load tests and deployment |
+
+The detailed acceptance list is [Section 3 of the delivery checklist](backend-delivery-checklist.md). [Module coverage](backend-module-coverage.md) retains every original screen as open until its full fields, business workflow and integration are verified. Core support in the table above is not a claim of complete original-module parity.
+
+## Verification evidence
+
+Go unit/database/HTTP/concurrency tests and vet pass against disposable schemas through migration 026. The web tests, formatting, typecheck and production build passed after adding invitations. Real Firebase Auth-emulator tests include MFA enforcement; Mailpit suites cover reset and invitation completion. Existing connected browser journeys run in a separate copied app/database schema. The older API suite was moved into that same isolation model after audit retention correctly blocked its old row-deletion cleanup.
+
+Hosted CI passed commit `ee7ffed` ([run 37231554242](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37231554242)), scheduling commit `f561304` ([run 37231893895](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37231893895)) and invitation commit `1ddde6d` ([run 37232198746](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37232198746)). Later runs must be checked separately; a pushed commit is not automatically a passing CI result.
+
+Provider setup steps are in [provider-setup.md](provider-setup.md); [deployment/.env.example](../deployment/.env.example) intentionally contains blank real credential fields. No real SMS, external email, payment charge or production deployment was performed.
+
+---
+
+The following sections retain earlier frontend/foundation checkpoints as historical context; their pending lists are superseded by the current checklist above.
 
 # Latest frontend review
 
