@@ -36,6 +36,12 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "accountant" || a.Role == "patient"
 	case "billing.manage":
 		return a.Role == "admin" || a.Role == "accountant"
+	case "finance.read", "finance.manage":
+		return a.Role == "admin" || a.Role == "accountant"
+	case "payroll.read", "payroll.manage":
+		return a.Role == "admin" || a.Role == "accountant"
+	case "payroll.read_own":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "receptionist" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
 	case "beds.read":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse"
 	case "clinical.read":
@@ -124,7 +130,8 @@ func (a Actor) Permissions() []string {
 		"complaints.read", "complaints.manage", "complaints.create", "notices.read", "notices.manage",
 		"front_office.manage", "front_office.read", "live_consultations.manage", "live_consultations.read",
 		"live_meetings.manage", "live_meetings.read", "blood_bank.manage", "blood_bank.read",
-		"prescriptions.manage", "prescriptions.read",
+		"prescriptions.manage", "prescriptions.read", "finance.read", "finance.manage",
+		"payroll.read", "payroll.read_own", "payroll.manage",
 	} {
 		if a.Can(p) {
 			result = append(result, p)

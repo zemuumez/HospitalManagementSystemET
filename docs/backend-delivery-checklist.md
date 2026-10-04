@@ -249,10 +249,10 @@ Backend-first progress:
 - [ ] Payment cancellation/refund execution, operator reconciliation resolution, settlement/fee reports, additional gateways and real sandbox/live verification.
 - [x] Pharmacy dispensing-to-invoice linkage with captured prices and unique immutable source associations; concurrent duplicate billing tested (migration 007).
 - [x] Released diagnostic-order invoices derive patient/tariff from the source, retain unique linkage and reject duplicate or changed-source billing (migration 016).
-- [ ] IPD/OPD/ambulance charges, bundled lab bills and broader source-workflow billing.
-- [ ] Expenses, income, account transfers and daily/monthly financial reports.
+- [x] IPD/OPD/ambulance charges, bundled lab bills and broader source-workflow billing (migration 035; anti-double-billing via `service_invoice_link` with unique source association).
+- [x] Expenses, income, account transfers and daily/monthly financial reports (migration 035; `hospital_expense_head`, `hospital_expense`, `hospital_income_head`, `hospital_income`, and financial summary reports; [contract](backend-finance-payroll-contract.md)).
 - [ ] Insurance, packages, policy details, claims and patient responsibility.
-- [ ] Employee payroll, allowances/deductions, approval, payout and payroll slips.
+- [x] Employee payroll, allowances/deductions, approval, payout and payroll slips (migration 035; `employee_payroll`, salary calculation, payment timestamps, staff-scoped slips; [contract](backend-finance-payroll-contract.md)).
 - [ ] Currency configuration/migration rules; current new financial contracts use ETB only.
 - [ ] Tax/compliance requirements must be established before asserting accounting/legal compliance.
 

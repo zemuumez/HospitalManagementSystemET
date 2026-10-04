@@ -28,6 +28,7 @@ type Server struct {
 	FrontOffice    application.FrontOfficeService
 	LiveConsultation application.LiveConsultationService
 	PharmacyBloodBank application.PharmacyBloodBankService
+	FinancePayroll application.FinancePayrollService
 	App            application.Hospital
 	Scheduling     application.Scheduling
 	Clinical       application.Clinical
@@ -176,6 +177,9 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.pharmacyBloodBank(w, r, a) {
+			return
+		}
+		if s.financePayroll(w, r, a) {
 			return
 		}
 		if s.audit(w, r, a) {
