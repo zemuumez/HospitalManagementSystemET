@@ -1,0 +1,6094 @@
+[
+  {
+    "id": "patient-id-card-template",
+    "title": "Patient ID Card Templates",
+    "group": "Patient ID Card",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_id_card_template/fields.blade.php"
+      },
+      {
+        "key": "color",
+        "label": "Color",
+        "type": "color",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_id_card_template/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Name",
+      "Color",
+      "Email",
+      "Phone",
+      "Date of Birth",
+      "Blood Group",
+      "Address",
+      "Patient Unique ID"
+    ],
+    "source": "review/legacy/resources/views/patient_id_card_template",
+    "tableSource": "review/legacy/app/Livewire/PatientIdCardTemplateTable.php",
+    "extracted": true
+  },
+  {
+    "id": "generate-patient-id-card",
+    "title": "Generate Patient ID Card",
+    "group": "Patient ID Card",
+    "fields": [
+      {
+        "key": "template_id",
+        "label": "Select Template",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/generate_patient_id_card/create_modal.blade.php"
+      },
+      {
+        "key": "patient_id",
+        "label": "Select Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/generate_patient_id_card/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Patients", "Patient Unique ID", "Template ID"],
+    "source": "review/legacy/resources/views/generate_patient_id_card",
+    "tableSource": "review/legacy/app/Livewire/GeneratePatientIdCardTable.php",
+    "extracted": true
+  },
+  {
+    "id": "users",
+    "title": "Users",
+    "group": "Users",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "department_id",
+        "label": "Role",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "doctor_department",
+        "label": "Doctor Departments",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": true,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "facebook_url",
+        "label": "Facebook URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "instagram_url",
+        "label": "Instagram URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "twitter_url",
+        "label": "Twitter URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "linkedIn_url",
+        "label": "Linked In URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/users/fields.blade.php"
+      }
+    ],
+    "columns": ["Users", "Role", "Email", "Status"],
+    "source": "review/legacy/resources/views/users",
+    "tableSource": "review/legacy/app/Livewire/UserTable.php",
+    "extracted": true
+  },
+  {
+    "id": "admins",
+    "title": "Admins",
+    "group": "Users",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/admins/fields.blade.php"
+      }
+    ],
+    "columns": ["Name", "Phone", "Status", "Last Name", "Email"],
+    "source": "review/legacy/resources/views/admins",
+    "tableSource": "review/legacy/app/Livewire/AdminTable.php",
+    "extracted": true
+  },
+  {
+    "id": "accountants",
+    "title": "Accountants",
+    "group": "Users",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "designation",
+        "label": "Designation",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "qualification",
+        "label": "Qualification",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/accountants/fields.blade.php"
+      }
+    ],
+    "columns": ["Accountants", "Phone", "Status", "Last Name", "Email"],
+    "source": "review/legacy/resources/views/accountants",
+    "tableSource": "review/legacy/app/Livewire/AccountantTable.php",
+    "extracted": true
+  },
+  {
+    "id": "nurses",
+    "title": "Nurses",
+    "group": "Users",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "designation",
+        "label": "Designation",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "qualification",
+        "label": "Qualification",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/nurses/fields.blade.php"
+      }
+    ],
+    "columns": ["Nurses", "Phone", "Qualification", "Birth Date", "Status"],
+    "source": "review/legacy/resources/views/nurses",
+    "tableSource": "review/legacy/app/Livewire/NurseTable.php",
+    "extracted": true
+  },
+  {
+    "id": "lab-technicians",
+    "title": "Lab Technicians",
+    "group": "Users",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "designation",
+        "label": "Designation",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "qualification",
+        "label": "Qualification",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/lab_technicians/fields.blade.php"
+      }
+    ],
+    "columns": ["Lab Technicians", "Designation", "Status"],
+    "source": "review/legacy/resources/views/lab_technicians",
+    "tableSource": "review/legacy/app/Livewire/LabTechnicianTable.php",
+    "extracted": true
+  },
+  {
+    "id": "receptionists",
+    "title": "Receptionists",
+    "group": "Users",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "designation",
+        "label": "Designation",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "qualification",
+        "label": "Qualification",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/receptionists/fields.blade.php"
+      }
+    ],
+    "columns": ["Receptionists", "Designation", "Phone", "Status", "Last Name"],
+    "source": "review/legacy/resources/views/receptionists",
+    "tableSource": "review/legacy/app/Livewire/ReceptionistTable.php",
+    "extracted": true
+  },
+  {
+    "id": "pharmacists",
+    "title": "Pharmacists",
+    "group": "Users",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "designation",
+        "label": "Designation",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "qualification",
+        "label": "Qualification",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/pharmacists/fields.blade.php"
+      }
+    ],
+    "columns": ["Pharmacists", "Blood Group", "Status"],
+    "source": "review/legacy/resources/views/pharmacists",
+    "tableSource": "review/legacy/app/Livewire/PharmacistTable.php",
+    "extracted": true
+  },
+  {
+    "id": "appointments",
+    "title": "Appointments",
+    "group": "Appointments",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "department_id",
+        "label": "Doctor Department",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "opd_date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "appointment_charge",
+        "label": "Appointment Charge",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "payment_mode",
+        "label": "Payment Mode",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "problem",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "timeslot",
+        "label": "Time",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/appointments/fields.blade.php"
+      }
+    ],
+    "columns": ["Patient", "Doctor", "Doctor Department", "Date", "Status"],
+    "source": "review/legacy/resources/views/appointments",
+    "tableSource": "review/legacy/app/Livewire/AppointmentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "appointment-calendars",
+    "title": "Appointment Calendars",
+    "group": "Appointments",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/appointment_calendars",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "appointment-transaction",
+    "title": "Appointment Transaction",
+    "group": "Appointments",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": [
+      "Patient",
+      "Doctor",
+      "Appointment Date",
+      "Payment Status",
+      "Payment Mode",
+      "Amount"
+    ],
+    "source": "review/legacy/resources/views/appointment_transaction",
+    "tableSource": "review/legacy/app/Livewire/AppointmentTransactionTable.php",
+    "extracted": false
+  },
+  {
+    "id": "patient-queues",
+    "title": "Patient Queues",
+    "group": "Appointments",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Patient", "Doctor", "Date", "Status"],
+    "source": "review/legacy/resources/views/patient_queues",
+    "tableSource": "review/legacy/app/Livewire/PatientQueueTable.php",
+    "extracted": false
+  },
+  {
+    "id": "ipd-patient-departments",
+    "title": "IPD Patients",
+    "group": "IPD / OPD",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "case_id",
+        "label": "Case ID",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "ipd_number",
+        "label": "IPD Number",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "weight",
+        "label": "Weight",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "bp",
+        "label": "Bp",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "admission_date",
+        "label": "Admission Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "bed_type_id",
+        "label": "Bed Type ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "bed_id",
+        "label": "Bed ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "is_old_patient",
+        "label": "Is Old Patient",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "symptoms",
+        "label": "Symptoms",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_patient_departments/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "IPD Number",
+      "Doctor ID",
+      "Admission Date",
+      "Bed ID",
+      "Discharge",
+      "Bill Status",
+      "Net Amount"
+    ],
+    "source": "review/legacy/resources/views/ipd_patient_departments",
+    "tableSource": "review/legacy/app/Livewire/IpdPatientDepartmentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "opd-patient-departments",
+    "title": "OPD Patients",
+    "group": "IPD / OPD",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "case_id",
+        "label": "Case ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "opd_number",
+        "label": "OPD Number",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "weight",
+        "label": "Weight",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "bp",
+        "label": "Bp",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "appointment_date",
+        "label": "Appointment Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "standard_charge",
+        "label": "Standard Charge",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "payment_mode",
+        "label": "Payment Mode",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "symptoms",
+        "label": "Symptoms",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      },
+      {
+        "key": "is_old_patient",
+        "label": "Is Old Patient",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_patient_departments/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "OPD Number",
+      "Doctor ID",
+      "Appointment Date",
+      "Standard Charge",
+      "Payment Mode",
+      "Phone",
+      "Total Visits"
+    ],
+    "source": "review/legacy/resources/views/opd_patient_departments",
+    "tableSource": "review/legacy/app/Livewire/OpdPatientDepartmentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "accounts",
+    "title": "Accounts",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Account",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/accounts/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/accounts/add_modal.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/accounts/add_modal.blade.php"
+      },
+      {
+        "key": "type",
+        "label": "Type",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/accounts/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Account", "Type", "Status"],
+    "source": "review/legacy/resources/views/accounts",
+    "tableSource": "review/legacy/app/Livewire/AccountTable.php",
+    "extracted": true
+  },
+  {
+    "id": "employee-payrolls",
+    "title": "Employee Payrolls",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "sr_no",
+        "label": "Sr No",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "payroll_id",
+        "label": "Payroll ID",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "type",
+        "label": "Role",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "owner_id",
+        "label": "Employee",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "month",
+        "label": "Month",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "year",
+        "label": "Year",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "basic_salary",
+        "label": "Basic Salary",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "allowance",
+        "label": "Allowance",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "deductions",
+        "label": "Deductions",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      },
+      {
+        "key": "net_salary",
+        "label": "Net Salary",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/employee_payrolls/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Sr No",
+      "Payroll ID",
+      "Employee",
+      "Month",
+      "Year",
+      "Net Salary",
+      "Status"
+    ],
+    "source": "review/legacy/resources/views/employee_payrolls",
+    "tableSource": "review/legacy/app/Livewire/EmployeePayrollTable.php",
+    "extracted": true
+  },
+  {
+    "id": "invoices",
+    "title": "Invoices",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/invoices/fields.blade.php"
+      },
+      {
+        "key": "invoice_date",
+        "label": "Invoice Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/invoices/fields.blade.php"
+      },
+      {
+        "key": "discount",
+        "label": "Discount",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/invoices/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/invoices/fields.blade.php"
+      }
+    ],
+    "columns": ["Invoice ID", "Patient", "Invoice Date", "Amount", "Status"],
+    "source": "review/legacy/resources/views/invoices",
+    "tableSource": "review/legacy/app/Livewire/InvoiceTable.php",
+    "extracted": true
+  },
+  {
+    "id": "payments",
+    "title": "Payments",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "account_id",
+        "label": "Account",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/payments/fields.blade.php"
+      },
+      {
+        "key": "payment_date",
+        "label": "Payment Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/payments/fields.blade.php"
+      },
+      {
+        "key": "pay_to",
+        "label": "Pay To",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/payments/fields.blade.php"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/payments/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/payments/fields.blade.php"
+      }
+    ],
+    "columns": ["Account", "Payment Date", "Pay To", "Amount"],
+    "source": "review/legacy/resources/views/payments",
+    "tableSource": "review/legacy/app/Livewire/PaymentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "payment-reports",
+    "title": "Payment Reports",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/payment_reports",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "advanced-payments",
+    "title": "Advanced Payments",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/advanced_payments/create_modal.blade.php"
+      },
+      {
+        "key": "receipt_no",
+        "label": "Receipt No",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/advanced_payments/create_modal.blade.php"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/advanced_payments/create_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/advanced_payments/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Receipt No", "Patient", "Date", "Amount"],
+    "source": "review/legacy/resources/views/advanced_payments",
+    "tableSource": "review/legacy/app/Livewire/AdvancedPaymentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "bills",
+    "title": "Bills",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "patient_admission_id",
+        "label": "Admission ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "bill_date",
+        "label": "Bill Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "name",
+        "label": "Patient",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Patient Email",
+        "type": "email",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Patient Cell No",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Patient Gender",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Patient Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "admission_date",
+        "label": "Admission Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "discharge_date",
+        "label": "Discharge Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "package_id",
+        "label": "Package Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "insurance_id",
+        "label": "Insurance Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "total_days",
+        "label": "Total Days",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      },
+      {
+        "key": "policy_no",
+        "label": "Policy No",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/bills/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Payment Mode",
+      "Bill ID",
+      "Patient",
+      "Bill Status",
+      "Bill Date",
+      "Amount"
+    ],
+    "source": "review/legacy/resources/views/bills",
+    "tableSource": "review/legacy/app/Livewire/BillTable.php",
+    "extracted": true
+  },
+  {
+    "id": "manual-bill-payments",
+    "title": "Manual Payment Approvals",
+    "group": "Billing",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/manual_bill_payments",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "bed-status",
+    "title": "Bed Status",
+    "group": "Bed Management",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/bed_status",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "bed-assigns",
+    "title": "Bed Assigns",
+    "group": "Bed Management",
+    "fields": [
+      {
+        "key": "case_id",
+        "label": "Case",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/bed_assigns/fields.blade.php"
+      },
+      {
+        "key": "ipd_patient_department_id",
+        "label": "IPD Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/bed_assigns/fields.blade.php"
+      },
+      {
+        "key": "bed_id",
+        "label": "Bed",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/bed_assigns/fields.blade.php"
+      },
+      {
+        "key": "assign_date",
+        "label": "Assign Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/bed_assigns/fields.blade.php"
+      },
+      {
+        "key": "discharge_date",
+        "label": "Discharge Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/bed_assigns/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/bed_assigns/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/bed_assigns/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "IPD Number",
+      "Patient",
+      "Bed",
+      "Assign Date",
+      "Discharge Date",
+      "Status"
+    ],
+    "source": "review/legacy/resources/views/bed_assigns",
+    "tableSource": "review/legacy/app/Livewire/BedAssignTable.php",
+    "extracted": true
+  },
+  {
+    "id": "beds",
+    "title": "Beds",
+    "group": "Bed Management",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Bed",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/beds/create_modal.blade.php"
+      },
+      {
+        "key": "bed_type",
+        "label": "Bed Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/beds/create_modal.blade.php"
+      },
+      {
+        "key": "charge",
+        "label": "Charge",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/beds/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/beds/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Bed ID", "Bed", "Bed Type", "Charge", "Available"],
+    "source": "review/legacy/resources/views/beds",
+    "tableSource": "review/legacy/app/Livewire/BedTable.php",
+    "extracted": true
+  },
+  {
+    "id": "bed-types",
+    "title": "Bed Types",
+    "group": "Bed Management",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Bed Type",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/bed_types/modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/bed_types/modal.blade.php"
+      }
+    ],
+    "columns": ["Bed Type"],
+    "source": "review/legacy/resources/views/bed_types",
+    "tableSource": "review/legacy/app/Livewire/BedTypeTable.php",
+    "extracted": true
+  },
+  {
+    "id": "blood-banks",
+    "title": "Blood Banks",
+    "group": "Blood Bank",
+    "fields": [
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_banks/modal.blade.php"
+      },
+      {
+        "key": "remained_bags",
+        "label": "Remained Bags",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_banks/modal.blade.php"
+      }
+    ],
+    "columns": ["Blood Group", "Remained Bags"],
+    "source": "review/legacy/resources/views/blood_banks",
+    "tableSource": "review/legacy/app/Livewire/BloodBankTable.php",
+    "extracted": true
+  },
+  {
+    "id": "blood-donors",
+    "title": "Blood Donors",
+    "group": "Blood Bank",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_donors/modal.blade.php"
+      },
+      {
+        "key": "age",
+        "label": "Age",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_donors/modal.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/blood_donors/modal.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_donors/modal.blade.php"
+      },
+      {
+        "key": "last_donate_date",
+        "label": "Last Donation Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_donors/modal.blade.php"
+      }
+    ],
+    "columns": ["Name", "Age", "Gender", "Blood Group", "Last Donation Date"],
+    "source": "review/legacy/resources/views/blood_donors",
+    "tableSource": "review/legacy/app/Livewire/BloodDonorTable.php",
+    "extracted": true
+  },
+  {
+    "id": "blood-donations",
+    "title": "Blood Donations",
+    "group": "Blood Bank",
+    "fields": [
+      {
+        "key": "blood_donor_id",
+        "label": "Donor Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_donations/add_modal.blade.php"
+      },
+      {
+        "key": "bags",
+        "label": "Bags",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_donations/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Donor Name", "Bags"],
+    "source": "review/legacy/resources/views/blood_donations",
+    "tableSource": "review/legacy/app/Livewire/BloodDonationTable.php",
+    "extracted": true
+  },
+  {
+    "id": "blood-issues",
+    "title": "Blood Issues",
+    "group": "Blood Bank",
+    "fields": [
+      {
+        "key": "issue_date",
+        "label": "Issue Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_issues/add_modal.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_issues/add_modal.blade.php"
+      },
+      {
+        "key": "patient_id",
+        "label": "Patient Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_issues/add_modal.blade.php"
+      },
+      {
+        "key": "donor_id",
+        "label": "Donor Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_issues/add_modal.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_issues/add_modal.blade.php"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/blood_issues/add_modal.blade.php"
+      },
+      {
+        "key": "remarks",
+        "label": "Remarks",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/blood_issues/add_modal.blade.php"
+      }
+    ],
+    "columns": [
+      "Patient",
+      "Doctor",
+      "Donor Name",
+      "Issue Date",
+      "Blood Group",
+      "Amount"
+    ],
+    "source": "review/legacy/resources/views/blood_issues",
+    "tableSource": "review/legacy/app/Livewire/BloodIssueTable.php",
+    "extracted": true
+  },
+  {
+    "id": "documents",
+    "title": "Documents",
+    "group": "Documents",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/documents/add_modal.blade.php"
+      },
+      {
+        "key": "document_type_id",
+        "label": "Document Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/documents/add_modal.blade.php"
+      },
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/documents/add_modal.blade.php"
+      },
+      {
+        "key": "file",
+        "label": "Attachment",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/documents/add_modal.blade.php"
+      },
+      {
+        "key": "notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/documents/add_modal.blade.php"
+      }
+    ],
+    "columns": ["File Name", "Document Type", "Patient"],
+    "source": "review/legacy/resources/views/documents",
+    "tableSource": "review/legacy/app/Livewire/DocumentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "document-types",
+    "title": "Document Types",
+    "group": "Documents",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Document Type",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/document_types/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Document Type"],
+    "source": "review/legacy/resources/views/document_types",
+    "tableSource": "review/legacy/app/Livewire/DocumentTypeTable.php",
+    "extracted": true
+  },
+  {
+    "id": "doctors",
+    "title": "Doctors",
+    "group": "Doctors",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "doctor_department_id",
+        "label": "Doctor Department",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "designation",
+        "label": "Designation",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "qualification",
+        "label": "Qualification",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "specialist",
+        "label": "Specialist",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "appointment_charge",
+        "label": "Appointment Charge",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "facebook_url",
+        "label": "Facebook URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "twitter_url",
+        "label": "Twitter URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "instagram_url",
+        "label": "Instagram URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      },
+      {
+        "key": "linkedIn_url",
+        "label": "Linked In URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctors/fields.blade.php"
+      }
+    ],
+    "columns": ["Qualification", "Doctor", "Specialist", "Status"],
+    "source": "review/legacy/resources/views/doctors",
+    "tableSource": "review/legacy/app/Livewire/DoctorTable.php",
+    "extracted": true
+  },
+  {
+    "id": "doctor-departments",
+    "title": "Doctor Departments",
+    "group": "Doctors",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Doctor Department",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/doctor_departments/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/doctor_departments/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Doctor Department"],
+    "source": "review/legacy/resources/views/doctor_departments",
+    "tableSource": "review/legacy/app/Livewire/DoctorDepartmentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "schedules",
+    "title": "Schedules",
+    "group": "Doctors",
+    "fields": [
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/schedules/fields.blade.php"
+      },
+      {
+        "key": "per_patient_time",
+        "label": "Per Patient Time",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/schedules/fields.blade.php"
+      }
+    ],
+    "columns": ["Doctor", "Per Patient Time"],
+    "source": "review/legacy/resources/views/schedules",
+    "tableSource": "review/legacy/app/Livewire/ScheduleTable.php",
+    "extracted": true
+  },
+  {
+    "id": "doctor-holiday",
+    "title": "Doctor Holidays",
+    "group": "Doctors",
+    "fields": [
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/doctor_holiday/fields.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/doctor_holiday/fields.blade.php"
+      },
+      {
+        "key": "name",
+        "label": "Reason",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/doctor_holiday/fields.blade.php"
+      }
+    ],
+    "columns": ["Doctor", "Reason", "Date"],
+    "source": "review/legacy/resources/views/doctor_holiday",
+    "tableSource": "review/legacy/app/Livewire/DoctorHolidayTable.php",
+    "extracted": true
+  },
+  {
+    "id": "lunch-breaks",
+    "title": "Lunch Breaks",
+    "group": "Doctors",
+    "fields": [
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/lunch_breaks/fields.blade.php"
+      },
+      {
+        "key": "break_from",
+        "label": "From",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/lunch_breaks/fields.blade.php"
+      },
+      {
+        "key": "break_to",
+        "label": "To",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/lunch_breaks/fields.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/lunch_breaks/fields.blade.php"
+      }
+    ],
+    "columns": ["Doctor", "Lunch Break", "Date"],
+    "source": "review/legacy/resources/views/lunch_breaks",
+    "tableSource": "review/legacy/app/Livewire/LunchBreakTable.php",
+    "extracted": true
+  },
+  {
+    "id": "prescriptions",
+    "title": "Prescriptions",
+    "group": "Prescriptions",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/prescriptions/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/prescriptions/fields.blade.php"
+      },
+      {
+        "key": "health_insurance",
+        "label": "Health Insurance",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/prescriptions/fields.blade.php"
+      },
+      {
+        "key": "low_income",
+        "label": "Low Income",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/prescriptions/fields.blade.php"
+      },
+      {
+        "key": "reference",
+        "label": "Reference",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/prescriptions/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/prescriptions/fields.blade.php"
+      }
+    ],
+    "columns": ["Patients", "Doctors", "Medical History", "Status"],
+    "source": "review/legacy/resources/views/prescriptions",
+    "tableSource": "review/legacy/app/Livewire/PrescriptionTable.php",
+    "extracted": true
+  },
+  {
+    "id": "patient-diagnosis-test",
+    "title": "Diagnosis Tests",
+    "group": "Diagnosis",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "category_id",
+        "label": "Diagnosis Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "report_number",
+        "label": "Report Number",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "age",
+        "label": "Age",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "height",
+        "label": "Height",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "weight",
+        "label": "Weight",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "average_glucose",
+        "label": "Average Glucose",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "fasting_blood_sugar",
+        "label": "Fasting Blood Sugar",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "urine_sugar",
+        "label": "Urine Sugar",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "blood_pressure",
+        "label": "Blood Pressure",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "diabetes",
+        "label": "Diabetes",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      },
+      {
+        "key": "cholesterol",
+        "label": "Cholesterol",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_diagnosis_test/fields.blade.php"
+      }
+    ],
+    "columns": ["Report Number", "Patient", "Doctor", "Diagnosis Category"],
+    "source": "review/legacy/resources/views/patient_diagnosis_test",
+    "tableSource": "review/legacy/app/Livewire/PatientDiagnosisTestTable.php",
+    "extracted": true
+  },
+  {
+    "id": "diagnosis-categories",
+    "title": "Diagnosis Categories",
+    "group": "Diagnosis",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Diagnosis Category",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/diagnosis_categories/modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/diagnosis_categories/modal.blade.php"
+      }
+    ],
+    "columns": ["Diagnosis Category"],
+    "source": "review/legacy/resources/views/diagnosis_categories",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "enquiries",
+    "title": "Enquiries",
+    "group": "Enquiries",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/enquiries",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "incomes",
+    "title": "Incomes",
+    "group": "Finance",
+    "fields": [
+      {
+        "key": "income_head",
+        "label": "Income Head",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/incomes/create_modal.blade.php"
+      },
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/incomes/create_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/incomes/create_modal.blade.php"
+      },
+      {
+        "key": "invoice_number",
+        "label": "Invoice Number",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/incomes/create_modal.blade.php"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/incomes/create_modal.blade.php"
+      },
+      {
+        "key": "attachment",
+        "label": "Attachment",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/incomes/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/incomes/create_modal.blade.php"
+      }
+    ],
+    "columns": [
+      "Invoice Number",
+      "Name",
+      "Income Head",
+      "Date",
+      "Amount",
+      "Attachment"
+    ],
+    "source": "review/legacy/resources/views/incomes",
+    "tableSource": "review/legacy/app/Livewire/IncomeTable.php",
+    "extracted": true
+  },
+  {
+    "id": "expenses",
+    "title": "Expenses",
+    "group": "Finance",
+    "fields": [
+      {
+        "key": "expense_head",
+        "label": "Expense Head",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/expenses/create_modal.blade.php"
+      },
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/expenses/create_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/expenses/create_modal.blade.php"
+      },
+      {
+        "key": "invoice_number",
+        "label": "Invoice Number",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/expenses/create_modal.blade.php"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/expenses/create_modal.blade.php"
+      },
+      {
+        "key": "attachment",
+        "label": "Attachment",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/expenses/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/expenses/create_modal.blade.php"
+      }
+    ],
+    "columns": [
+      "Invoice Number",
+      "Name",
+      "Expense Head",
+      "Date",
+      "Amount",
+      "Attachment"
+    ],
+    "source": "review/legacy/resources/views/expenses",
+    "tableSource": "review/legacy/app/Livewire/ExpenseTable.php",
+    "extracted": true
+  },
+  {
+    "id": "call-logs",
+    "title": "Call Logs",
+    "group": "Front Office",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/call_logs/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/call_logs/fields.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Received On",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/call_logs/fields.blade.php"
+      },
+      {
+        "key": "follow_up_date",
+        "label": "Follow Up Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/call_logs/fields.blade.php"
+      },
+      {
+        "key": "note",
+        "label": "Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/call_logs/fields.blade.php"
+      },
+      {
+        "key": "call_type",
+        "label": "Call Type",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/call_logs/fields.blade.php"
+      }
+    ],
+    "columns": ["Name", "Phone", "Received On", "Follow Up Date", "Call Type"],
+    "source": "review/legacy/resources/views/call_logs",
+    "tableSource": "review/legacy/app/Livewire/CallLogTable.php",
+    "extracted": true
+  },
+  {
+    "id": "visitors",
+    "title": "Visitors",
+    "group": "Front Office",
+    "fields": [
+      {
+        "key": "purpose",
+        "label": "Purpose",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "id_card",
+        "label": "Id Card",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "no_of_person",
+        "label": "Number Of Person",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "in_time",
+        "label": "In Time",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "out_time",
+        "label": "Out Time",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "note",
+        "label": "Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      },
+      {
+        "key": "attachment",
+        "label": "Attachment",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/visitors/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Purpose",
+      "Name",
+      "Phone",
+      "Id Card",
+      "Number Of Person",
+      "Date",
+      "In Time",
+      "Out Time",
+      "Attachment"
+    ],
+    "source": "review/legacy/resources/views/visitors",
+    "tableSource": "review/legacy/app/Livewire/VisitorTable.php",
+    "extracted": true
+  },
+  {
+    "id": "postals",
+    "title": "Postal Receive / Dispatch",
+    "group": "Front Office",
+    "fields": [
+      {
+        "key": "to_title",
+        "label": "To Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/postals/dispatches/add_modal.blade.php"
+      },
+      {
+        "key": "reference_no",
+        "label": "Reference No",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/postals/dispatches/add_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/postals/dispatches/add_modal.blade.php"
+      },
+      {
+        "key": "from_title",
+        "label": "From Title",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/postals/dispatches/add_modal.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Attachment",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/postals/dispatches/add_modal.blade.php"
+      },
+      {
+        "key": "address",
+        "label": "Address",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/postals/dispatches/add_modal.blade.php"
+      }
+    ],
+    "columns": ["To Title", "Reference No", "Date", "From Title"],
+    "source": "review/legacy/resources/views/postals",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "complaints",
+    "title": "Complaints",
+    "group": "Front Office",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/complaints/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/complaints/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Title", "User", "Description", "Status"],
+    "source": "review/legacy/resources/views/complaints",
+    "tableSource": "review/legacy/app/Livewire/ComplaintTable.php",
+    "extracted": true
+  },
+  {
+    "id": "front-settings",
+    "title": "Front Settings",
+    "group": "Front CMS",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/front_settings/front_services/add_modal.blade.php"
+      },
+      {
+        "key": "short_description",
+        "label": "Short Description",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/front_settings/front_services/add_modal.blade.php"
+      },
+      {
+        "key": "icon",
+        "label": "Icon",
+        "type": "file",
+        "required": true,
+        "source": "review/legacy/resources/views/front_settings/front_services/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Name"],
+    "source": "review/legacy/resources/views/front_settings",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "services",
+    "title": "Services",
+    "group": "Front CMS",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Service",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/services/fields.blade.php"
+      },
+      {
+        "key": "quantity",
+        "label": "Quantity",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/services/fields.blade.php"
+      },
+      {
+        "key": "rate",
+        "label": "Rate",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/services/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/services/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/services/fields.blade.php"
+      }
+    ],
+    "columns": ["Service", "Quantity", "Rate", "Status"],
+    "source": "review/legacy/resources/views/services",
+    "tableSource": "review/legacy/app/Livewire/ServiceTable.php",
+    "extracted": true
+  },
+  {
+    "id": "notice-boards",
+    "title": "Notice Boards",
+    "group": "Front CMS",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/notice_boards/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/notice_boards/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Title"],
+    "source": "review/legacy/resources/views/notice_boards",
+    "tableSource": "review/legacy/app/Livewire/NoticeBoardTable.php",
+    "extracted": true
+  },
+  {
+    "id": "testimonials",
+    "title": "Testimonials",
+    "group": "Front CMS",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/testimonials/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/testimonials/add_modal.blade.php"
+      },
+      {
+        "key": "profile",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/testimonials/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Profile", "Name", "Description"],
+    "source": "review/legacy/resources/views/testimonials",
+    "tableSource": "review/legacy/app/Livewire/TestimonialTable.php",
+    "extracted": true
+  },
+  {
+    "id": "charge-categories",
+    "title": "Charge Categories",
+    "group": "Hospital Charges",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Charge Category",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/charge_categories/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/charge_categories/create_modal.blade.php"
+      },
+      {
+        "key": "charge_type",
+        "label": "Charge Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/charge_categories/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Charge Category", "Charge Type"],
+    "source": "review/legacy/resources/views/charge_categories",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "charges",
+    "title": "Charges",
+    "group": "Hospital Charges",
+    "fields": [
+      {
+        "key": "charge_type",
+        "label": "Charge Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/charges/create_modal.blade.php"
+      },
+      {
+        "key": "charge_category_id",
+        "label": "Charge Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/charges/create_modal.blade.php"
+      },
+      {
+        "key": "code",
+        "label": "Code",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/charges/create_modal.blade.php"
+      },
+      {
+        "key": "standard_charge",
+        "label": "Standard Charge",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/charges/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/charges/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Code", "Charge Category", "Charge Type", "Standard Charge"],
+    "source": "review/legacy/resources/views/charges",
+    "tableSource": "review/legacy/app/Livewire/ChargeTable.php",
+    "extracted": true
+  },
+  {
+    "id": "doctor-opd-charges",
+    "title": "Doctor OPD Charges",
+    "group": "Hospital Charges",
+    "fields": [
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/doctor_opd_charges/create_modal.blade.php"
+      },
+      {
+        "key": "standard_charge",
+        "label": "Standard Charge",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/doctor_opd_charges/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Doctor", "Standard Charge"],
+    "source": "review/legacy/resources/views/doctor_opd_charges",
+    "tableSource": "review/legacy/app/Livewire/DoctorOPDChargeTable.php",
+    "extracted": true
+  },
+  {
+    "id": "item-categories",
+    "title": "Item Categories",
+    "group": "Inventory",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/item_categories/modal.blade.php"
+      }
+    ],
+    "columns": ["Name"],
+    "source": "review/legacy/resources/views/item_categories",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "items",
+    "title": "Items",
+    "group": "Inventory",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/items/fields.blade.php"
+      },
+      {
+        "key": "item_category_id",
+        "label": "Item Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/items/fields.blade.php"
+      },
+      {
+        "key": "unit",
+        "label": "Unit",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/items/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/items/fields.blade.php"
+      }
+    ],
+    "columns": ["Name", "Item Category", "Unit", "Available Quantity"],
+    "source": "review/legacy/resources/views/items",
+    "tableSource": "review/legacy/app/Livewire/ItemTable.php",
+    "extracted": true
+  },
+  {
+    "id": "item-stocks",
+    "title": "Item Stocks",
+    "group": "Inventory",
+    "fields": [
+      {
+        "key": "item_category_id",
+        "label": "Item Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      },
+      {
+        "key": "item_id",
+        "label": "Item",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      },
+      {
+        "key": "supplier_name",
+        "label": "Supplier Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      },
+      {
+        "key": "store_name",
+        "label": "Store Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      },
+      {
+        "key": "quantity",
+        "label": "Quantity",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      },
+      {
+        "key": "purchase_price",
+        "label": "Purchase Price",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Attachment",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/item_stocks/fields.blade.php"
+      }
+    ],
+    "columns": ["Item", "Item Category", "Quantity", "Purchase Price"],
+    "source": "review/legacy/resources/views/item_stocks",
+    "tableSource": "review/legacy/app/Livewire/ItemStockTable.php",
+    "extracted": true
+  },
+  {
+    "id": "issued-items",
+    "title": "Issued Items",
+    "group": "Inventory",
+    "fields": [
+      {
+        "key": "department_id",
+        "label": "Department ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "user_id",
+        "label": "User ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "issued_by",
+        "label": "Issued By",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "issued_date",
+        "label": "Issued Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "return_date",
+        "label": "Return Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "item_category_id",
+        "label": "Item Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "item_id",
+        "label": "Item",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "quantity",
+        "label": "Quantity",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/issued_items/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Item",
+      "Item Category",
+      "Issued Date",
+      "Return Date",
+      "Quantity",
+      "Status"
+    ],
+    "source": "review/legacy/resources/views/issued_items",
+    "tableSource": "review/legacy/app/Livewire/IssuedItemTable.php",
+    "extracted": true
+  },
+  {
+    "id": "live-consultations",
+    "title": "Live Consultations",
+    "group": "Live Consultations",
+    "fields": [
+      {
+        "key": "consultation_title",
+        "label": "Consultation Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "consultation_date",
+        "label": "Consultation Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "platform_type",
+        "label": "Platform Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "consultation_duration_minutes",
+        "label": "Consultation Duration Minutes",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "patient_id",
+        "label": "Patient Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "type",
+        "label": "Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "type_number",
+        "label": "Type Number",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "host_video",
+        "label": "Host Video",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "participant_video",
+        "label": "Client Video",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/live_consultations/add_modal.blade.php"
+      }
+    ],
+    "columns": [
+      "Consultation Title",
+      "Date",
+      "Created By",
+      "Created For",
+      "Patient",
+      "Status",
+      "Password"
+    ],
+    "source": "review/legacy/resources/views/live_consultations",
+    "tableSource": "review/legacy/app/Livewire/LiveConsultationTable.php",
+    "extracted": true
+  },
+  {
+    "id": "live-consultations-live-meetings",
+    "title": "Live Meetings",
+    "group": "Live Consultations",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/live_consultations/live_meetings",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "goole-meet-consultation",
+    "title": "Google Meet Consultations",
+    "group": "Live Consultations",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/goole_meet_consultation",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "categories",
+    "title": "Medicine Categories",
+    "group": "Medicine",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Category",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/categories/fields.blade.php"
+      },
+      {
+        "key": "active",
+        "label": "Status",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/categories/modal.blade.php"
+      }
+    ],
+    "columns": ["Category", "Status"],
+    "source": "review/legacy/resources/views/categories",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "brands",
+    "title": "Medicine Brands",
+    "group": "Medicine",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Brand",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/brands/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/brands/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": false,
+        "source": "review/legacy/resources/views/brands/fields.blade.php"
+      }
+    ],
+    "columns": ["Brand", "Phone", "Email"],
+    "source": "review/legacy/resources/views/brands",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "medicines",
+    "title": "Medicines",
+    "group": "Medicine",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Medicine",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      },
+      {
+        "key": "category_id",
+        "label": "Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      },
+      {
+        "key": "brand_id",
+        "label": "Brand",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      },
+      {
+        "key": "salt_composition",
+        "label": "Salt Composition",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      },
+      {
+        "key": "buying_price",
+        "label": "Buying Price",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      },
+      {
+        "key": "selling_price",
+        "label": "Selling Price",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      },
+      {
+        "key": "side_effects",
+        "label": "Side Effects",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/medicines/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Medicine",
+      "Brand",
+      "Available Quantity",
+      "Selling Price",
+      "Buying Price"
+    ],
+    "source": "review/legacy/resources/views/medicines",
+    "tableSource": "review/legacy/app/Livewire/MedicineTable.php",
+    "extracted": true
+  },
+  {
+    "id": "purchase-medicines",
+    "title": "Medicine Purchases",
+    "group": "Medicine",
+    "fields": [
+      {
+        "key": "note",
+        "label": "Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/purchase-medicines/fields.blade.php"
+      },
+      {
+        "key": "total",
+        "label": "Total",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/purchase-medicines/fields.blade.php"
+      },
+      {
+        "key": "discount",
+        "label": "Discount",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/purchase-medicines/fields.blade.php"
+      },
+      {
+        "key": "tax",
+        "label": "Tax",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/purchase-medicines/fields.blade.php"
+      },
+      {
+        "key": "net_amount",
+        "label": "Net Amount",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/purchase-medicines/fields.blade.php"
+      },
+      {
+        "key": "payment_type",
+        "label": "Payment Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/purchase-medicines/fields.blade.php"
+      },
+      {
+        "key": "payment_note",
+        "label": "Payment Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/purchase-medicines/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Purchase Number",
+      "Total",
+      "Tax",
+      "Payment Status",
+      "Net Amount",
+      "Payment Mode"
+    ],
+    "source": "review/legacy/resources/views/purchase-medicines",
+    "tableSource": "review/legacy/app/Livewire/PurchaseMedicineTable.php",
+    "extracted": true
+  },
+  {
+    "id": "used-medicine",
+    "title": "Used Medicines",
+    "group": "Medicine",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Medicines", "Used Quantity", "Used At", "Date"],
+    "source": "review/legacy/resources/views/used-medicine",
+    "tableSource": "review/legacy/app/Livewire/UsedMedicineTable.php",
+    "extracted": false
+  },
+  {
+    "id": "medicine-bills",
+    "title": "Medicine Bills",
+    "group": "Medicine",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "bill_date",
+        "label": "Bill Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "note",
+        "label": "Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "total",
+        "label": "Total",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "discount",
+        "label": "Discount",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "tax",
+        "label": "Tax",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "net_amount",
+        "label": "Net Amount",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "payment_type",
+        "label": "Payment Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      },
+      {
+        "key": "payment_note",
+        "label": "Payment Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/medicine-bills/medicine-table.blade.php"
+      }
+    ],
+    "columns": [
+      "Bill Number",
+      "Date",
+      "Patient",
+      "Doctor",
+      "Payment Mode",
+      "Net Amount",
+      "Payment Status"
+    ],
+    "source": "review/legacy/resources/views/medicine-bills",
+    "tableSource": "review/legacy/app/Livewire/MedicineBillTable.php",
+    "extracted": true
+  },
+  {
+    "id": "patients",
+    "title": "Patients",
+    "group": "Patients",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": true,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "facebook_url",
+        "label": "Facebook URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "twitter_url",
+        "label": "Twitter URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "instagram_url",
+        "label": "Instagram URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      },
+      {
+        "key": "linkedIn_url",
+        "label": "Linked In URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patients/fields.blade.php"
+      }
+    ],
+    "columns": ["Patients", "Phone", "Blood Group", "Status"],
+    "source": "review/legacy/resources/views/patients",
+    "tableSource": "review/legacy/app/Livewire/PatientTable.php",
+    "extracted": true
+  },
+  {
+    "id": "patient-cases",
+    "title": "Patient Cases",
+    "group": "Patients",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_cases/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_cases/fields.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Case Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_cases/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_cases/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_cases/fields.blade.php"
+      },
+      {
+        "key": "fee",
+        "label": "Fee",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_cases/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_cases/fields.blade.php"
+      }
+    ],
+    "columns": ["Case ID", "Doctor", "Case Date", "Fee", "Status"],
+    "source": "review/legacy/resources/views/patient_cases",
+    "tableSource": "review/legacy/app/Livewire/PatientCaseTable.php",
+    "extracted": true
+  },
+  {
+    "id": "case-handlers",
+    "title": "Case Handlers",
+    "group": "Patients",
+    "fields": [
+      {
+        "key": "first_name",
+        "label": "First Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "last_name",
+        "label": "Last Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "email",
+        "label": "Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "designation",
+        "label": "Designation",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "phone",
+        "label": "Phone",
+        "type": "tel",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "gender",
+        "label": "Gender",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "qualification",
+        "label": "Qualification",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "dob",
+        "label": "Date of Birth",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "blood_group",
+        "label": "Blood Group",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "password",
+        "label": "Password",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "password_confirmation",
+        "label": "Password Confirmation",
+        "type": "password",
+        "required": true,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Profile",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "address1",
+        "label": "Address 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "address2",
+        "label": "Address 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "city",
+        "label": "City",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      },
+      {
+        "key": "zip",
+        "label": "Zip",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/case_handlers/fields.blade.php"
+      }
+    ],
+    "columns": ["Users", "Phone", "Qualification", "Birth Date", "Status"],
+    "source": "review/legacy/resources/views/case_handlers",
+    "tableSource": "review/legacy/app/Livewire/CaseHandlerTable.php",
+    "extracted": true
+  },
+  {
+    "id": "patient-admissions",
+    "title": "Patient Admissions",
+    "group": "Patients",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "admission_date",
+        "label": "Admission Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "discharge_date",
+        "label": "Discharge Date",
+        "type": "date",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "package_id",
+        "label": "Package",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "insurance_id",
+        "label": "Insurance",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "bed_id",
+        "label": "Bed",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "policy_no",
+        "label": "Policy No",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "agent_name",
+        "label": "Agent Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "guardian_name",
+        "label": "Guardian Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "guardian_relation",
+        "label": "Guardian Relation",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "guardian_contact",
+        "label": "Guardian Contact",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "guardian_address",
+        "label": "Guardian Address",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": false,
+        "source": "review/legacy/resources/views/patient_admissions/fields.blade.php"
+      }
+    ],
+    "columns": ["Package", "Insurance", "Policy No", "Status"],
+    "source": "review/legacy/resources/views/patient_admissions",
+    "tableSource": "review/legacy/app/Livewire/PatientAdmissionTable.php",
+    "extracted": true
+  },
+  {
+    "id": "pathology-categories",
+    "title": "Pathology Categories",
+    "group": "Pathology",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_categories/modal.blade.php"
+      }
+    ],
+    "columns": ["Name"],
+    "source": "review/legacy/resources/views/pathology_categories",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "pathology-units",
+    "title": "Pathology Units",
+    "group": "Pathology",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_units/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Name"],
+    "source": "review/legacy/resources/views/pathology_units",
+    "tableSource": "review/legacy/app/Livewire/PathologyUnitTable.php",
+    "extracted": true
+  },
+  {
+    "id": "pathology-parameter",
+    "title": "Pathology Parameters",
+    "group": "Pathology",
+    "fields": [
+      {
+        "key": "parameter_name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_parameter/modal.blade.php"
+      },
+      {
+        "key": "reference_range",
+        "label": "Reference Range",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_parameter/modal.blade.php"
+      },
+      {
+        "key": "unit_id",
+        "label": "Unit",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_parameter/modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/pathology_parameter/modal.blade.php"
+      }
+    ],
+    "columns": ["Name", "Reference Range", "Unit"],
+    "source": "review/legacy/resources/views/pathology_parameter",
+    "tableSource": "review/legacy/app/Livewire/PathologyParameterTable.php",
+    "extracted": true
+  },
+  {
+    "id": "pathology-tests",
+    "title": "Pathology Tests",
+    "group": "Pathology",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "test_name",
+        "label": "Test Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "short_name",
+        "label": "Short Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "test_type",
+        "label": "Test Type",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "category_id",
+        "label": "Category Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "unit",
+        "label": "Unit",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "subcategory",
+        "label": "Subcategory",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "method",
+        "label": "Method",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "report_days",
+        "label": "Report Days",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "charge_category_id",
+        "label": "Charge Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      },
+      {
+        "key": "standard_charge",
+        "label": "Standard Charge",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/pathology_tests/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Test Name",
+      "Patient",
+      "Short Name",
+      "Test Type",
+      "Category Name",
+      "Charge Category"
+    ],
+    "source": "review/legacy/resources/views/pathology_tests",
+    "tableSource": "review/legacy/app/Livewire/PathologyTestsTable.php",
+    "extracted": true
+  },
+  {
+    "id": "birth-reports",
+    "title": "Birth Reports",
+    "group": "Reports",
+    "fields": [
+      {
+        "key": "case_id",
+        "label": "Case",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/birth_reports/create_modal.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/birth_reports/create_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/birth_reports/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/birth_reports/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Case ID", "Patient", "Doctor", "Date"],
+    "source": "review/legacy/resources/views/birth_reports",
+    "tableSource": "review/legacy/app/Livewire/BirthReportTable.php",
+    "extracted": true
+  },
+  {
+    "id": "death-reports",
+    "title": "Death Reports",
+    "group": "Reports",
+    "fields": [
+      {
+        "key": "case_id",
+        "label": "Case",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/death_reports/create_modal.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/death_reports/create_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/death_reports/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/death_reports/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Case ID", "Patient", "Doctor", "Date"],
+    "source": "review/legacy/resources/views/death_reports",
+    "tableSource": "review/legacy/app/Livewire/DeathReportTable.php",
+    "extracted": true
+  },
+  {
+    "id": "investigation-reports",
+    "title": "Investigation Reports",
+    "group": "Reports",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/investigation_reports/fields.blade.php"
+      },
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/investigation_reports/fields.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/investigation_reports/fields.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/investigation_reports/fields.blade.php"
+      },
+      {
+        "key": "image",
+        "label": "Attachment",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/investigation_reports/fields.blade.php"
+      },
+      {
+        "key": "status",
+        "label": "Status",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/investigation_reports/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/investigation_reports/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "User Details",
+      "Users",
+      "Date",
+      "Title",
+      "Status",
+      "Attachment"
+    ],
+    "source": "review/legacy/resources/views/investigation_reports",
+    "tableSource": "review/legacy/app/Livewire/InvestigationReportTable.php",
+    "extracted": true
+  },
+  {
+    "id": "operation-reports",
+    "title": "Operation Reports",
+    "group": "Reports",
+    "fields": [
+      {
+        "key": "case_id",
+        "label": "Case",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/operation_reports/create_modal.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/operation_reports/create_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/operation_reports/create_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/operation_reports/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Case ID", "Patient", "Doctor", "Date"],
+    "source": "review/legacy/resources/views/operation_reports",
+    "tableSource": "review/legacy/app/Livewire/OperationReportTable.php",
+    "extracted": true
+  },
+  {
+    "id": "radiology-categories",
+    "title": "Radiology Categories",
+    "group": "Radiology",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_categories/modal.blade.php"
+      }
+    ],
+    "columns": ["Name"],
+    "source": "review/legacy/resources/views/radiology_categories",
+    "tableSource": "review/legacy/app/Livewire/RadiologyCategoriesTable.php",
+    "extracted": true
+  },
+  {
+    "id": "radiology-tests",
+    "title": "Radiology Tests",
+    "group": "Radiology",
+    "fields": [
+      {
+        "key": "test_name",
+        "label": "Test Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "short_name",
+        "label": "Short Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "test_type",
+        "label": "Test Type",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "category_id",
+        "label": "Category Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "subcategory",
+        "label": "Subcategory",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "report_days",
+        "label": "Report Days",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "charge_category_id",
+        "label": "Charge Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "charge_id",
+        "label": "Charge",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      },
+      {
+        "key": "standard_charge",
+        "label": "Standard Charge",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/radiology_tests/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Test Name",
+      "Short Name",
+      "Test Type",
+      "Category Name",
+      "Charge Category"
+    ],
+    "source": "review/legacy/resources/views/radiology_tests",
+    "tableSource": "review/legacy/app/Livewire/RadiologyTestTable.php",
+    "extracted": true
+  },
+  {
+    "id": "insurances",
+    "title": "Insurances",
+    "group": "Services",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Insurance",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      },
+      {
+        "key": "service_tax",
+        "label": "Service Tax",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      },
+      {
+        "key": "discount",
+        "label": "Discount",
+        "type": "number",
+        "required": false,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      },
+      {
+        "key": "insurance_no",
+        "label": "Insurance No",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      },
+      {
+        "key": "insurance_code",
+        "label": "Insurance Code",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      },
+      {
+        "key": "hospital_rate",
+        "label": "Hospital Rate",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      },
+      {
+        "key": "remark",
+        "label": "Remark",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      },
+      {
+        "key": "disease_name[]",
+        "label": "Status",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/insurances/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Insurance",
+      "Service Tax",
+      "Insurance No",
+      "Insurance Code",
+      "Hospital Rate",
+      "Total",
+      "Status"
+    ],
+    "source": "review/legacy/resources/views/insurances",
+    "tableSource": "review/legacy/app/Livewire/InsuranceTable.php",
+    "extracted": true
+  },
+  {
+    "id": "packages",
+    "title": "Packages",
+    "group": "Services",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Package",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/packages/fields.blade.php"
+      },
+      {
+        "key": "discount",
+        "label": "Discount",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/packages/fields.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/packages/fields.blade.php"
+      }
+    ],
+    "columns": ["Package", "Discount", "Total Amount"],
+    "source": "review/legacy/resources/views/packages",
+    "tableSource": "review/legacy/app/Livewire/PackageTable.php",
+    "extracted": true
+  },
+  {
+    "id": "ambulances",
+    "title": "Ambulances",
+    "group": "Services",
+    "fields": [
+      {
+        "key": "vehicle_number",
+        "label": "Vehicle Number",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "vehicle_model",
+        "label": "Vehicle Model",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "year_made",
+        "label": "Year Made",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "driver_name",
+        "label": "Driver Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "driver_contact",
+        "label": "Driver Contact",
+        "type": "tel",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "driver_license",
+        "label": "Driver License",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "note",
+        "label": "Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "vehicle_type",
+        "label": "Vehicle Type",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      },
+      {
+        "key": "is_available",
+        "label": "Is Available",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ambulances/fields.blade.php"
+      }
+    ],
+    "columns": [
+      "Vehicle Number",
+      "Vehicle Model",
+      "Year Made",
+      "Driver Name",
+      "Driver License",
+      "Driver Contact",
+      "Vehicle Type",
+      "Is Available"
+    ],
+    "source": "review/legacy/resources/views/ambulances",
+    "tableSource": "review/legacy/app/Livewire/AmbulanceTable.php",
+    "extracted": true
+  },
+  {
+    "id": "ambulance-calls",
+    "title": "Ambulance Calls",
+    "group": "Services",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulance_calls/fields.blade.php"
+      },
+      {
+        "key": "ambulance_id",
+        "label": "Vehicle Model",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulance_calls/fields.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulance_calls/fields.blade.php"
+      },
+      {
+        "key": "driver_name",
+        "label": "Driver Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulance_calls/fields.blade.php"
+      },
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ambulance_calls/fields.blade.php"
+      }
+    ],
+    "columns": ["Patient", "Vehicle Model", "Driver Name", "Date", "Amount"],
+    "source": "review/legacy/resources/views/ambulance_calls",
+    "tableSource": "review/legacy/app/Livewire/AmbulanceCallTable.php",
+    "extracted": true
+  },
+  {
+    "id": "sms",
+    "title": "SMS",
+    "group": "SMS / Mail",
+    "fields": [
+      {
+        "key": "phone",
+        "label": "Phone Number",
+        "type": "tel",
+        "required": true,
+        "source": "review/legacy/resources/views/sms/create_modal.blade.php"
+      },
+      {
+        "key": "role",
+        "label": "Role",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/sms/create_modal.blade.php"
+      },
+      {
+        "key": "number",
+        "label": "Send SMS By Number Directly",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/sms/create_modal.blade.php"
+      },
+      {
+        "key": "send_to[]",
+        "label": "Send To",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/sms/create_modal.blade.php"
+      },
+      {
+        "key": "message",
+        "label": "Message",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/sms/create_modal.blade.php"
+      }
+    ],
+    "columns": ["Send To", "Phone", "Region Code", "Send By"],
+    "source": "review/legacy/resources/views/sms",
+    "tableSource": "review/legacy/app/Livewire/SmsTable.php",
+    "extracted": true
+  },
+  {
+    "id": "emails",
+    "title": "Emails",
+    "group": "SMS / Mail",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/emails",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "email-template",
+    "title": "Email Template",
+    "group": "SMS / Mail",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Email Subject", "Actions"],
+    "source": "review/legacy/resources/views/email-template",
+    "tableSource": "review/legacy/app/Livewire/EmailTemplateTable.php",
+    "extracted": false
+  },
+  {
+    "id": "settings",
+    "title": "General Settings",
+    "group": "Settings",
+    "fields": [
+      {
+        "key": "app_name",
+        "label": "App Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "company_name",
+        "label": "Company Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "hospital_email",
+        "label": "Hospital Email",
+        "type": "email",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "hospital_phone",
+        "label": "Hospital Phone",
+        "type": "tel",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "hospital_from_day",
+        "label": "Hospital From Day",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "hospital_from_time",
+        "label": "Hospital From Time",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "hospital_address",
+        "label": "Address",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "current_currency",
+        "label": "Currency",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "app_logo",
+        "label": "App Logo",
+        "type": "file",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/fields.blade.php"
+      },
+      {
+        "key": "country_phone",
+        "label": "Country Code",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "default_lang",
+        "label": "Default Language",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "about_us",
+        "label": "About Us",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "favicon",
+        "label": "Favicon",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "facebook_url",
+        "label": "Facebook URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "twitter_url",
+        "label": "Twitter URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "instagram_url",
+        "label": "Instagram URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "linkedIn_url",
+        "label": "Linked In URL",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "open_ai_key",
+        "label": "Open Ai Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "model_name",
+        "label": "Model Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      },
+      {
+        "key": "custom_serial_prefix",
+        "label": "Custom Serial Prefix",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/settings/general.blade.php"
+      }
+    ],
+    "columns": [
+      "App Name",
+      "Company Name",
+      "Hospital Email",
+      "Hospital Phone",
+      "Hospital From Day"
+    ],
+    "source": "review/legacy/resources/views/settings",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "hospital-schedule",
+    "title": "Hospital Schedule",
+    "group": "Settings",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/hospital_schedule",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "currency-settings",
+    "title": "Currencies",
+    "group": "Settings",
+    "fields": [
+      {
+        "key": "currency_name",
+        "label": "Currency Name",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/currency_settings/fields.blade.php"
+      },
+      {
+        "key": "currency_icon",
+        "label": "Currency Icon",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/currency_settings/fields.blade.php"
+      },
+      {
+        "key": "currency_code",
+        "label": "Currency Code",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/currency_settings/fields.blade.php"
+      }
+    ],
+    "columns": ["Currency Name", "Currency Icon", "Currency Code"],
+    "source": "review/legacy/resources/views/currency_settings",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "operation-categories",
+    "title": "Operation Categories",
+    "group": "Settings",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/operation_categories/modal.blade.php"
+      }
+    ],
+    "columns": ["Name"],
+    "source": "review/legacy/resources/views/operation_categories",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "operations",
+    "title": "Operations",
+    "group": "Settings",
+    "fields": [
+      {
+        "key": "operation_category_id",
+        "label": "Operation Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/operations/add_modal.blade.php"
+      },
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/operations/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Name", "Operation Category"],
+    "source": "review/legacy/resources/views/operations",
+    "tableSource": "review/legacy/app/Livewire/OperationTable.php",
+    "extracted": true
+  },
+  {
+    "id": "payment-gateway",
+    "title": "Payment Gateway",
+    "group": "Settings",
+    "fields": [
+      {
+        "key": "stripe_key",
+        "label": "Stripe Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "stripe_secret",
+        "label": "Stripe Secret",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "paypal_client_id",
+        "label": "Paypal Client ID",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "paypal_secret",
+        "label": "Paypal Secret",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "paypal_mode",
+        "label": "Paypal Mode",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "razorpay_key",
+        "label": "Razorpay Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "razorpay_secret",
+        "label": "Razorpay Secret",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "flutterwave_public_key",
+        "label": "Flutterwave Public Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "flutterwave_secret_key",
+        "label": "Flutterwave Secret Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "phonepe_merchant_id",
+        "label": "Phonepe Merchant ID",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "phonepe_merchant_user_id",
+        "label": "Phonepe Merchant User ID",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "phonepe_env",
+        "label": "Phonepe Env",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "phonepe_salt_key",
+        "label": "Phonepe Salt Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "phonepe_salt_index",
+        "label": "Phonepe Salt Index",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "phonepe_merchant_transaction_id",
+        "label": "Phonepe Merchant Transaction ID",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "paystack_public_key",
+        "label": "Paystack Public Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      },
+      {
+        "key": "paystack_secret_key",
+        "label": "Paystack Secret Key",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/payment_gateway/create.blade.php"
+      }
+    ],
+    "columns": [
+      "Stripe Key",
+      "Stripe Secret",
+      "Paypal Client ID",
+      "Paypal Secret",
+      "Paypal Mode"
+    ],
+    "source": "review/legacy/resources/views/payment_gateway",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "add-custom-fields",
+    "title": "Custom Fields",
+    "group": "Settings",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Module Name", "Field Type", "Field Name", "Value"],
+    "source": "review/legacy/resources/views/add_custom_fields",
+    "tableSource": "review/legacy/app/Livewire/AddCustomFieldTable.php",
+    "extracted": false
+  },
+  {
+    "id": "vaccinations",
+    "title": "Vaccinations",
+    "group": "Vaccinations",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/vaccinations/add_modal.blade.php"
+      },
+      {
+        "key": "manufactured_by",
+        "label": "Manufactured By",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/vaccinations/add_modal.blade.php"
+      },
+      {
+        "key": "brand",
+        "label": "Brand",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/vaccinations/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Name", "Manufactured By", "Brand"],
+    "source": "review/legacy/resources/views/vaccinations",
+    "tableSource": "review/legacy/app/Livewire/VaccinationTable.php",
+    "extracted": true
+  },
+  {
+    "id": "vaccinated-patients",
+    "title": "Vaccinated Patients",
+    "group": "Vaccinations",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/vaccinated_patients/add_modal.blade.php"
+      },
+      {
+        "key": "vaccination_id",
+        "label": "Vaccine",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/vaccinated_patients/add_modal.blade.php"
+      },
+      {
+        "key": "vaccination_serial_number",
+        "label": "Serial No",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/vaccinated_patients/add_modal.blade.php"
+      },
+      {
+        "key": "dose_number",
+        "label": "Does No",
+        "type": "number",
+        "required": true,
+        "source": "review/legacy/resources/views/vaccinated_patients/add_modal.blade.php"
+      },
+      {
+        "key": "dose_given_date",
+        "label": "Dose Given Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/vaccinated_patients/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/vaccinated_patients/add_modal.blade.php"
+      }
+    ],
+    "columns": [
+      "Patient",
+      "Vaccination",
+      "Serial No",
+      "Does No",
+      "Dose Given Date"
+    ],
+    "source": "review/legacy/resources/views/vaccinated_patients",
+    "tableSource": "review/legacy/app/Livewire/VaccinatedPatientsTable.php",
+    "extracted": true
+  },
+  {
+    "id": "odontogram",
+    "title": "Odontogram",
+    "group": "Odontogram",
+    "fields": [
+      {
+        "key": "patient_id",
+        "label": "Patient",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/odontogram/modal.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/odontogram/modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/odontogram/modal.blade.php"
+      }
+    ],
+    "columns": ["Patient", "Doctor"],
+    "source": "review/legacy/resources/views/odontogram",
+    "tableSource": "review/legacy/app/Livewire/OdontogramTable.php",
+    "extracted": true
+  },
+  {
+    "id": "add-on",
+    "title": "Add On",
+    "group": "Add-ons",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/add-on",
+    "tableSource": "review/legacy/app/Livewire/AddOnTable.php",
+    "extracted": false
+  },
+  {
+    "id": "ipd-diagnoses",
+    "title": "IPD Diagnoses",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "report_type",
+        "label": "Report Type",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_diagnoses/add_modal.blade.php"
+      },
+      {
+        "key": "report_date",
+        "label": "Report Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_diagnoses/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_diagnoses/add_modal.blade.php"
+      },
+      {
+        "key": "document",
+        "label": "Document",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_diagnoses/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Report Type", "Report Date"],
+    "source": "review/legacy/resources/views/ipd_diagnoses",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "ipd-consultant-registers",
+    "title": "IPD Consultant Registers",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Doctor ID", "Applied Date", "Instruction Date"],
+    "source": "review/legacy/resources/views/ipd_consultant_registers",
+    "tableSource": "review/legacy/app/Livewire/IpdConsultantRegisterTable.php",
+    "extracted": false
+  },
+  {
+    "id": "ipd-operation",
+    "title": "IPD Operation",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "operation_date",
+        "label": "Operation Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "operation_category_id",
+        "label": "Operation Category",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "operation_id",
+        "label": "Operation Name",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "doctor_id",
+        "label": "IPD Consultant Doctor",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "assistant_consultant_1",
+        "label": "Assistant Consultant 1",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "assistant_consultant_2",
+        "label": "Assistant Consultant 2",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "anesthetist",
+        "label": "Anesthetist",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "anesthesia_type",
+        "label": "Anesthesia Type",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "ot_technician",
+        "label": "Ot Technician",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "ot_assistant",
+        "label": "Ot Assistant",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "remark",
+        "label": "Remarks",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      },
+      {
+        "key": "result",
+        "label": "Result",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_operation/add_modal.blade.php"
+      }
+    ],
+    "columns": [
+      "Reference ID",
+      "Operation Date",
+      "Operation Name",
+      "Operation Category Name",
+      "Ot Technician"
+    ],
+    "source": "review/legacy/resources/views/ipd_operation",
+    "tableSource": "review/legacy/app/Livewire/IpdOperationTable.php",
+    "extracted": true
+  },
+  {
+    "id": "ipd-charges",
+    "title": "IPD Charges",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_charges/add_modal.blade.php"
+      },
+      {
+        "key": "charge_type_id",
+        "label": "Charge Type ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_charges/add_modal.blade.php"
+      },
+      {
+        "key": "charge_category_id",
+        "label": "Charge Category ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_charges/add_modal.blade.php"
+      },
+      {
+        "key": "charge_id",
+        "label": "Charge ID",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_charges/add_modal.blade.php"
+      },
+      {
+        "key": "standard_charge",
+        "label": "Standard Charge",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_charges/add_modal.blade.php"
+      },
+      {
+        "key": "applied_charge",
+        "label": "Applied Charge",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_charges/add_modal.blade.php"
+      }
+    ],
+    "columns": [
+      "Date",
+      "Charge Type ID",
+      "Charge Category ID",
+      "Charge ID",
+      "Standard Charge",
+      "Applied Charge"
+    ],
+    "source": "review/legacy/resources/views/ipd_charges",
+    "tableSource": "review/legacy/app/Livewire/IpdChargeTable.php",
+    "extracted": true
+  },
+  {
+    "id": "ipd-prescriptions",
+    "title": "IPD Prescriptions",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "header_note",
+        "label": "Header Note",
+        "type": "textarea",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_prescriptions/add_modal.blade.php"
+      },
+      {
+        "key": "footer_note",
+        "label": "Footer Note",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_prescriptions/add_modal.blade.php"
+      }
+    ],
+    "columns": ["IPD No", "Patients", "Doctors", "Created On"],
+    "source": "review/legacy/resources/views/ipd_prescriptions",
+    "tableSource": "review/legacy/app/Livewire/IpdPrescriptionTable.php",
+    "extracted": true
+  },
+  {
+    "id": "ipd-timelines",
+    "title": "IPD Timelines",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "visible_to_person",
+        "label": "Visible To Person",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "document",
+        "label": "Document",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_timelines/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Title", "Date", "Visible To Person"],
+    "source": "review/legacy/resources/views/ipd_timelines",
+    "tableSource": null,
+    "extracted": true
+  },
+  {
+    "id": "ipd-payments",
+    "title": "IPD Payments",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "amount",
+        "label": "Amount",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_payments/add_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_payments/add_modal.blade.php"
+      },
+      {
+        "key": "payment_mode",
+        "label": "Payment Mode",
+        "type": "select",
+        "required": true,
+        "source": "review/legacy/resources/views/ipd_payments/add_modal.blade.php"
+      },
+      {
+        "key": "document",
+        "label": "Document",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_payments/add_modal.blade.php"
+      },
+      {
+        "key": "notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/ipd_payments/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Date", "Amount", "Payment Mode", "Document", "Note"],
+    "source": "review/legacy/resources/views/ipd_payments",
+    "tableSource": "review/legacy/app/Livewire/IpdPaymentTable.php",
+    "extracted": true
+  },
+  {
+    "id": "ipd-bills",
+    "title": "IPD Bills",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["Name", "Description"],
+    "source": "review/legacy/resources/views/ipd_bills",
+    "tableSource": null,
+    "extracted": false
+  },
+  {
+    "id": "opd-diagnoses",
+    "title": "OPD Diagnoses",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "report_type",
+        "label": "Report Type",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_diagnoses/add_modal.blade.php"
+      },
+      {
+        "key": "report_date",
+        "label": "Report Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_diagnoses/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_diagnoses/add_modal.blade.php"
+      },
+      {
+        "key": "document",
+        "label": "Document",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_diagnoses/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Report Type", "Report Date", "Document", "Description"],
+    "source": "review/legacy/resources/views/opd_diagnoses",
+    "tableSource": "review/legacy/app/Livewire/OpdDiagnosesTable.php",
+    "extracted": true
+  },
+  {
+    "id": "opd-prescriptions",
+    "title": "OPD Prescriptions",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "required": true
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false
+      }
+    ],
+    "columns": ["OPD Number", "Patients", "Doctors", "Created On"],
+    "source": "review/legacy/resources/views/opd_prescriptions",
+    "tableSource": "review/legacy/app/Livewire/OpdPrescriptionTable.php",
+    "extracted": false
+  },
+  {
+    "id": "opd-timelines",
+    "title": "OPD Timelines",
+    "group": "Clinical Records",
+    "fields": [
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "date",
+        "label": "Date",
+        "type": "date",
+        "required": true,
+        "source": "review/legacy/resources/views/opd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "visible_to_person",
+        "label": "Visible To Person",
+        "type": "text",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_timelines/add_modal.blade.php"
+      },
+      {
+        "key": "document",
+        "label": "Document",
+        "type": "file",
+        "required": false,
+        "source": "review/legacy/resources/views/opd_timelines/add_modal.blade.php"
+      }
+    ],
+    "columns": ["Title", "Date", "Visible To Person"],
+    "source": "review/legacy/resources/views/opd_timelines",
+    "tableSource": null,
+    "extracted": true
+  }
+]

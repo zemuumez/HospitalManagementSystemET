@@ -1,0 +1,147 @@
+{
+  "Home": [
+    {
+      "key": "home_page_experience",
+      "label": "Home Page Experience",
+      "type": "number"
+    },
+    {
+      "key": "home_page_title",
+      "label": "Home Page Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_description",
+      "label": "Home Page Description",
+      "type": "textarea"
+    },
+    {
+      "key": "home_page_box_title",
+      "label": "Home Page Box Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_box_description",
+      "label": "Home Page Box Description",
+      "type": "textarea"
+    },
+    {
+      "key": "home_page_certified_doctor_text",
+      "label": "Home Page Certified Doctor Text",
+      "type": "text"
+    },
+    {
+      "key": "home_page_certified_doctor_title",
+      "label": "Home Page Certified Doctor Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_certified_doctor_description",
+      "label": "Home Page Certified Doctor Description",
+      "type": "textarea"
+    },
+    {
+      "key": "home_page_certified_box_title",
+      "label": "Home Page Certified Box Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_certified_box_description",
+      "label": "Home Page Certified Box Description",
+      "type": "textarea"
+    },
+    {
+      "key": "home_page_step_1_title",
+      "label": "Home Page Step 1 Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_step_1_description",
+      "label": "Home Page Step 1 Description",
+      "type": "textarea"
+    },
+    {
+      "key": "home_page_step_2_title",
+      "label": "Home Page Step 2 Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_step_2_description",
+      "label": "Home Page Step 2 Description",
+      "type": "textarea"
+    },
+    {
+      "key": "home_page_step_3_title",
+      "label": "Home Page Step 3 Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_step_3_description",
+      "label": "Home Page Step 3 Description",
+      "type": "textarea"
+    },
+    {
+      "key": "home_page_step_4_title",
+      "label": "Home Page Step 4 Title",
+      "type": "text"
+    },
+    {
+      "key": "home_page_step_4_description",
+      "label": "Home Page Step 4 Description",
+      "type": "textarea"
+    }
+  ],
+  "About Us": [
+    {
+      "key": "about_us_title",
+      "label": "About Us Title",
+      "type": "text"
+    },
+    {
+      "key": "about_us_description",
+      "label": "About Us Description",
+      "type": "textarea"
+    },
+    {
+      "key": "about_us_mission",
+      "label": "About Us Mission",
+      "type": "textarea"
+    },
+    {
+      "key": "about_us_image",
+      "label": "About Us Image",
+      "type": "image"
+    }
+  ],
+  "Appointment": [
+    {
+      "key": "about_us_title",
+      "label": "About Us Title",
+      "type": "text"
+    },
+    {
+      "key": "about_us_description",
+      "label": "About Us Description",
+      "type": "textarea"
+    }
+  ],
+  "Terms & Conditions": [
+    {
+      "key": "term_condition",
+      "label": "Terms Conditions",
+      "type": "textarea"
+    },
+    {
+      "key": "privacy_policy",
+      "label": "Privacy Policy",
+      "type": "text"
+    }
+  ],
+  "Map": [
+    {
+      "key": "location_map",
+      "label": "Label",
+      "type": "text"
+    }
+  ]
+}
