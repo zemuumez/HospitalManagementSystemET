@@ -21,6 +21,7 @@ type Server struct {
 	Audit          application.Audit
 	OnlinePayments application.OnlinePayments
 	Inventory      application.Inventory
+	Attendance     application.Attendance
 	App            application.Hospital
 	Scheduling     application.Scheduling
 	Clinical       application.Clinical
@@ -148,6 +149,9 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.staff(w, r, a) {
+			return
+		}
+		if s.attendance(w, r, a) {
 			return
 		}
 		if s.audit(w, r, a) {

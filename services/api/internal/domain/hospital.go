@@ -43,6 +43,10 @@ func (a Actor) Can(permission string) bool {
 	case "clinical.admit":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor"
 
+	case "attendance.clock", "attendance.read_own":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "receptionist" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
+	case "attendance.manage":
+		return a.Role == "admin"
 	case "appointments.read", "appointments.book":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "patient"
 	case "staff.manage":
@@ -58,7 +62,7 @@ func (a Actor) Can(permission string) bool {
 }
 func (a Actor) Permissions() []string {
 	result := []string{}
-	for _, p := range []string{"diagnostics.catalog", "diagnostics.read", "pharmacy.catalog", "pharmacy.manage", "medication.read", "patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book", "staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage"} {
+	for _, p := range []string{"diagnostics.catalog", "diagnostics.read", "pharmacy.catalog", "pharmacy.manage", "medication.read", "patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book", "staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage", "attendance.clock", "attendance.read_own", "attendance.manage"} {
 		if a.Can(p) {
 			result = append(result, p)
 		}

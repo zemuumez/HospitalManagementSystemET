@@ -415,5 +415,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testAudit(t, db, store, actors)
 	testStaff(t, db, store, actors)
 	testAddenda(t, db, store, actors, cases)
+	testAttendance(t, db, store, actors)
 
 }

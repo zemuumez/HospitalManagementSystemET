@@ -117,8 +117,8 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | OPD Diagnoses (`opd-diagnoses`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
 | OPD Prescriptions (`opd-prescriptions`) | Clinical Records | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
 | OPD Timelines (`opd-timelines`) | Clinical Records | Preview only; typed backend, integration and workflow QA pending | Open |
-| Attendance (`attendance`) | Attendance | Preview only; typed backend, integration and workflow QA pending | Open |
-| Manage Attendance (`manage-attendance`) | Manage Attendance | Preview only; typed backend, integration and workflow QA pending | Open |
+| Attendance (`attendance`) | Attendance | Typed Go backend, shifts, clock in/out, breaks, overtime, corrections, approval history and DB immutability implemented (migration 028); frontend integration pending Section 4 | Core Complete (UI Pending) |
+| Manage Attendance (`manage-attendance`) | Manage Attendance | Typed Go admin management, assignments, corrections, approval transitions and summaries implemented (migration 028); frontend integration pending Section 4 | Core Complete (UI Pending) |
 | Modules Setting (`modules-setting`) | Settings | Preview only; typed backend, integration and workflow QA pending | Open |
 | Patient Queue Theme (`patient-queue-theme`) | Settings | Preview only; typed backend, integration and workflow QA pending | Open |
 | Front CMS Services (`front-cms-services`) | Front CMS | Preview only; typed backend, integration and workflow QA pending | Open |

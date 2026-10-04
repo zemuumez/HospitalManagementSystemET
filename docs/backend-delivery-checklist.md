@@ -258,7 +258,7 @@ Backend-first progress:
 
 ### I. Operational modules, content and communications
 
-- [ ] Attendance/check-in/out, shifts, breaks, overtime, corrections and approval history.
+- [x] Attendance/check-in/out, shifts, breaks, overtime, corrections and approval history (migration 028).
 - [ ] Ambulances, assignment/calls, tariffs and billing.
 - [ ] Services, charge categories, operations, custom fields and validated module settings.
 - [ ] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely.
@@ -450,3 +450,20 @@ Migration 017 and the Go Stripe adapter implement server-derived checkout and si
 ### Complete password-recovery verification
 
 The isolated recovery suite follows a Mailpit-delivered reset link, changes the password, verifies single-use and expired-token rejection, rejects the old password, checks revocation of two pre-existing sessions, signs in/out with the replacement password, checks the generic unknown-account response and verifies the fourth reset request is throttled. It passed locally and is added to CI. All accounts/tokens are synthetic in a disposable schema; Mailpit retains synthetic test messages. No new frontend integration was added.
+
+### Attendance backend increment
+
+Migration 028 adds `attendance_shift`, `attendance_shift_assignment`, `attendance_record`, `attendance_break`, `attendance_correction`, and `attendance_approval_history` with database-level immutability triggers on corrections and approval history (`protect_retained_record`). Default Day Shift (08:00-17:00) and Night Shift (20:00-06:00 overnight) are seeded.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Explicit shift definitions and staff shift assignments.
+- Check-in/check-out and break tracking (with automatic active break closure on check-out).
+- Scheduled vs worked time, lateness, early departure, and overtime calculations strictly anchored to `Africa/Addis_Ababa` (UTC+3, EAT) without day boundaries breaking overnight shifts.
+- Actor-scoped authorization: staff can only clock and view their own attendance records (`attendance.clock`, `attendance.read_own`), while admin/HR manage all staff records (`attendance.manage`).
+- Reasoned corrections with immutable snapshots preserving original vs corrected fields and author identity.
+- Approval workflow transitions (`draft` -> `submitted` -> `approved` / `rejected`), recording immutable approval history with approver notes and forbidding edits to approved records without super-admin override.
+- Optimistic locking (`version` field) and PostgreSQL row locks preventing duplicate check-ins, overlapping active breaks, stale updates, and concurrent clocking races.
+- Filtered paginated list endpoints and aggregated summary statistics (`total_scheduled_minutes`, `total_worked_minutes`, `total_break_minutes`, `total_overtime_minutes`, `total_late_minutes`, `total_early_departure_minutes`).
+
+PostgreSQL and HTTP tests verify: all role permissions and denials, cross-staff ID isolation, concurrent check-ins and stale updates, overlapping breaks, overnight shifts crossing EAT midnight, reasoned corrections, approval state transitions, database trigger immutability, and API error codes. See contract in [backend attendance contract](backend-attendance-contract.md). Frontend integration deferred to Section 4.
+
