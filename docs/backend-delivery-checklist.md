@@ -118,6 +118,8 @@ The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The comple
 
 ## 3. Full backend implementation checklist
 
+Provider credentials remain blank by user instruction. See [step-by-step provider setup](provider-setup.md) and [production worksheet](../deployment/.env.example). Live external verification stays pending; it does not block local backend development.
+
 **Current delivery order (user instruction): complete backend work in this section before starting further Section 4 UI integration.** Existing connected screens remain in place. Each verified backend increment is committed and pushed separately. Unchecked compound items can contain working core behavior; Sections 1–2 describe that evidence without claiming full module parity.
 
 Production Firebase/SMS credentials, deployment infrastructure, local tax requirements, independent assessment and user acceptance require external configuration or decisions. These are tracked explicitly, not marked complete based on local implementation alone.
