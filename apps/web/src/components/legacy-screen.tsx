@@ -15,6 +15,11 @@ import {
 } from "lucide-react";
 import { useLanguage } from "./language";
 import { Modal } from "./modal";
+import {
+  changeClinicalField,
+  dependentOptions,
+  validateClinicalPreview,
+} from "@/lib/clinical-preview";
 import odontogramSvg from "@/lib/odontogram-svg.json";
 import {
   type Field,
@@ -30,13 +35,21 @@ function FieldInput({
   field: f,
   value,
   onChange,
+  values = {},
 }: {
+  values?: Record<string, string>;
   field: Field;
   value: string;
   onChange: (v: string) => void;
 }) {
   const { t } = useLanguage();
   const type = /password/.test(f.key) ? "password" : f.type;
+  const customOptions = f.key.startsWith("custom_")
+    ? (f.source || "")
+        .split(/[,\n]/)
+        .map((v) => v.trim())
+        .filter(Boolean)
+    : undefined;
   if (f.key === "gender")
     return (
       <fieldset>
@@ -85,7 +98,11 @@ function FieldInput({
           required={f.required}
         >
           <option value="">Select {t(f.label)}</option>
-          {optionsFor(f).map((o) => (
+          {(
+            customOptions ||
+            dependentOptions(f.key, values) ||
+            optionsFor(f)
+          ).map((o) => (
             <option key={o} value={o}>
               {t(o)}
             </option>
@@ -143,6 +160,7 @@ export function LegacyScreen({
   const { t } = useLanguage();
   const [rows, setRows] = useState<PreviewRow[]>(() => seedRows(s));
   const [ready, setReady] = useState(false);
+  const [customFields, setCustomFields] = useState<Field[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [sort, setSort] = useState("");
@@ -163,6 +181,30 @@ export function LegacyScreen({
     try {
       const saved = sessionStorage.getItem(storage);
       if (saved) setRows(JSON.parse(saved));
+    } catch {}
+    try {
+      const definitions: PreviewRow[] = JSON.parse(
+        sessionStorage.getItem("hms-preview-v2:add-custom-fields:") || "[]",
+      );
+      setCustomFields(
+        definitions
+          .filter((r) => r.values.module === s.group && r.status !== "Inactive")
+          .map((r) => ({
+            key: `custom_${r.id}`,
+            label: r.values.field_name,
+            type:
+              (
+                {
+                  Number: "number",
+                  Date: "date",
+                  Textarea: "textarea",
+                  Select: "select",
+                } as Record<string, string>
+              )[r.values.field_type] || "text",
+            required: r.values.is_required === "Yes",
+            source: r.values.values || "",
+          })),
+      );
     } catch {}
     setReady(true);
   }, [storage]);
@@ -225,7 +267,11 @@ export function LegacyScreen({
     window.scrollTo(0, 0);
     setEditing({
       id: `DEMO-${crypto.randomUUID().slice(0, 8)}`,
-      values: {},
+      values: Object.fromEntries(
+        s.fields
+          .filter((f) => ["department_id", "bed_type_id"].includes(f.key))
+          .map((f) => [f.key, ""]),
+      ),
       status: "Active",
     });
     setNotice("");
@@ -238,6 +284,24 @@ export function LegacyScreen({
       editing.values.password_confirmation !== undefined
     ) {
       setFormError("Password confirmation must match the password.");
+      return;
+    }
+    const validation = validateClinicalPreview(s.id, editing.values);
+    if (validation) {
+      setFormError(validation);
+      return;
+    }
+    if (
+      (s.id === "appointments" || s.id === "appointment-calendars") &&
+      rows.some(
+        (r) =>
+          r.id !== editing.id &&
+          r.values.doctor_id === editing.values.doctor_id &&
+          r.values.opd_date === editing.values.opd_date &&
+          r.values.timeslot === editing.values.timeslot,
+      )
+    ) {
+      setFormError("This appointment time is already booked in the preview.");
       return;
     }
     const values = { ...editing.values };
@@ -363,7 +427,7 @@ export function LegacyScreen({
             }}
           >
             <div className="legacy-form">
-              {s.fields.map((f) => (
+              {[...s.fields, ...customFields].map((f) => (
                 <FieldInput
                   key={f.key}
                   field={f}
@@ -691,11 +755,12 @@ export function LegacyScreen({
                   <FieldInput
                     key={f.key}
                     field={f}
+                    values={editing.values}
                     value={editing.values[f.key] || ""}
                     onChange={(v) =>
                       setEditing({
                         ...editing,
-                        values: { ...editing.values, [f.key]: v },
+                        values: changeClinicalField(editing.values, f.key, v),
                       })
                     }
                   />
@@ -783,10 +848,15 @@ export function LegacyScreen({
                 name={tab}
                 patient={view.id}
                 parent={s.id}
+                admissionDate={view.values.admission_date}
               />
             )}
-            {/invoice|bill/.test(s.id) && (
-              <LineItems saved={view.values._lineItems} readOnly />
+            {/invoice|bill|prescription/.test(s.id) && (
+              <LineItems
+                prescription={s.id.includes("prescription")}
+                saved={view.values._lineItems}
+                readOnly
+              />
             )}
             {s.group === "Patient ID Card" && (
               <PatientCard values={view.values} />
@@ -1092,7 +1162,9 @@ function ClinicalTab({
   name,
   patient,
   parent,
+  admissionDate,
 }: {
+  admissionDate?: string;
   name: string;
   patient: string;
   parent: string;
@@ -1123,16 +1195,34 @@ function ClinicalTab({
         <LegacyScreen screen={screen} scope={patient} />
       </div>
     );
-  return <Discharge patient={patient} />;
+  return <Discharge patient={patient} admissionDate={admissionDate} />;
 }
-function Discharge({ patient }: { patient: string }) {
+function Discharge({
+  patient,
+  admissionDate,
+}: {
+  patient: string;
+  admissionDate?: string;
+}) {
   const { t } = useLanguage();
   const [saved, setSaved] = useState(false);
+  const [summary, setSummary] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try {
+      setSummary(
+        JSON.parse(sessionStorage.getItem(`hms-discharge:${patient}`) || "{}"),
+      );
+    } catch {}
+  }, [patient]);
   return (
     <form
       className="py-6"
       onSubmit={(e) => {
         e.preventDefault();
+        sessionStorage.setItem(
+          `hms-discharge:${patient}`,
+          JSON.stringify(summary),
+        );
         setSaved(true);
       }}
     >
@@ -1148,16 +1238,38 @@ function Discharge({ patient }: { patient: string }) {
           <label key={label}>
             <span className="label">{label}</span>
             {label === "Discharge Date" ? (
-              <input className="field" type="date" required />
+              <input
+                className="field"
+                type="date"
+                required
+                min={admissionDate}
+                value={summary[label] || ""}
+                onChange={(e) =>
+                  setSummary({ ...summary, [label]: e.target.value })
+                }
+              />
             ) : label === "Discharge Status" ? (
-              <select className="field">
+              <select
+                className="field"
+                value={summary[label] || "Recovered"}
+                onChange={(e) =>
+                  setSummary({ ...summary, [label]: e.target.value })
+                }
+              >
                 <option>Recovered</option>
                 <option>Referred</option>
                 <option>Discharged on request</option>
                 <option>Death</option>
               </select>
             ) : (
-              <textarea className="field" rows={3} />
+              <textarea
+                className="field"
+                rows={3}
+                value={summary[label] || ""}
+                onChange={(e) =>
+                  setSummary({ ...summary, [label]: e.target.value })
+                }
+              />
             )}
           </label>
         ))}

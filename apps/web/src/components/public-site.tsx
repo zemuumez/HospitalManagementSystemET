@@ -12,6 +12,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { LanguageSwitcher, useLanguage } from "./language";
+import { previewSlots } from "@/lib/clinical-preview";
 import { defaultFrontSettings, FRONT_KEY } from "@/lib/front-settings";
 const doctors = ["Dr. Avery Reed", "Dr. Robin Patel", "Dr. Quinn Parker"];
 const services = [
@@ -23,6 +24,7 @@ const services = [
   "Emergency Care",
 ];
 const titles: Record<string, string> = {
+  "doctor-details": "Doctor Details",
   home: "Home",
   "about-us": "About Us",
   "our-services": "Services",
@@ -35,13 +37,20 @@ const titles: Record<string, string> = {
   "terms-of-service": "Terms & Conditions",
   register: "Sign Up",
 };
-export function PublicSite({ page = "home" }: { page?: string }) {
+export function PublicSite({
+  page = "home",
+  doctorIndex = 0,
+}: {
+  page?: string;
+  doctorIndex?: number;
+}) {
   const { t } = useLanguage();
   const [settings, setSettings] = useState(defaultFrontSettings);
   const [mobile, setMobile] = useState(false);
   const [notice, setNotice] = useState("");
   const [doctor, setDoctor] = useState(doctors[0]);
   const [date, setDate] = useState("");
+  const [doctorTab, setDoctorTab] = useState("Overview");
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const chosen = query.get("doctor");
@@ -56,6 +65,10 @@ export function PublicSite({ page = "home" }: { page?: string }) {
   }, []);
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (page === "appointment" && !previewSlots(doctor, date).length) {
+      setNotice(t("Choose an available appointment time."));
+      return;
+    }
     const form = e.target as HTMLFormElement;
     const passwords = form.querySelectorAll<HTMLInputElement>(
       'input[type="password"]',
@@ -73,7 +86,9 @@ export function PublicSite({ page = "home" }: { page?: string }) {
           <div className="doctor-portrait">
             <Stethoscope size={70} />
           </div>
-          <h3>{name}</h3>
+          <h3>
+            <Link href={`/doctors/${i + 1}`}>{name}</Link>
+          </h3>
           <p>{t(services[i])}</p>
           <Link href={`/appointment?doctor=${encodeURIComponent(name)}`}>
             {t("Book an Appointment")} →
@@ -283,6 +298,77 @@ export function PublicSite({ page = "home" }: { page?: string }) {
               servicesView
             ) : page === "doctors" ? (
               doctorsView
+            ) : page === "doctor-details" ? (
+              <article className="public-form">
+                <div className="public-split">
+                  <div className="doctor-portrait">
+                    <Stethoscope size={100} />
+                  </div>
+                  <div>
+                    <h2>{doctors[doctorIndex]}</h2>
+                    <h3>{t("Email")}</h3>
+                    <p>doctor{doctorIndex + 1}@example.invalid</p>
+                    <h3>{t("Qualification")}</h3>
+                    <p>MD · {t(services[doctorIndex])}</p>
+                    <Link
+                      className="primary"
+                      href={`/appointment?doctor=${encodeURIComponent(doctors[doctorIndex])}`}
+                    >
+                      {t("Book an Appointment")}
+                    </Link>
+                  </div>
+                </div>
+                <div className="detail-tabs" role="tablist">
+                  {["Overview", "Schedules"].map((tab) => (
+                    <button
+                      key={tab}
+                      role="tab"
+                      aria-selected={doctorTab === tab}
+                      className={doctorTab === tab ? "active" : ""}
+                      onClick={() => setDoctorTab(tab)}
+                    >
+                      {t(tab)}
+                    </button>
+                  ))}
+                </div>
+                <div role="tabpanel">
+                  {doctorTab === "Overview" ? (
+                    <p>{t("Sample doctor profile for frontend review.")}</p>
+                  ) : (
+                    <div className="legacy-table-wrap">
+                      <table className="legacy-table">
+                        <thead>
+                          <tr>
+                            {[
+                              "Available On",
+                              "Available From",
+                              "Available To",
+                            ].map((c) => (
+                              <th key={c}>{t(c)}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            "Monday",
+                            "Tuesday",
+                            "Wednesday",
+                            "Thursday",
+                            "Friday",
+                            "Saturday",
+                          ].map((day) => (
+                            <tr key={day}>
+                              <td>{t(day)}</td>
+                              <td>{doctorIndex === 1 ? "14:00" : "09:00"}</td>
+                              <td>{doctorIndex === 1 ? "15:30" : "11:00"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </article>
             ) : page === "working-hours" ? (
               <div className="public-form">
                 <h2>
@@ -404,16 +490,20 @@ export function PublicSite({ page = "home" }: { page?: string }) {
                       </label>
                       <label>
                         <span className="label">Time *</span>
-                        <select className="field" required>
-                          <option value="">Select time</option>
-                          {[
-                            "09:00",
-                            "09:30",
-                            "10:00",
-                            "10:30",
-                            "14:00",
-                            "14:30",
-                          ].map((time) => (
+                        <select
+                          key={doctor + date}
+                          className="field"
+                          required
+                          disabled={!previewSlots(doctor, date).length}
+                        >
+                          <option value="">
+                            {t(
+                              previewSlots(doctor, date).length
+                                ? "Select time"
+                                : "No available slots",
+                            )}
+                          </option>
+                          {previewSlots(doctor, date).map((time) => (
                             <option key={time}>{time}</option>
                           ))}
                         </select>

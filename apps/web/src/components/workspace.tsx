@@ -270,6 +270,9 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                     <div className="legacy-popover">
                       <p>{identity?.user.role}</p>
                       <Link href="/account">{t("My Profile")}</Link>
+                      <Link href="/security-preview">
+                        {t("Two-Factor Authentication")}
+                      </Link>
                       <Link href="/">{t("Front Site")}</Link>
                       <Link href="/communications">Live communications</Link>
                       <button

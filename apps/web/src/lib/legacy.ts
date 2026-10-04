@@ -1,4 +1,5 @@
 import source from "./legacy-catalog.json";
+import prescriptionFields from "./prescription-fields.json";
 export type Field = {
   key: string;
   label: string;
@@ -26,6 +27,19 @@ const fields = (definitions: string): Field[] =>
     };
   });
 const overrides: Record<string, Partial<Screen>> = {
+  prescriptions: {
+    fields: [
+      ...source.find((s) => s.id === "prescriptions")!.fields,
+      ...prescriptionFields,
+    ],
+  },
+  appointments: {
+    fields: source
+      .find((s) => s.id === "appointments")!
+      .fields.map((f) =>
+        f.key === "timeslot" ? { ...f, type: "select", required: true } : f,
+      ),
+  },
   "live-consultations-live-meetings": {
     title: "Live Meetings",
     fields: fields(
@@ -50,7 +64,11 @@ const overrides: Record<string, Partial<Screen>> = {
     columns: ["Date", "Doctor", "Notes"],
   },
   "appointment-calendars": {
-    fields: source.find((s) => s.id === "appointments")!.fields,
+    fields: source
+      .find((s) => s.id === "appointments")!
+      .fields.map((f) =>
+        f.key === "timeslot" ? { ...f, type: "select", required: true } : f,
+      ),
   },
   "appointment-transaction": {
     columns: [

@@ -1,0 +1,135 @@
+[
+  {
+    "key": "high_blood_pressure",
+    "label": "High Blood Pressure",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "food_allergies",
+    "label": "Food Allergies",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "tendency_bleed",
+    "label": "Tendency Bleed",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "heart_disease",
+    "label": "Heart Disease",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "diabetic",
+    "label": "Diabetic",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "medical_history",
+    "label": "Medical History",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "female_pregnancy",
+    "label": "Female Pregnancy",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "breast_feeding",
+    "label": "Breast Feeding",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "current_medication",
+    "label": "Current Medication",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "surgery",
+    "label": "Surgery",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "accident",
+    "label": "Accident",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "others",
+    "label": "Others",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "plus_rate",
+    "label": "Plus Rate",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "temperature",
+    "label": "Temperature",
+    "type": "text",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "problem_description",
+    "label": "Problem Description",
+    "type": "textarea",
+    "required": false,
+    "source": "prescriptions/physical-info-fields.blade.php"
+  },
+  {
+    "key": "test",
+    "label": "Test",
+    "type": "textarea",
+    "required": false,
+    "source": "prescriptions/other-fields.blade.php"
+  },
+  {
+    "key": "advice",
+    "label": "Advice",
+    "type": "textarea",
+    "required": false,
+    "source": "prescriptions/other-fields.blade.php"
+  },
+  {
+    "key": "next_visit_qty",
+    "label": "Next Visit Qty",
+    "type": "number",
+    "required": false,
+    "source": "prescriptions/other-fields.blade.php"
+  },
+  {
+    "key": "next_visit_time",
+    "label": "Next Visit Time",
+    "type": "select",
+    "required": false,
+    "source": "prescriptions/other-fields.blade.php"
+  }
+]
