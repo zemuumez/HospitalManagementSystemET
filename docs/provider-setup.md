@@ -75,3 +75,7 @@ References: [Stripe keys](https://docs.stripe.com/keys), [webhook setup](https:/
 Keep all production secrets blank until you obtain them. You can continue using local email/password login, captured SMS, Mailpit and manual financial records. Provider setup is tracked separately from local backend implementation/testing; a blank worksheet is not proof of live delivery, real payment settlement or production readiness.
 
 After configuring a provider, record only the environment, provider name, verification date and outcome in the deployment log. Never record secret values. Restrict and rotate compromised credentials in the provider console, update the secret manager and restart/rebuild the affected service.
+
+## Authenticator MFA
+
+Authenticator MFA needs no Firebase/SMS/provider credential. It uses the Better Auth secret and migration 018. Keep that secret backed up securely. Enrollment is opt-in; the backend is tested, while enrollment/challenge screens remain Section 4 work. See [MFA API and recovery contract](backend-mfa-contract.md).

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { Pool } from "pg";
 import { hashPassword } from "better-auth/crypto";
@@ -50,7 +50,7 @@ async function fixture() {
   ]);
   const response = await post("/api/auth/sign-in/email", { email, password });
   assert.equal(response.status, 200, "fixture sign-in");
-  return { id, cookie: cookies(response) };
+  return { id, email, password, cookie: cookies(response) };
 }
 async function phoneProof() {
   // Distinct OTP flows must cross a JWT issuance second to produce distinct proofs.
@@ -90,6 +90,228 @@ async function phoneProof() {
   const { idToken } = await signed.json();
   assert.ok(idToken);
   return idToken;
+}
+function totp(uri) {
+  const encoded = new URL(uri).searchParams.get("secret");
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const char of encoded.replace(/=+$/, "").toUpperCase())
+    bits += alphabet.indexOf(char).toString(2).padStart(5, "0");
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8)
+    bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const digest = createHmac("sha1", Buffer.from(bytes))
+    .update(counter)
+    .digest();
+  const offset = digest[19] & 15;
+  return ((digest.readUInt32BE(offset) & 0x7fffffff) % 1000000)
+    .toString()
+    .padStart(6, "0");
+}
+async function resetLimits() {
+  // Only this generated disposable schema is writable by the suite.
+  await db.query('DELETE FROM "rateLimit"');
+}
+async function checkMfa(user) {
+  await resetLimits();
+  let response = await post(
+    "/api/auth/two-factor/enable",
+    { password: user.password },
+    user.cookie,
+  );
+  assert.equal(response.status, 200, "MFA enrollment");
+  const { totpURI, backupCodes } = await response.json();
+  assert.ok(totpURI && backupCodes.length);
+  response = await post(
+    "/api/auth/two-factor/verify-totp",
+    { code: totp(totpURI) },
+    user.cookie,
+  );
+  assert.equal(response.status, 200, "MFA enrollment verification");
+  assert.equal(
+    (await fetch(base + "/api/hms/me", { headers: { cookie: user.cookie } }))
+      .status,
+    401,
+    "enrollment revokes pre-MFA sessions",
+  );
+  await resetLimits();
+  response = await post("/api/auth/sign-in/email", {
+    email: user.email,
+    password: user.password,
+  });
+  assert.equal(response.status, 200);
+  assert.equal(
+    (await response.json()).twoFactorRedirect,
+    true,
+    "password login requires MFA",
+  );
+  const challenge = cookies(response);
+  assert.equal(
+    (await fetch(base + "/api/hms/me", { headers: { cookie: challenge } }))
+      .status,
+    401,
+    "challenge is not an authenticated session",
+  );
+  response = await post(
+    "/api/auth/two-factor/verify-totp",
+    { code: "invalid" },
+    challenge,
+  );
+  assert.equal(response.ok, false, "bad TOTP rejected");
+  response = await post(
+    "/api/auth/two-factor/verify-totp",
+    { code: totp(totpURI) },
+    challenge,
+  );
+  assert.equal(response.status, 200, "valid TOTP completes sign-in");
+  assert.equal(
+    (
+      await fetch(base + "/api/hms/me", {
+        headers: { cookie: cookies(response) },
+      })
+    ).status,
+    200,
+  );
+  await resetLimits();
+  response = await post(
+    "/api/auth/two-factor/verify-totp",
+    { code: totp(totpURI) },
+    challenge,
+  );
+  assert.equal(response.ok, false, "consumed challenge rejected");
+  response = await post("/api/auth/firebase/sign-in", {
+    idToken: await phoneProof(),
+  });
+  assert.equal(response.status, 200);
+  assert.equal(
+    (await response.json()).twoFactorRedirect,
+    true,
+    "Firebase cannot bypass MFA",
+  );
+  const phoneChallenge = cookies(response);
+  assert.equal(
+    (await fetch(base + "/api/hms/me", { headers: { cookie: phoneChallenge } }))
+      .status,
+    401,
+  );
+  response = await post(
+    "/api/auth/two-factor/verify-backup-code",
+    { code: backupCodes[0] },
+    phoneChallenge,
+  );
+  assert.equal(response.status, 200, "backup code completes Firebase MFA");
+  assert.equal(
+    (
+      await fetch(base + "/api/hms/me", {
+        headers: { cookie: cookies(response) },
+      })
+    ).status,
+    200,
+  );
+  await resetLimits();
+  response = await post("/api/auth/sign-in/email", {
+    email: user.email,
+    password: user.password,
+  });
+  const recoveryChallenge = cookies(response);
+  response = await post(
+    "/api/auth/two-factor/verify-backup-code",
+    { code: backupCodes[0] },
+    recoveryChallenge,
+  );
+  assert.equal(response.ok, false, "backup code is single use");
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int AS n FROM audit_event WHERE actor_id=$1 AND action='identity.mfa_enabled'",
+        [user.id],
+      )
+    ).rows[0].n,
+    1,
+  );
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await resetLimits();
+    response = await post("/api/auth/sign-in/email", {
+      email: user.email,
+      password: user.password,
+    });
+    response = await post(
+      "/api/auth/two-factor/verify-totp",
+      { code: "invalid" },
+      cookies(response),
+    );
+    assert.equal(response.ok, false);
+  }
+  assert.ok(
+    (
+      await db.query(
+        'SELECT "lockedUntil">now() AS locked FROM "twoFactor" WHERE "userId"=$1',
+        [user.id],
+      )
+    ).rows[0].locked,
+    "failed attempts lock account MFA",
+  );
+  await resetLimits();
+  response = await post("/api/auth/sign-in/email", {
+    email: user.email,
+    password: user.password,
+  });
+  response = await post(
+    "/api/auth/two-factor/verify-totp",
+    { code: totp(totpURI) },
+    cookies(response),
+  );
+  assert.equal(response.ok, false, "valid code cannot bypass account lockout");
+  // Advance only this disposable fixture's lock deadline, not production behavior.
+  await db.query(
+    'UPDATE "twoFactor" SET "lockedUntil"=now()-interval \'1 second\' WHERE "userId"=$1',
+    [user.id],
+  );
+  await resetLimits();
+  response = await post("/api/auth/sign-in/email", {
+    email: user.email,
+    password: user.password,
+  });
+  response = await post(
+    "/api/auth/two-factor/verify-totp",
+    { code: totp(totpURI) },
+    cookies(response),
+  );
+  assert.equal(response.status, 200, "sign-in recovers after lock expiry");
+  const authenticated = cookies(response);
+  response = await post(
+    "/api/auth/two-factor/disable",
+    { password: "wrong-password" },
+    authenticated,
+  );
+  assert.equal(response.ok, false, "password required to disable MFA");
+  await resetLimits();
+  response = await post(
+    "/api/auth/two-factor/disable",
+    { password: user.password },
+    authenticated,
+  );
+  assert.equal(response.status, 200, "explicit password-confirmed disable");
+  assert.equal(
+    (await fetch(base + "/api/hms/me", { headers: { cookie: authenticated } }))
+      .status,
+    401,
+    "disable revokes previous sessions",
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int AS n FROM audit_event WHERE actor_id=$1 AND action='identity.mfa_disabled'",
+        [user.id],
+      )
+    ).rows[0].n,
+    1,
+  );
+  console.log(
+    "PASS: authenticator enrollment, prior-session revocation, email and Firebase MFA enforcement, invalid code/challenge replay denial and single-use recovery code.",
+  );
 }
 try {
   assert.equal(
@@ -146,6 +368,8 @@ try {
     200,
     "Go accepts the phone-authenticated Better Auth session",
   );
+  await checkMfa(winner);
+  await resetLimits();
   const freshAgain = await phoneProof();
   response = await post(
     "/api/auth/firebase/link",

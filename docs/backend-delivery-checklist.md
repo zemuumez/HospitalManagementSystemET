@@ -148,7 +148,8 @@ Backend-first progress:
 - [x] Administrator provisioning and disablement.
 - [ ] Invitation acceptance with expiring single-use links, first-login password policy and identity verification.
 - [ ] Staff profile edits, audited role changes and safe reassignment/deprovisioning of active clinical work.
-- [ ] Real staff MFA/step-up authentication; replace or remove the security-preview demonstration before production.
+- [x] Opt-in Better Auth authenticator MFA backend: verified enrollment, email/Firebase challenges, single-use recovery, lockout, audited enable/disable and prior-session revocation (migration 018; real Auth-emulator suite).
+- [ ] MFA enrollment/challenge UI, privileged-action step-up and replacement/removal of the security-preview demonstration before production.
 - [x] Password-reset email/link completion, expiry/replay rejection, old-password denial, all-session revocation, logout and reset-request throttling (`npm run test:recovery`).
 - [ ] Session-management/revoke-all UI and additional account-recovery administration.
 - [x] Firebase emulator success-path tests: OTP, link, login, revoked token, replay, disabled account and concurrent linking (`npm run test:firebase`).
