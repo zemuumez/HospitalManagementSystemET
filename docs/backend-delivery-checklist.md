@@ -85,13 +85,20 @@ Commit: `21e2f55` — clinical admissions and immutable signed notes.
 - [x] Isolated-schema database tests for competing admissions, retry behavior, ownership, signed-note immutability and discharge.
 - [ ] Nurse/team assignment, transfers, full vitals, encounter attachments, amendments after closure, diagnosis/prescription/charge/payment submodules and discharge PDF parity.
 
-### 1.5 Work in progress at this checklist checkpoint
+### 1.5 Step 4: verified invoice and payment core
 
-- [ ] Billing migration `004_billing.sql`: charge accounts, invoice header/lines and append-only payment/refund ledger.
-- [ ] Billing domain/application contracts: integer money, percentage discount rounding, invoice and payment validation.
-- [ ] Billing PostgreSQL adapter, HTTP routes, connected screens, concurrency tests and browser QA.
+- [x] Migration 004, charge-account and invoice persistence, line snapshots, generated numbers and audited access.
+- [x] Server-calculated integer minor-unit totals, validated quantities/limits and percentage discount rounding.
+- [x] Idempotent invoices/payments, invoice-level payment locking and overpayment prevention.
+- [x] Append-only payment/refund records; refunds reference original payments and cannot exceed unrefunded amounts.
+- [x] Unique bank references, patient invoice scope and administrator/accountant mutation permissions.
+- [x] Connected Accounts, Invoices and patient portal invoices with detail, balance and manual payment/refund forms.
+- [x] Browser invoice creation and persisted total verification; payment form rendering checked.
+- [x] Disposable-schema payment/refund posting and concurrency tests, plus HTTP authorization/strict-input tests.
+- [x] Go tests/vet, frontend tests, typecheck, format check, production build and authentication/API integration suite.
+- [ ] Actual payment gateways, reconciliation, taxes, source-workflow charge linkage, invoice corrections/voiding, print/PDF, payroll and full original finance parity.
 
-These billing files are **not yet a finished or verified backend step** at this checkpoint. They will be committed as a functional step after implementation and validation.
+Manual payment forms record completed money movements; they do not send bank transfers. ETB is the only currency in the current implementation. Ledger posting tests run in a disposable schema, not the ordinary development dataset.
 
 ## 2. API and screen integration inventory
 
@@ -103,7 +110,7 @@ These billing files are **not yet a finished or verified backend step** at this 
 | Clinical | `/v1/beds`, `/v1/cases`, `/v1/encounters` | Beds, Cases, OPD/IPD and portal lists | Original submodules and fields |
 | Notes/discharge | Encounter `/notes` and `/discharge` | Encounter details | Attachments, amendments, templates, print/PDF |
 | Messaging | `/v1/messages` | Communications | Preferences, callbacks, scheduled delivery, reconciliation |
-| Billing | Contracts in progress | Preview only at checkpoint | Entire connected billing workflow |
+| Billing | `/v1/charge-accounts`, `/v1/invoices`, invoice detail/payments, billing patient index | Accounts, Invoices, portal invoices | Gateways, taxes, voiding/corrections, print, reconciliation, source charges |
 | Other original modules | No completed API yet | Marked frontend previews | See module coverage appendix |
 
 The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The complete original-screen inventory is in [backend-module-coverage.md](backend-module-coverage.md).
@@ -196,9 +203,11 @@ The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The comple
 ### H. Billing, finance and payroll
 
 - [ ] Charge accounts and immutable issued invoice/line snapshots.
-- [ ] Exact integer/decimal totals, server-calculated discounts/taxes and documented rounding.
+- [x] Core invoice integer totals, server-calculated percentage discounts and documented rounding.
+- [ ] Tax rules, tax calculation, tax reports and wider workflow pricing.
 - [ ] Bills/invoices, itemized services, quantities, printable receipts and original print-template parity.
-- [ ] Partial/full payments, idempotent posting, overpayment prevention and append-only refunds/reversals.
+- [x] Core invoice partial/full payments, idempotent posting, overpayment prevention and append-only refunds.
+- [ ] Expanded reversal/voiding approvals and reconciliation workflows.
 - [ ] Payment provider integrations, signed webhooks, event replay protection and settlement reconciliation.
 - [ ] IPD/OPD/pharmacy/ambulance/lab charges linked to their source workflows without duplicate billing.
 - [ ] Expenses, income, account transfers and daily/monthly financial reports.
@@ -257,13 +266,16 @@ The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The comple
 
 - [x] Existing five frontend/domain tests: clinical dependency behavior, Firebase proof policy and source-label Amharic coverage.
 - [x] TypeScript checks after connected scheduling and clinical screens.
-- [x] Production Next.js build after scheduling integration. Repeat after subsequent changes before delivery.
+- [x] Production Next.js build after clinical and billing integration.
 - [x] Go unit tests and vet after clinical implementation.
 - [x] Live authentication/API suite: CSRF/identity denial, row/count scope, patient linkage, disablement, message deduplication, Mailpit, captured SMS and logout.
 - [x] Scheduling integration: slot creation, ownership, concurrent booking rejection, retry deduplication, status validation and released cancelled slots.
 - [x] Isolated-schema clinical integration: bed race, admission retries, immutable notes, clinical-note access denial, discharge and bed release.
 - [x] Chrome integration: Users -> Schedules -> Patients -> Appointments and Beds -> Cases -> IPD -> doctor discharge.
 - [x] Connected appointment desktop/mobile screenshots and no browser page errors in the tested flows.
+- [x] Final stable production-build frontend regression: **156 checks passed, 0 failed**, with no browser runtime errors. This covers original catalog routes, preview forms, role navigation, public pages and layouts; connected mutations are covered by the dedicated suite.
+- [x] Expanded connected suite: charge-account/invoice creation, exact saved total and invoice/payment-form rendering, alongside the scheduling and clinical journeys.
+- [x] Invoice/payment unit, PostgreSQL concurrency, refund-bound and HTTP authorization/input tests.
 
 ### Mandatory test matrix still to complete
 
@@ -295,14 +307,16 @@ npm run test
 npm run format:check
 npm run build
 npm run test:integration
-node --env-file=apps/web/.env.local scripts/verify-connected.mjs
+npm run test:connected
 go test ./...                       (from services/api)
 go vet ./...                        (from services/api)
 ```
 
 Set `HMS_TEST_DATABASE_URL` to the local development database connection for the Go isolated-schema tests. Do not print credentials. The test creates a random schema, applies migrations there and drops only that schema afterward. Live API/browser tests use synthetic accounts/records and clean them up. Signed-note mutation tests deliberately run only in the disposable schema.
 
-The older `scripts/verify-frontend.mjs` assumes preview-only mutations; it needs updating for newly connected routes before it is used again. Browser tests require a local Chrome executable (override with `HMS_CHROME_PATH`). Successful local tests do not establish production scale or independent security assurance.
+`scripts/verify-frontend.mjs` now blocks persistent API mutations and treats connected catalog routes as read-only checks. The dedicated connected suite owns synthetic persistent workflow tests. Browser tests require a local Chrome executable (override with `HMS_CHROME_PATH`). Preview regression uses `HMS_TEST_EMAIL`/`HMS_TEST_PASSWORD`; `HMS_BASE_URL` can point to a separate loopback production-build QA server, and `HMS_FRONTEND_MODULES` limits a targeted rerun to comma-separated module IDs. Do not print or commit credentials.
+
+The first broad development-mode run encountered one service-restart timeout and a hydration error while builds/hot reload were occurring. The complete rerun against a separate stable production build passed all 156 checks with no runtime errors. The ordinary development app remains on port 3000; temporary QA services were stopped afterward. Successful local tests do not establish production scale or independent security assurance.
 
 ## 6. Per-step completion and Git workflow
 
@@ -314,4 +328,4 @@ The older `scripts/verify-frontend.mjs` assumes preview-only mutations; it needs
 6. Update this checklist, the module inventory and known limitations with actual evidence.
 7. Commit the completed step and push to `origin/main`; never include local secrets, database files or legacy archives.
 
-Next implementation: finish billing persistence/API/integration and QA from the existing work in progress, then continue the remaining domain areas above. No new approval is needed for the already authorized development work.
+Next implementation: prescriptions, pharmacy/inventory movements and their billing linkage, followed by diagnostics and the remaining domain areas above. No new approval is needed for the already authorized development work.

@@ -10,7 +10,12 @@ const email = process.env.HMS_TEST_EMAIL;
 const password = process.env.HMS_TEST_PASSWORD;
 if (!email || !password)
   throw new Error("Set HMS_TEST_EMAIL and HMS_TEST_PASSWORD.");
-const output = ".local/frontend-verification";
+const onlyModules = (process.env.HMS_FRONTEND_MODULES || "")
+  .split(",")
+  .filter(Boolean);
+const output = onlyModules.length
+  ? ".local/frontend-verification-targeted"
+  : ".local/frontend-verification";
 mkdirSync(output, { recursive: true });
 const browser = await chromium.launch({
   headless: true,
@@ -22,6 +27,33 @@ const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
   acceptDownloads: true,
 });
+// Guard preview QA from ever submitting new persistent workflows.
+for (const pattern of ["**/api/hms/**", "**/api/staff**"])
+  await context.route(pattern, (route) =>
+    route.request().method() === "GET"
+      ? route.continue()
+      : route.abort("blockedbyclient"),
+  );
+const connected = new Set([
+  "users",
+  "patients",
+  "appointments",
+  "schedules",
+  "beds",
+  "bed-status",
+  "patient-cases",
+  "ipd-patient-departments",
+  "opd-patient-departments",
+  "accounts",
+  "invoices",
+]);
+const connectedPortals = new Set([
+  "/portal/appointments",
+  "/portal/ipd",
+  "/portal/opd",
+  "/portal/cases",
+  "/portal/invoices",
+]);
 const page = await context.newPage();
 page.setDefaultTimeout(12000);
 const failures = [],
@@ -158,13 +190,15 @@ try {
   ]);
   for (const [index, screen] of (process.env.HMS_FRONTEND_SKIP_CATALOG === "1"
     ? []
-    : catalog
+    : catalog.filter(
+        (screen) => !onlyModules.length || onlyModules.includes(screen.id),
+      )
   ).entries()) {
     await check("module " + screen.id, async () => {
       await visit(
         screen.id === "patients" ? "/patients" : "/modules/" + screen.id,
       );
-      if (special.has(screen.id)) return;
+      if (special.has(screen.id) || connected.has(screen.id)) return;
       await page.locator("main h1").first().waitFor();
       const create = page.getByRole("button", { name: /^New / }).first();
       if (!(await create.isVisible())) return;
@@ -183,238 +217,220 @@ try {
         `Checked ${index + 1}/${catalog.length} catalog routes/forms`,
       );
   }
-  for (const id of [
-    "attendance",
-    "manage-attendance",
-    "modules-setting",
-    "patient-queue-theme",
-    "front-cms-services",
-  ])
-    await check("extra " + id, () => visit("/modules/" + id));
+  if (!onlyModules.length) {
+    for (const id of [
+      "attendance",
+      "manage-attendance",
+      "modules-setting",
+      "patient-queue-theme",
+      "front-cms-services",
+    ])
+      await check("extra " + id, () => visit("/modules/" + id));
 
-  for (const role of [
-    "Doctor",
-    "Nurse",
-    "Receptionist",
-    "Pharmacist",
-    "Lab Technician",
-    "Accountant",
-    "Case Manager",
-    "Patient",
-    "Admin",
-  ]) {
-    await check("role " + role, async () => {
-      await visit("/dashboard");
-      await page.getByLabel("Preview role").selectOption(role);
-      await page.waitForFunction(
-        (value) => sessionStorage.getItem("hms-preview-role") === value,
-        role,
-      );
-      const links = await page
-        .getByRole("navigation", { name: "Main navigation", exact: true })
-        .locator("a")
-        .evaluateAll((elements) =>
-          elements.map((el) => el.getAttribute("href")),
-        );
-      for (const href of links) {
-        await visit(href);
-        if (href.startsWith("/portal/")) {
-          await page
-            .getByRole("button", { name: "View 1", exact: true })
-            .click();
-          await page.getByRole("dialog").waitFor();
-          await page.keyboard.press("Escape");
-          await page.getByRole("dialog").waitFor({ state: "hidden" });
-        }
-      }
-    });
-    console.log("Checked role", role);
-  }
-  await check("schedule persistence and validation", async () => {
-    await visit("/modules/hospital-schedule");
-    await page.getByLabel("Monday Opening time").fill("10:00");
-    await page.getByLabel("Monday Closing time").fill("09:00");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page
-      .getByText("Closing time must be after opening time.", { exact: true })
-      .waitFor();
-    await page.getByLabel("Monday Closing time").fill("18:00");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.reload();
-    await page.waitForFunction(
-      () =>
-        document.querySelector('input[aria-label="Monday Opening time"]')
-          ?.value === "10:00",
-    );
-  });
-  await check("dental chart patient isolation and persistence", async () => {
-    await visit("/modules/odontogram");
-    await page.getByRole("button", { name: "K", exact: true }).click();
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page
-      .getByLabel("Patient:", { exact: false })
-      .selectOption("Jamie Wilson");
-    assert.equal(await page.locator("#Tooth1").getAttribute("fill"), "#fff");
-    await page
-      .getByLabel("Patient:", { exact: false })
-      .selectOption("Alex Morgan");
-    assert.equal(await page.locator("#Tooth1").getAttribute("fill"), "#e91e63");
-    await page.reload();
-    await page.waitForFunction(
-      () =>
-        document.querySelector("#Tooth1")?.getAttribute("fill") === "#e91e63",
-    );
-  });
-  await check("card template rename updates cards", async () => {
-    await visit("/modules/patient-id-card-template");
-    await page
-      .getByRole("button", { name: "Edit Standard", exact: true })
-      .click();
-    await page
-      .getByLabel("Template Name", { exact: false })
-      .fill("Renamed Standard");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await visit("/modules/generate-patient-id-card");
-    await page
-      .getByRole("cell", { name: "Renamed Standard", exact: true })
-      .first()
-      .waitFor();
-    await page
-      .getByRole("button", { name: "View card Alex Morgan", exact: true })
-      .click();
-    const download = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Download", exact: true }).click();
-    await (await download).saveAs(output + "/smart-card.png");
-  });
-  await check("custom fields appear in configured module", async () => {
-    await visit("/modules/add-custom-fields");
-    await page.getByRole("button", { name: /^New / }).click();
-    await page.getByLabel("Field Name", { exact: false }).fill("Triage Note");
-    await page.getByLabel(/^Module:/).selectOption("Patients");
-    await page.getByLabel("Field Type", { exact: false }).selectOption("Text");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await visit("/patients");
-    await page
-      .getByRole("button", { name: "New Patient", exact: true })
-      .click();
-    await page
-      .getByLabel("Triage Note", { exact: false })
-      .fill("Synthetic triage note");
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  });
-  await check("record edit delete search and CSV export", async () => {
-    await visit("/modules/blood-banks");
-    await page
-      .getByRole("button", { name: "New Blood Bank", exact: true })
-      .click();
-    await page.getByLabel("Blood Group:").fill("TEST-CRUD");
-    await page.getByLabel("Remained Bags:").fill("9");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByRole("status").waitFor();
-    await page.reload();
-    await page
-      .getByRole("textbox", { name: "Search Blood Banks" })
-      .fill("TEST-CRUD");
-    await page.getByRole("button", { name: /^Edit DEMO-/ }).click();
-    await page.getByLabel("Remained Bags:").fill("12");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    const csv = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Export", exact: true }).click();
-    await (await csv).saveAs(output + "/blood-banks.csv");
-    assert.ok(
-      readFileSync(output + "/blood-banks.csv", "utf8").includes("TEST-CRUD"),
-    );
-    await page.getByRole("button", { name: /^Delete DEMO-/ }).click();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Delete", exact: true })
-      .click();
-    await page
-      .getByText("No matching records found", { exact: true })
-      .waitFor();
-  });
-  await check("appointment conflict and dependent selections", async () => {
-    await visit("/modules/appointments");
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await page
-        .getByRole("button", { name: "New Appointment", exact: true })
-        .click();
-      await page.getByLabel(/^Patient:/).selectOption("Alex Morgan");
-      await page
-        .getByLabel("Doctor Department", { exact: false })
-        .selectOption("Cardiology");
-      await page.getByLabel(/^Doctor:/).selectOption("Dr. Robin Patel");
-      await page.getByLabel(/^Date:/).fill("2026-10-06");
-      await page.getByLabel(/^Time:/).selectOption("14:00");
-      await page.getByRole("button", { name: "Save", exact: true }).click();
-      if (attempt === 0) await page.getByRole("status").waitFor();
-      else {
-        await page
-          .getByText(
-            "This appointment time is already booked in the preview.",
-            { exact: true },
-          )
-          .waitFor();
-        await page.getByRole("button", { name: "Cancel", exact: true }).click();
-      }
-    }
-  });
-  await check("role-specific billing tabs", async () => {
-    await visit("/dashboard");
-    await page.getByLabel("Preview role").selectOption("Receptionist");
-    await page
-      .getByRole("navigation", { name: "Main navigation", exact: true })
-      .getByRole("link", { name: "Billings", exact: true })
-      .click();
-    await page.waitForURL("**/modules/bills");
-    await page.getByRole("heading", { name: "Bills", exact: true }).waitFor();
-    assert.deepEqual(
-      (
-        await page
-          .getByRole("navigation", { name: "Module navigation", exact: true })
-          .locator("a")
-          .allTextContents()
-      ).map((s) => s.trim()),
-      ["Bills"],
-    );
-    await page.getByLabel("Preview role").selectOption("Admin");
-  });
-  await check("queue theme persistence", async () => {
-    await visit("/modules/patient-queue-theme");
-    await page.getByLabel("Message", { exact: true }).fill("Queue fixture");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.reload();
-    await page.waitForFunction(
-      () =>
-        document.querySelector(
-          '.legacy-form input[type="text"],.legacy-form input:not([type])',
-        )?.value === "Queue fixture",
-    );
-  });
-  for (const width of [1440, 390])
-    for (const path of [
-      "/",
-      "/dashboard",
-      "/patients",
-      "/modules/manage-attendance",
-      "/doctors/1",
+    for (const role of [
+      "Doctor",
+      "Nurse",
+      "Receptionist",
+      "Pharmacist",
+      "Lab Technician",
+      "Accountant",
+      "Case Manager",
+      "Patient",
+      "Admin",
     ]) {
-      await check(`layout ${width} ${path}`, async () => {
-        await page.setViewportSize({ width, height: 900 });
-        await visit(path);
-        assert.equal(
-          await page.evaluate(
-            () => document.documentElement.scrollWidth > innerWidth,
-          ),
-          false,
-          "Horizontal page overflow",
+      await check("role " + role, async () => {
+        await visit("/dashboard");
+        await page.getByLabel("Preview role").selectOption(role);
+        await page.waitForFunction(
+          (value) => sessionStorage.getItem("hms-preview-role") === value,
+          role,
         );
-        await page.screenshot({
-          path: `${output}/${width}-${path.replaceAll("/", "_") || "home"}.png`,
-          fullPage: true,
-        });
+        const links = await page
+          .getByRole("navigation", { name: "Main navigation", exact: true })
+          .locator("a")
+          .evaluateAll((elements) =>
+            elements.map((el) => el.getAttribute("href")),
+          );
+        for (const href of links) {
+          await visit(href);
+          if (href.startsWith("/portal/") && !connectedPortals.has(href)) {
+            await page
+              .getByRole("button", { name: "View 1", exact: true })
+              .click();
+            await page.getByRole("dialog").waitFor();
+            await page.keyboard.press("Escape");
+            await page.getByRole("dialog").waitFor({ state: "hidden" });
+          }
+        }
       });
+      console.log("Checked role", role);
     }
+    await check("schedule persistence and validation", async () => {
+      await visit("/modules/hospital-schedule");
+      await page.getByLabel("Monday Opening time").fill("10:00");
+      await page.getByLabel("Monday Closing time").fill("09:00");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await page
+        .getByText("Closing time must be after opening time.", { exact: true })
+        .waitFor();
+      await page.getByLabel("Monday Closing time").fill("18:00");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await page.reload();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('input[aria-label="Monday Opening time"]')
+            ?.value === "10:00",
+      );
+    });
+    await check("dental chart patient isolation and persistence", async () => {
+      await visit("/modules/odontogram");
+      await page.getByRole("button", { name: "K", exact: true }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await page
+        .getByLabel("Patient:", { exact: false })
+        .selectOption("Jamie Wilson");
+      assert.equal(await page.locator("#Tooth1").getAttribute("fill"), "#fff");
+      await page
+        .getByLabel("Patient:", { exact: false })
+        .selectOption("Alex Morgan");
+      assert.equal(
+        await page.locator("#Tooth1").getAttribute("fill"),
+        "#e91e63",
+      );
+      await page.reload();
+      await page.waitForFunction(
+        () =>
+          document.querySelector("#Tooth1")?.getAttribute("fill") === "#e91e63",
+      );
+    });
+    await check("card template rename updates cards", async () => {
+      await visit("/modules/patient-id-card-template");
+      await page
+        .getByRole("button", { name: "Edit Standard", exact: true })
+        .click();
+      await page
+        .getByLabel("Template Name", { exact: false })
+        .fill("Renamed Standard");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await visit("/modules/generate-patient-id-card");
+      await page
+        .getByRole("cell", { name: "Renamed Standard", exact: true })
+        .first()
+        .waitFor();
+      await page
+        .getByRole("button", { name: "View card Alex Morgan", exact: true })
+        .click();
+      const download = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Download", exact: true }).click();
+      await (await download).saveAs(output + "/smart-card.png");
+    });
+    await check("custom fields appear in configured module", async () => {
+      await visit("/modules/add-custom-fields");
+      await page.getByRole("button", { name: /^New / }).click();
+      await page.getByLabel("Field Name", { exact: false }).fill("Triage Note");
+      await page.getByLabel(/^Module:/).selectOption("Patients");
+      await page
+        .getByLabel("Field Type", { exact: false })
+        .selectOption("Text");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await visit("/modules/patients");
+      await page
+        .getByRole("button", { name: "New Patient", exact: true })
+        .click();
+      await page
+        .getByLabel("Triage Note", { exact: false })
+        .fill("Synthetic triage note");
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    });
+    await check("record edit delete search and CSV export", async () => {
+      await visit("/modules/blood-banks");
+      await page
+        .getByRole("button", { name: "New Blood Bank", exact: true })
+        .click();
+      await page.getByLabel("Blood Group:").fill("TEST-CRUD");
+      await page.getByLabel("Remained Bags:").fill("9");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await page.getByRole("status").waitFor();
+      await page.reload();
+      await page
+        .getByRole("textbox", { name: "Search Blood Banks" })
+        .fill("TEST-CRUD");
+      await page.getByRole("button", { name: /^Edit DEMO-/ }).click();
+      await page.getByLabel("Remained Bags:").fill("12");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      const csv = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Export", exact: true }).click();
+      await (await csv).saveAs(output + "/blood-banks.csv");
+      assert.ok(
+        readFileSync(output + "/blood-banks.csv", "utf8").includes("TEST-CRUD"),
+      );
+      await page.getByRole("button", { name: /^Delete DEMO-/ }).click();
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Delete", exact: true })
+        .click();
+      await page
+        .getByText("No matching records found", { exact: true })
+        .waitFor();
+    });
+    // Persistent appointment conflicts are verified by integration.mjs and verify-connected.mjs.
+    await check("role-specific billing tabs", async () => {
+      await visit("/dashboard");
+      await page.getByLabel("Preview role").selectOption("Receptionist");
+      await page
+        .getByRole("navigation", { name: "Main navigation", exact: true })
+        .getByRole("link", { name: "Billings", exact: true })
+        .click();
+      await page.waitForURL("**/modules/bills");
+      await page.getByRole("heading", { name: "Bills", exact: true }).waitFor();
+      assert.deepEqual(
+        (
+          await page
+            .getByRole("navigation", { name: "Module navigation", exact: true })
+            .locator("a")
+            .allTextContents()
+        ).map((s) => s.trim()),
+        ["Bills"],
+      );
+      await page.getByLabel("Preview role").selectOption("Admin");
+    });
+    await check("queue theme persistence", async () => {
+      await visit("/modules/patient-queue-theme");
+      await page.getByLabel("Message", { exact: true }).fill("Queue fixture");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await page.reload();
+      await page.waitForFunction(
+        () =>
+          document.querySelector(
+            '.legacy-form input[type="text"],.legacy-form input:not([type])',
+          )?.value === "Queue fixture",
+      );
+    });
+    for (const width of [1440, 390])
+      for (const path of [
+        "/",
+        "/dashboard",
+        "/patients",
+        "/modules/manage-attendance",
+        "/doctors/1",
+      ]) {
+        await check(`layout ${width} ${path}`, async () => {
+          await page.setViewportSize({ width, height: 900 });
+          await visit(path);
+          assert.equal(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth > innerWidth,
+            ),
+            false,
+            "Horizontal page overflow",
+          );
+          await page.screenshot({
+            path: `${output}/${width}-${path.replaceAll("/", "_") || "home"}.png`,
+            fullPage: true,
+          });
+        });
+      }
+  }
   assert.deepEqual(pageErrors, [], "Browser runtime errors");
 } finally {
   writeFileSync(

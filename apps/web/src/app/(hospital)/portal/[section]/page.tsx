@@ -1,5 +1,6 @@
 import { ConnectedAppointments } from "@/components/connected-scheduling";
 import { ConnectedClinical } from "@/components/connected-clinical";
+import { ConnectedInvoices } from "@/components/connected-billing";
 import { notFound } from "next/navigation";
 import { portalSections } from "@/lib/role-preview";
 import { RolePortal } from "@/components/role-portal";
@@ -12,6 +13,7 @@ export default async function PortalPage({
   if (section === "appointments") return <ConnectedAppointments />;
   if (section === "ipd" || section === "opd" || section === "cases")
     return <ConnectedClinical mode={section} />;
+  if (section === "invoices") return <ConnectedInvoices />;
   if (!portalSections[section]) notFound();
   return <RolePortal key={section} section={section} />;
 }

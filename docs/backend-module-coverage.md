@@ -1,6 +1,6 @@
 # Original module backend and integration coverage
 
-Checkpoint: 2026-10-04, through commit `21e2f55`. See [the master checklist](backend-delivery-checklist.md) for acceptance criteria and QA evidence.
+Checkpoint: 2026-10-04, through the verified billing core step (following `21e2f55`). See [the master checklist](backend-delivery-checklist.md) for acceptance criteria and QA evidence.
 
 This inventory contains 111 source-catalog screens and 5 additional frontend screens. Each row remains open for full field/action parity; a partial backend is not a completed module. Source group/order is retained instead of alphabetic sorting.
 
@@ -21,9 +21,9 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Patient Queues (`patient-queues`) | Appointments | Preview only; typed backend, integration and workflow QA pending | Open |
 | IPD Patients (`ipd-patient-departments`) | IPD / OPD | Admission, bed allocation, signed notes and discharge; submodules pending | Open |
 | OPD Patients (`opd-patient-departments`) | IPD / OPD | Encounter, signed notes and discharge; repeat visits/submodules pending | Open |
-| Accounts (`accounts`) | Billing | Charge-account contracts in progress; unverified | Open |
+| Accounts (`accounts`) | Billing | Connected charge-account creation/list; full original account types and editing pending | Open |
 | Employee Payrolls (`employee-payrolls`) | Billing | Preview only; typed backend, integration and workflow QA pending | Open |
-| Invoices (`invoices`) | Billing | Billing contracts in progress; unverified | Open |
+| Invoices (`invoices`) | Billing | Connected invoice creation/detail and manual payments/refunds; gateways/taxes/print/full parity pending | Open |
 | Payments (`payments`) | Billing | Preview only; typed backend, integration and workflow QA pending | Open |
 | Payment Reports (`payment-reports`) | Billing | Preview only; typed backend, integration and workflow QA pending | Open |
 | Advanced Payments (`advanced-payments`) | Billing | Preview only; typed backend, integration and workflow QA pending | Open |
@@ -130,7 +130,7 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Public home/content/doctors | Original-style frontend previews | Persist CMS, real public doctors, asset handling and publishing |
 | Public appointment/contact/register | Preview form behavior | Verified booking/registration/enquiry flows and anti-abuse |
 | Login/reset/account | Better Auth and phone bridge foundation | Firebase success path, recovery completion, MFA and full account lifecycle |
-| Patient portal | Appointments/cases/IPD/OPD connected | Bills/invoices/reports/prescriptions/documents/vaccines and full summaries |
+| Patient portal | Appointments/cases/IPD/OPD/invoices connected | Bills/reports/prescriptions/documents/vaccines and full summaries |
 | Staff role dashboards | Mostly preview summaries | Real role-scoped aggregates and actionable work queues |
 | Communications | Persistent authorized outbox | Callbacks, preferences, templates, scheduling and reconciliation |
 | Security preview | Demonstration only | Replace with real security controls; never use demo codes as authentication |

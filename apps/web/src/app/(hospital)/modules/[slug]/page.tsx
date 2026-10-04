@@ -4,6 +4,10 @@ import {
   ConnectedAppointments,
 } from "@/components/connected-scheduling";
 import { ConnectedClinical } from "@/components/connected-clinical";
+import {
+  ConnectedAccounts,
+  ConnectedInvoices,
+} from "@/components/connected-billing";
 import { notFound } from "next/navigation";
 import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
@@ -16,6 +20,8 @@ export default async function ModulePage({
   const { slug } = await params;
   const screen = screens.find((s) => s.id === slug);
   if (!screen) notFound();
+  if (slug === "accounts") return <ConnectedAccounts />;
+  if (slug === "invoices") return <ConnectedInvoices />;
   if (slug === "beds" || slug === "bed-status")
     return <ConnectedClinical mode="beds" />;
   if (slug === "patient-cases") return <ConnectedClinical mode="cases" />;

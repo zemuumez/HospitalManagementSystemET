@@ -1,6 +1,6 @@
 # Current backend delivery status
 
-Backend work is now in progress. See the [detailed backend/integration/QA checklist](backend-delivery-checklist.md) and [module coverage inventory](backend-module-coverage.md). Verified commits `bf1d623`, `add59b9` and `21e2f55` add staff access, scheduling, connected patient access and core clinical admissions. Billing is the current next implementation step. The sections below describe earlier checkpoints and are not the current completion status.
+Backend work is now in progress. See the [detailed backend/integration/QA checklist](backend-delivery-checklist.md) and [module coverage inventory](backend-module-coverage.md). Verified commits `bf1d623`, `add59b9` and `21e2f55` add staff access, scheduling, connected patient access and core clinical admissions. The billing core is also implemented and verified: charge accounts, invoice totals, manual payments/refunds and connected invoice screens. Prescriptions/pharmacy/inventory are next. The sections below describe earlier checkpoints and are not the current completion status.
 
 # Latest frontend review
 

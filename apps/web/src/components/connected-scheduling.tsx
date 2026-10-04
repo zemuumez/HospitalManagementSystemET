@@ -127,14 +127,16 @@ export function Editor({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   const { t } = useLanguage();
   return (
-    <Modal titleId="connected-editor-title" onClose={onClose}>
+    <Modal titleId="connected-editor-title" onClose={onClose} wide={wide}>
       <div className="p-6">
         <div className="page-heading">
           <h2 id="connected-editor-title">{t(title)}</h2>

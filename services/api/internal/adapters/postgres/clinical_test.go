@@ -5,13 +5,18 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"hms.local/api/internal/adapters/httpapi"
 	"hms.local/api/internal/application"
 	"hms.local/api/internal/domain"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -181,4 +186,86 @@ func TestClinicalTransactions(t *testing.T) {
 	if _, e = clinic.Admit(ctx, actors[0], inputs[loser], "admission-key-rebook"); e != nil {
 		t.Fatal("released bed could not be allocated", e)
 	}
+	billing := application.Billing{Store: store, Now: time.Now}
+	account, e := billing.CreateAccount(ctx, actors[0], "Consultation")
+	if e != nil {
+		t.Fatal(e)
+	}
+	invoiceInput := domain.InvoiceInput{PatientID: patients[0].ID, InvoiceDate: time.Now().In(domain.HospitalLocation).Format("2006-01-02"), DiscountBasisPoints: 1000, Lines: []domain.InvoiceLine{{AccountID: account.ID, Quantity: 3, UnitPriceMinor: 333}}}
+	invoice, e := billing.CreateInvoice(ctx, actors[0], invoiceInput, "invoice-key-00000001")
+	if e != nil || invoice.TotalMinor != 899 {
+		t.Fatal("invoice totals", e, invoice.TotalMinor)
+	}
+	again, e := billing.CreateInvoice(ctx, actors[0], invoiceInput, "invoice-key-00000001")
+	if e != nil || again.ID != invoice.ID {
+		t.Fatal("invoice retry", e)
+	}
+	if _, e = billing.Invoice(ctx, actors[3], invoice.ID); e != nil {
+		t.Fatal("patient cannot view own invoice", e)
+	}
+	if _, e = billing.Invoice(ctx, actors[1], invoice.ID); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal("doctor read finance", e)
+	}
+	var payments [2]domain.Payment
+	var payErrors [2]error
+	for n := 0; n < 2; n++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			payments[n], payErrors[n] = billing.RecordPayment(ctx, actors[0], invoice.ID, domain.PaymentInput{AmountMinor: 899, Method: "cash"}, "payment-key-000000"+string(rune('0'+n)))
+		}(n)
+	}
+	wg.Wait()
+	payWinner := 0
+	if payErrors[0] != nil {
+		payWinner = 1
+	}
+	if payErrors[payWinner] != nil || !errors.Is(payErrors[1-payWinner], domain.ErrStale) {
+		t.Fatal("concurrent overpayment", payErrors)
+	}
+	paid := payments[payWinner]
+	retryPayment, e := billing.RecordPayment(ctx, actors[0], invoice.ID, domain.PaymentInput{AmountMinor: 899, Method: "cash"}, "payment-key-000000"+string(rune('0'+payWinner)))
+	if e != nil || retryPayment.ID != paid.ID {
+		t.Fatal("duplicate payment", e)
+	}
+	if _, e = db.Exec(ctx, `UPDATE invoice_payment SET amount_minor=1 WHERE id=$1`, paid.ID); e == nil {
+		t.Fatal("payment ledger changed")
+	}
+	refund := domain.PaymentInput{AmountMinor: 200, Method: "cash", OriginalPaymentID: paid.ID, Reason: "Synthetic correction"}
+	if _, e = billing.RecordPayment(ctx, actors[0], invoice.ID, refund, "refund-key-00000001"); e != nil {
+		t.Fatal(e)
+	}
+	balance, e := billing.Invoice(ctx, actors[0], invoice.ID)
+	if e != nil || balance.PaidMinor != 699 {
+		t.Fatal("refund balance", e, balance.PaidMinor)
+	}
+	refund.AmountMinor = 700
+	if _, e = billing.RecordPayment(ctx, actors[0], invoice.ID, refund, "refund-key-00000002"); !errors.Is(e, domain.ErrStale) {
+		t.Fatal("over-refund", e)
+	}
+	if _, e = billing.RecordPayment(ctx, actors[3], invoice.ID, domain.PaymentInput{AmountMinor: 1, Method: "cash"}, "patient-payment-key"); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal("patient forged payment", e)
+	}
+
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		who := strings.TrimPrefix(r.Header.Get("Cookie"), "session=")
+		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))
+	}))
+	defer auth.Close()
+	handler := httpapi.Server{Billing: billing, Actors: store, AuthURL: auth.URL, Origin: "http://hospital.test", Client: auth.Client()}.Handler()
+	for _, tc := range []struct {
+		actor, body string
+		want        int
+	}{{"patient", `{"amountMinor":200,"method":"cash"}`, 403}, {"admin", `{"amountMinor":200,"method":"cash","role":"admin"}`, 400}, {"admin", `{"amountMinor":200,"method":"cash"}`, 201}} {
+		req := httptest.NewRequest("POST", "/v1/invoices/"+invoice.ID+"/payments", strings.NewReader(tc.body))
+		req.Header.Set("Origin", "http://hospital.test")
+		req.Header.Set("Cookie", "session="+tc.actor)
+		req.Header.Set("Idempotency-Key", "http-payment-key-0001")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != tc.want {
+			t.Fatalf("payment HTTP wanted %d got %d: %s", tc.want, w.Code, w.Body.String())
+		}
+	}
+
 }
