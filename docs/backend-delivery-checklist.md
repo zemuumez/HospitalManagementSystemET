@@ -147,7 +147,8 @@ Backend-first progress:
 - [x] Better Auth credentials/sessions and active database roles.
 - [x] Administrator provisioning and disablement.
 - [ ] Invitation acceptance with expiring single-use links, first-login password policy and identity verification.
-- [ ] Staff profile edits, audited role changes and safe reassignment/deprovisioning of active clinical work.
+- [x] Administrator staff demographic/qualification profile edits with optimistic concurrency and retained revisions; audited role changes revoke sessions and reject active clinical/appointment/access assignments (migration 020).
+- [ ] Explicit care-work reassignment, expanded deprovisioning workflow and staff revision review UI.
 - [x] Opt-in Better Auth authenticator MFA backend: verified enrollment, email/Firebase challenges, single-use recovery, lockout, audited enable/disable and prior-session revocation (migration 018; real Auth-emulator suite).
 - [ ] MFA enrollment/challenge UI, privileged-action step-up and replacement/removal of the security-preview demonstration before production.
 - [x] Password-reset email/link completion, expiry/replay rejection, old-password denial, all-session revocation, logout and reset-request throttling (`npm run test:recovery`).
@@ -171,7 +172,8 @@ Backend-first progress:
 - [x] Patient detail/edit with optimistic concurrency and retained before/after audit history; no patient-delete API, retained clinical/revision references prevent destructive record deletion.
 - [ ] Duplicate detection, merge/correction policy and imported identifier preservation.
 - [ ] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management.
-- [ ] Nurse, receptionist, accountant, pharmacist, case-manager and lab-technician profile parity.
+- [x] Shared staff names/contact/address, optional DOB, gender, designation, qualification and doctor specialty backend fields, with administrator-only access and source comparison (migration 020).
+- [ ] Staff photos/documents, role-specific remaining fields, complete original form parity and profile history integration.
 - [ ] Emergency/guardian contacts, consent/preferences and staff/team assignments.
 - [ ] Smart-card templates, issued identifiers, signed/authorized QR lookup, download and revocation.
 

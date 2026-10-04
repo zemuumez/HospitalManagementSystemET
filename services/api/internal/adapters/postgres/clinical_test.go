@@ -413,5 +413,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testNursing(t, db, store, actors, cases)
 	testOnlinePayments(t, db, store, actors, patients)
 	testAudit(t, db, store, actors)
+	testStaff(t, db, store, actors)
 
 }
