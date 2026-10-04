@@ -53,3 +53,30 @@ func TestStableErrorCodes(t *testing.T) {
 		}
 	}
 }
+
+func TestPrometheusMetricsExposition(t *testing.T) {
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	w := httptest.NewRecorder()
+	Server{}.Handler().ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	contentType := w.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "text/plain") {
+		t.Fatalf("expected text/plain content type, got %s", contentType)
+	}
+
+	body := w.Body.String()
+	for _, expected := range []string{
+		"hms_http_requests_total",
+		"go_goroutines",
+		"go_memstats_alloc_bytes",
+		"hms_app_info",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("metrics missing expected indicator %q", expected)
+		}
+	}
+}
+

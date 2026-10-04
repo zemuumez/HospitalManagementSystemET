@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hms_prod}
+      POSTGRES_USER: ${POSTGRES_USER:-hms_admin}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro
+    secrets:
+      - db_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hms_admin} -d ${POSTGRES_DB:-hms_prod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hms_internal
+
+  api:
+    build:
+      context: ../services/api
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-hms_admin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-hms_prod}?sslmode=disable
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      API_ADDR: 0.0.0.0:8080
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hms_internal
+      - hms_public
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  worker:
+    build:
+      context: ../services/api
+      dockerfile: Dockerfile.worker
+    restart: always
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-hms_admin}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-hms_prod}?sslmode=disable
+      SMS_PROVIDER: ${SMS_PROVIDER:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hms_internal
+
+  proxy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - hms_public
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  hms_internal:
+    internal: true
+  hms_public:

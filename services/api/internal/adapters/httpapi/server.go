@@ -34,6 +34,7 @@ type Server struct {
 	AppointmentOps application.AppointmentOpsService
 	ClinicalCare      application.ClinicalCareService
 	DiagnosticReports application.DiagnosticReportsService
+	Attachments       application.AttachmentsService
 	App               application.Hospital
 	Scheduling     application.Scheduling
 	Clinical       application.Clinical
@@ -148,6 +149,10 @@ func (s Server) Handler() http.Handler {
 			write(w, 200, map[string]string{"status": "ok"})
 			return
 		}
+		if r.URL.Path == "/metrics" && r.Method == "GET" {
+			s.metrics(w, r)
+			return
+		}
 		if s.paymentWebhook(w, r) {
 			return
 		}
@@ -206,6 +211,9 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.diagnosticReports(w, r, a) {
+			return
+		}
+		if s.attachments(w, r, a) {
 			return
 		}
 		if s.audit(w, r, a) {
