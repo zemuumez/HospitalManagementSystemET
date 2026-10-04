@@ -88,3 +88,5 @@ jobs:
           npm run test:connected
       - name: Firebase Auth emulator integration
         run: npm run test:firebase
+      - name: Password recovery integration
+        run: npm run test:recovery

@@ -15,7 +15,8 @@
     "db:migrate": "npm run db:migrate --workspace @hms/web",
     "admin:create": "npm run admin:create --workspace @hms/web",
     "test:frontend": "node scripts/verify-frontend.mjs",
-    "test:firebase": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --firebase"
+    "test:firebase": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --firebase",
+    "test:recovery": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --recovery"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",

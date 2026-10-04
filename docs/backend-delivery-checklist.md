@@ -149,7 +149,8 @@ Backend-first progress:
 - [ ] Invitation acceptance with expiring single-use links, first-login password policy and identity verification.
 - [ ] Staff profile edits, audited role changes and safe reassignment/deprovisioning of active clinical work.
 - [ ] Real staff MFA/step-up authentication; replace or remove the security-preview demonstration before production.
-- [ ] Password recovery completion, reset expiry/replay tests, session management and revoke-all UI.
+- [x] Password-reset email/link completion, expiry/replay rejection, old-password denial, all-session revocation, logout and reset-request throttling (`npm run test:recovery`).
+- [ ] Session-management/revoke-all UI and additional account-recovery administration.
 - [x] Firebase emulator success-path tests: OTP, link, login, revoked token, replay, disabled account and concurrent linking (`npm run test:firebase`).
 - [ ] Firebase production project configuration, authorized domains and OTP anti-abuse limits.
 - [ ] Audited phone-change/unlink/recovery process that cannot claim someone else's account.
@@ -434,3 +435,7 @@ Migration 017 and the Go Stripe adapter implement server-derived checkout and si
 ### Firebase Auth emulator verification
 
 `npm run test:firebase` creates a demo Firebase project and loopback Auth emulator inside the disposable schema/service harness. Real emulator OTP confirmation produces tokens consumed by the existing Better Auth bridge; the resulting session is checked through Go. Tests passed for competing link requests, proof replay, takeover attempts, old linking sessions, disabled accounts and revoked Firebase tokens. No credentials or real SMS are needed. CI includes the same command and now audits development dependencies too. Firebase CLI is pinned, with scoped overrides for patched FTP/OpenTelemetry packages and a brace-free Chokidar release; the Auth-emulator use case passed after overrides. Full npm audit: zero vulnerabilities. General use of other Firebase CLI emulators is not covered by this suite.
+
+### Complete password-recovery verification
+
+The isolated recovery suite follows a Mailpit-delivered reset link, changes the password, verifies single-use and expired-token rejection, rejects the old password, checks revocation of two pre-existing sessions, signs in/out with the replacement password, checks the generic unknown-account response and verifies the fourth reset request is throttled. It passed locally and is added to CI. All accounts/tokens are synthetic in a disposable schema; Mailpit retains synthetic test messages. No new frontend integration was added.

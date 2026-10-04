@@ -17,6 +17,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.cwd();
 const firebaseMode = process.argv.includes("--firebase");
+const recoveryMode = process.argv.includes("--recovery");
 const dsn = new URL(process.env.DATABASE_URL);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
   throw Error("Browser QA requires a loopback PostgreSQL database");
@@ -165,6 +166,16 @@ try {
       emulator,
     );
   }
+  if (recoveryMode) {
+    Object.assign(env, {
+      SMTP_HOST: "127.0.0.1",
+      SMTP_PORT: "1025",
+      SMTP_SECURE: "false",
+      SMTP_USER: "",
+      SMTP_PASSWORD: "",
+      MAIL_FROM: "noreply@hms.local",
+    });
+  }
   const binary = resolve(
     root,
     `services/api/bin/qa-api${process.platform === "win32" ? ".exe" : ""}`,
@@ -200,7 +211,9 @@ try {
       [
         firebaseMode
           ? "scripts/verify-firebase.mjs"
-          : "scripts/verify-connected.mjs",
+          : recoveryMode
+            ? "scripts/verify-recovery.mjs"
+            : "scripts/verify-connected.mjs",
       ],
       {
         cwd: root,
