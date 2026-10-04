@@ -15,12 +15,20 @@ async function proxy(
       "doctors",
       "slots",
       "appointments",
+      "beds",
+      "cases",
+      "encounters",
     ].includes(path[0]);
   const appointment =
     path.length === 2 &&
     ["appointments", "patients"].includes(path[0]) &&
     /^[0-9a-f-]{36}$/i.test(path[1]);
-  if (!allowed && !appointment)
+  const encounter =
+    path.length === 3 &&
+    path[0] === "encounters" &&
+    /^[0-9a-f-]{36}$/i.test(path[1]) &&
+    ["notes", "discharge"].includes(path[2]);
+  if (!allowed && !appointment && !encounter)
     return Response.json({ error: "Not found" }, { status: 404 });
   const origin = process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3000";
   if (request.method !== "GET" && request.headers.get("origin") !== origin)

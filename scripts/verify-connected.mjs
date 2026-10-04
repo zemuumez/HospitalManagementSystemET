@@ -17,6 +17,7 @@ if (
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 const id = randomUUID(),
   password = randomUUID() + "Aa1!",
+  doctorPassword = randomUUID() + "Aa1!",
   email = `browser-${id}@example.test`,
   doctorEmail = `doctor-${id}@example.test`,
   family = `Browser${id.slice(0, 8)}`;
@@ -61,9 +62,7 @@ try {
   await dialog.getByLabel("Name", { exact: true }).fill("Browser test doctor");
   await dialog.getByLabel("Email", { exact: true }).fill(doctorEmail);
   await dialog.getByLabel("Role", { exact: true }).selectOption("doctor");
-  await dialog
-    .getByLabel("Password", { exact: true })
-    .fill(randomUUID() + "Aa1!");
+  await dialog.getByLabel("Password", { exact: true }).fill(doctorPassword);
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await dialog.waitFor({ state: "hidden" });
   await visit("/modules/schedules");
@@ -145,6 +144,79 @@ try {
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
     ),
   );
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await visit("/modules/beds");
+  await page.getByRole("button", { name: "New Bed", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name", { exact: true }).fill(`Bed-${family}`);
+  await dialog.getByLabel("Bed Type", { exact: true }).fill("General");
+  await dialog.getByLabel("Charge (ETB)", { exact: true }).fill("123.45");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  await visit("/modules/patient-cases");
+  await page.getByRole("button", { name: "New Case", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Search patients", { exact: true }).fill(family);
+  await dialog.getByRole("button", { name: "Search", exact: true }).click();
+  await dialog
+    .getByLabel("Patient", { exact: true })
+    .selectOption({ index: 1 });
+  await dialog
+    .getByLabel("Doctor", { exact: true })
+    .selectOption({ label: "Browser test doctor" });
+  await dialog
+    .getByLabel("Description", { exact: true })
+    .fill("Synthetic case");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  await visit("/modules/ipd-patient-departments");
+  await page
+    .getByRole("button", { name: "New IPD Patient", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Patient Case", { exact: true })
+    .selectOption({ index: 1 });
+  await dialog
+    .getByLabel("Bed", { exact: true })
+    .selectOption({ label: `Bed-${family} \u2014 General` });
+  await dialog
+    .getByLabel("Symptoms", { exact: true })
+    .fill("Synthetic admission");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  const signout = await page.request.post(base + "/api/auth/sign-out", {
+    headers: { origin: base },
+    data: {},
+  });
+  assert.equal(signout.status(), 200);
+  await page.goto(base + "/login");
+  await page.getByLabel("Email address").fill(doctorEmail);
+  await page.getByLabel("Password", { exact: false }).fill(doctorPassword);
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await page.waitForURL("**/dashboard");
+  await visit("/modules/ipd-patient-departments");
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Discharge Summary", { exact: true })
+    .fill("Synthetic discharge. Test complete.");
+  await dialog
+    .getByRole("button", { name: "Discharge patient", exact: true })
+    .click();
+  await dialog.waitFor({ state: "hidden" });
+  await page.reload();
+  await page.getByRole("cell", { name: "discharged", exact: true }).waitFor();
+  await visit("/modules/beds");
+  await page
+    .getByRole("row")
+    .filter({ hasText: `Bed-${family}` })
+    .getByText("Available", { exact: true })
+    .waitFor();
+  console.log(
+    "PASS: browser bed and case creation, IPD admission, doctor sign-in, discharge persistence and released bed.",
+  );
   assert.deepEqual(errors, []);
   console.log(
     "PASS: browser staff creation, doctor schedule, patient registration, booking, persistence after reload, mobile layout and no page errors.",
@@ -158,6 +230,9 @@ try {
     ])
   ).rows.map((u) => u.id);
   await db.query("DELETE FROM appointment WHERE created_by=$1", [id]);
+  await db.query("DELETE FROM encounter WHERE created_by=$1", [id]);
+  await db.query("DELETE FROM patient_case WHERE created_by=$1", [id]);
+  await db.query("DELETE FROM hospital_bed WHERE created_by=$1", [id]);
   await db.query("DELETE FROM patient WHERE family_name=$1", [family]);
   await db.query("DELETE FROM doctor_hours WHERE doctor_id=ANY($1::text[])", [
     users,

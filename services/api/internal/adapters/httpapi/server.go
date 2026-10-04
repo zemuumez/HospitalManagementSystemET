@@ -19,6 +19,7 @@ type ActorStore interface {
 type Server struct {
 	App        application.Hospital
 	Scheduling application.Scheduling
+	Clinical   application.Clinical
 	Actors     ActorStore
 	AuthURL    string
 	Origin     string
@@ -112,6 +113,9 @@ func (s Server) Handler() http.Handler {
 		a, err := s.identify(r)
 		if err != nil {
 			write(w, 401, map[string]string{"error": "Sign in to continue"})
+			return
+		}
+		if s.clinical(w, r, a) {
 			return
 		}
 		switch {

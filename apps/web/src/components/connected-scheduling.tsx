@@ -14,7 +14,7 @@ type Staff = {
   active: boolean;
 };
 type Hours = { weekday: number; startMinute: number; endMinute: number };
-type Doctor = {
+export type Doctor = {
   id: string;
   name: string;
   department: string;
@@ -45,12 +45,12 @@ async function staffRequest<T>(query = "", init?: RequestInit): Promise<T> {
   if (!response.ok) throw new Error(body.error || "Unable to load users");
   return body;
 }
-function errorText(error: unknown) {
+export function errorText(error: unknown) {
   return error instanceof Error
     ? error.message
     : "Unable to complete the request";
 }
-function useResource<T>(loader: () => Promise<T>) {
+export function useResource<T>(loader: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
@@ -78,7 +78,7 @@ function useResource<T>(loader: () => Promise<T>) {
   }, [loader, revision]);
   return { data, error, loading, reload: () => setRevision((v) => v + 1) };
 }
-function Table({
+export function Table({
   head,
   children,
 }: {
@@ -101,7 +101,7 @@ function Table({
     </div>
   );
 }
-function Status({
+export function Status({
   loading,
   error,
   empty,
@@ -123,7 +123,7 @@ function Status({
     <p className="legacy-card p-8">{t("No records found")}</p>
   ) : null;
 }
-function Editor({
+export function Editor({
   title,
   onClose,
   children,
@@ -147,7 +147,7 @@ function Editor({
     </Modal>
   );
 }
-function Paging({
+export function Paging({
   page,
   setPage,
   count,
@@ -183,7 +183,7 @@ function Paging({
     </div>
   );
 }
-function Input({
+export function Input({
   label,
   ...props
 }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {

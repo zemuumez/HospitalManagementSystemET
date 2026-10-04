@@ -67,6 +67,7 @@ type AppointmentInput struct {
 }
 
 func (i *AppointmentInput) Validate(now time.Time) error {
+	i.StartsAt = i.StartsAt.UTC().Truncate(time.Microsecond)
 	i.Problem = strings.TrimSpace(i.Problem)
 	if !UUIDPattern.MatchString(i.PatientID) || i.DoctorID == "" || len(i.DoctorID) > 128 || len([]rune(i.Problem)) > 2000 || !i.StartsAt.After(now) || i.StartsAt.After(now.AddDate(1, 0, 0)) {
 		return ErrValidation

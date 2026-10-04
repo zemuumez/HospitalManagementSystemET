@@ -92,6 +92,14 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     "/modules/schedules",
     "/modules/appointments",
     "/portal/appointments",
+    "/portal/ipd",
+    "/portal/opd",
+    "/portal/cases",
+    "/modules/beds",
+    "/modules/bed-status",
+    "/modules/patient-cases",
+    "/modules/ipd-patient-departments",
+    "/modules/opd-patient-departments",
   ].includes(path);
   const selected = screens.find((s) => screenHref(s) === path);
   const group = selected?.group;
