@@ -17,18 +17,19 @@ type ActorStore interface {
 	Actor(context.Context, string) (domain.Actor, error)
 }
 type Server struct {
-	Inventory   application.Inventory
-	App         application.Hospital
-	Scheduling  application.Scheduling
-	Clinical    application.Clinical
-	Billing     application.Billing
-	Pharmacy    application.Pharmacy
-	Diagnostics application.Diagnostics
-	Ready       func(context.Context) error
-	Actors      ActorStore
-	AuthURL     string
-	Origin      string
-	Client      *http.Client
+	OnlinePayments application.OnlinePayments
+	Inventory      application.Inventory
+	App            application.Hospital
+	Scheduling     application.Scheduling
+	Clinical       application.Clinical
+	Billing        application.Billing
+	Pharmacy       application.Pharmacy
+	Diagnostics    application.Diagnostics
+	Ready          func(context.Context) error
+	Actors         ActorStore
+	AuthURL        string
+	Origin         string
+	Client         *http.Client
 }
 
 func write(w http.ResponseWriter, status int, v any) {
@@ -42,6 +43,11 @@ func fail(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	message := "Unable to complete the request"
 	code := "INTERNAL_ERROR"
+	if errors.Is(err, domain.ErrUnavailable) {
+		code = "DEPENDENCY_UNAVAILABLE"
+		status = 503
+		message = "This service is not configured or is temporarily unavailable"
+	}
 	if errors.Is(err, domain.ErrForbidden) {
 		code = "FORBIDDEN"
 		status = 403
@@ -127,6 +133,9 @@ func (s Server) Handler() http.Handler {
 			write(w, 200, map[string]string{"status": "ok"})
 			return
 		}
+		if s.paymentWebhook(w, r) {
+			return
+		}
 		if r.Method != "GET" && r.Header.Get("Origin") != s.Origin {
 			write(w, 403, map[string]string{"error": "Request origin is not allowed", "code": "ORIGIN_DENIED"})
 			return
@@ -146,6 +155,9 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.pharmacy(w, r, a) {
+			return
+		}
+		if s.onlinePayments(w, r, a) {
 			return
 		}
 		if s.billing(w, r, a) {

@@ -233,7 +233,8 @@ Backend-first progress:
 - [ ] Bills/invoices, itemized services, quantities, printable receipts and original print-template parity.
 - [x] Core invoice partial/full payments, idempotent posting, overpayment prevention and append-only refunds.
 - [ ] Expanded reversal/voiding approvals and reconciliation workflows.
-- [ ] Payment provider integrations, signed webhooks, event replay protection and settlement reconciliation.
+- [x] Optional Stripe invoice checkout, raw-body signature/timestamp/mode verification, durable event/intent replay protection and balance-conflict review queue; fake-provider and signed-webhook integration tests (migration 017).
+- [ ] Payment cancellation/refund execution, operator reconciliation resolution, settlement/fee reports, additional gateways and real sandbox/live verification.
 - [x] Pharmacy dispensing-to-invoice linkage with captured prices and unique immutable source associations; concurrent duplicate billing tested (migration 007).
 - [x] Released diagnostic-order invoices derive patient/tariff from the source, retain unique linkage and reject duplicate or changed-source billing (migration 016).
 - [ ] IPD/OPD/ambulance charges, bundled lab bills and broader source-workflow billing.
@@ -424,3 +425,7 @@ Migration 015 adds bounded nurse rosters with retained assignment events and typ
 ### Diagnostic source billing
 
 Migration 016 links released diagnostic orders to one immutable invoice. Admin/accountant billing derives the patient and immutable catalog tariff, with validated account/discount and exact integer totals. Concurrent requests return one invoice; lab staff cannot issue invoices and unreleased orders cannot be billed through this endpoint. Pharmacy and diagnostics now share the source-invoice posting helper. PostgreSQL/HTTP tests and vet passed, including retained source links, exact totals and patient invoice access.
+
+### Optional payment-provider backend
+
+Migration 017 and the Go Stripe adapter implement server-derived checkout and signed-success-event ledger posting. All credential fields remain blank; no live provider request or charge occurred. Tests use a loopback fake provider and locally signed payloads, cover request metadata/idempotency, mode/signature/raw-body/timestamp rejection, duplicate checkout/event/intent races, patient scope and overpayment review. Go tests/vet passed. Setup instructions now document the implemented webhook route and explicitly separate sandbox/live credentials. Full provider refunds, cancellation, settlement and operator resolution remain open. [Contract](backend-online-payments.md).

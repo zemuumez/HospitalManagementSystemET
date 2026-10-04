@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"hms.local/api/internal/adapters/httpapi"
 	"hms.local/api/internal/adapters/postgres"
+	"hms.local/api/internal/adapters/stripe"
 	"hms.local/api/internal/application"
 	"log/slog"
 	"net/http"
@@ -50,7 +51,11 @@ func main() {
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
-	handler := httpapi.Server{Ready: db.Ping, App: application.Hospital{Store: store, Now: time.Now}, Scheduling: application.Scheduling{Store: store, Now: time.Now}, Clinical: application.Clinical{Store: store, Now: time.Now}, Billing: application.Billing{Store: store, Now: time.Now}, Pharmacy: application.Pharmacy{Store: store, Now: time.Now}, Diagnostics: application.Diagnostics{Store: store}, Inventory: application.Inventory{Store: store}, Actors: store, AuthURL: authURL, Origin: authURL, Client: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}.Handler()
+	var provider application.PaymentProvider
+	if os.Getenv("PAYMENT_PROVIDER") == "stripe" {
+		provider = stripe.Client{Secret: os.Getenv("STRIPE_SECRET_KEY"), WebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"), Live: os.Getenv("APP_ENV") == "production"}
+	}
+	handler := httpapi.Server{OnlinePayments: application.OnlinePayments{Store: store, Provider: provider, Now: time.Now}, Ready: db.Ping, App: application.Hospital{Store: store, Now: time.Now}, Scheduling: application.Scheduling{Store: store, Now: time.Now}, Clinical: application.Clinical{Store: store, Now: time.Now}, Billing: application.Billing{Store: store, Now: time.Now}, Pharmacy: application.Pharmacy{Store: store, Now: time.Now}, Diagnostics: application.Diagnostics{Store: store}, Inventory: application.Inventory{Store: store}, Actors: store, AuthURL: authURL, Origin: authURL, Client: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}.Handler()
 	server := &http.Server{Addr: addr, Handler: http.TimeoutHandler(handler, 15*time.Second, `{"error":"Request timed out"}`), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	go func() {
 		<-ctx.Done()

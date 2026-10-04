@@ -12,7 +12,7 @@ Production values are intentionally blank in [deployment/.env.example](../deploy
 | Firebase project/web app and server identity | Your Firebase/Google Cloud account | Phone-login proof verification |
 | SMS-enabled sender and account credentials | Your SMS provider account | Operational messaging worker |
 | Verified email sender and SMTP credentials | Your email provider account | Password reset and operational email |
-| Payment provider merchant eligibility and credentials | Hospital's approved merchant account | Online payment adapter, when implemented |
+| Payment provider merchant eligibility and credentials | Hospital's approved merchant account | Optional Stripe backend; merchant validation required |
 | Hospital hours, tax rules, currency and clinical approval rules | Hospital administrator/accountant/clinical lead | Configuration and acceptance review |
 | Production host, backup target, retention and operator contacts | Your infrastructure administrator | Deployment and recovery |
 
@@ -54,18 +54,19 @@ For production:
 4. Set MAIL_FROM to the web sender (display name allowed), and SMTP_FROM to the worker's plain email address. They must be authorized senders.
 5. Restart web and worker. Request a password reset for your controlled test account and send one operational email to an approved recipient. Verify delivery and links use your HTTPS domain.
 
-## 5. Payment credentials (preparation; adapter still pending)
+## 5. Optional Stripe payment setup
 
-Existing payment forms record money already received/refunded; they do not charge a card or move money. Blank reserved payment variables do not change that. Do not buy a provider plan merely to finish local development.
+Leave PAYMENT_PROVIDER, STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET blank until you choose and configure a supported merchant account. The backend responds DEPENDENCY_UNAVAILABLE with blank configuration. Existing manual payment forms continue to record completed transactions; the new online checkout UI is deferred to Section 4.
 
-If Stripe is selected and supports the hospital's merchant jurisdiction:
+1. Confirm the hospital can open a merchant account in its jurisdiction and accept the required currency. ETB presentment support alone does not establish merchant eligibility. Start with the provider's sandbox, not live money.
+2. Create/select the sandbox and open its API-key page. Copy the secret key into private STRIPE_SECRET_KEY; save its publishable key in NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY for later UI integration. Never put the secret key in a NEXT_PUBLIC variable. Set PAYMENT_PROVIDER=stripe only in the environment you are testing.
+3. Configure an exact HTTPS reverse-proxy route `/v1/webhooks/stripe` to the private Go API's same path. Preserve the raw request body and Stripe-Signature header; do not expose all private hospital endpoints. In Stripe's webhook settings, register `https://YOUR-HOSPITAL-DOMAIN/v1/webhooks/stripe` for snapshot `payment_intent.succeeded` events. Replace the domain; the route itself is implemented.
+4. Copy that endpoint's signing secret into STRIPE_WEBHOOK_SECRET. For local development, `stripe listen --events payment_intent.succeeded --forward-to http://127.0.0.1:8080/v1/webhooks/stripe` prints a different, local signing secret; use that local secret when testing CLI forwarding. Do not mix dashboard and CLI secrets.
+5. Restart the Go API. Use a non-production APP_ENV with `sk_test_` credentials for sandbox tests. Production APP_ENV accepts only `sk_live_` keys and live-mode events. Complete authorization, signature/replay, amount/currency and reconciliation tests in staging before considering live activation.
+6. The protected backend checkout request is `POST /v1/invoices/{invoiceId}/checkout` with `{}` and the authenticated session/origin. It derives the outstanding invoice amount, creates/retrieves one provider intent, and returns a client secret only to authorized admin/accountant/owning-patient callers. Creation does not confirm a card or charge it. Card collection must use the provider's browser components during Section 4; never send card data to HMS.
+7. Verify a successful sandbox webhook posts exactly one invoice payment, replay it, and check `/v1/payment-reviews` as admin/accountant. Mismatched balances/amounts go to review rather than overpaying the ledger. Settlement reports, refund/cancellation execution and operator resolution remain pending; do not interpret local fake-provider tests as live settlement verification.
 
-1. Create a merchant account and sandbox. Complete the provider's requested business/bank verification before live use.
-2. In the sandbox API-key page, copy the publishable key to NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY and secret key to STRIPE_SECRET_KEY. Never put the secret key in browser variables.
-3. Once the application's signed webhook endpoint is implemented and documented, register its HTTPS URL in Stripe and copy that endpoint's signing secret to STRIPE_WEBHOOK_SECRET. Do not invent a callback URL or reuse an API key as a signing secret.
-4. Use sandbox payments/webhook fixtures first. Live keys and live endpoint secrets are separate; activate only after amount/currency/replay/refund reconciliation tests pass.
-
-See [Stripe keys](https://docs.stripe.com/keys) and [webhook setup](https://docs.stripe.com/webhooks). Other gateways require their own adapter, credential names and signature verification; credentials are not interchangeable. Provider choice remains configurable work, not an assumption of Ethiopian merchant support.
+References: [Stripe keys](https://docs.stripe.com/keys), [webhook setup](https://docs.stripe.com/webhooks), [raw-body signatures](https://docs.stripe.com/webhooks/signature), [PaymentIntents](https://docs.stripe.com/api/payment_intents/create), [idempotent requests](https://docs.stripe.com/api/idempotent_requests), [currencies](https://docs.stripe.com/currencies). Other gateways need their own adapters and credentials. This optional implementation is not an assertion of Ethiopian merchant eligibility.
 
 ## 6. Values still intentionally unfilled
 

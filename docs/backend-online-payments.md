@@ -1,0 +1,15 @@
+# Optional online payments
+
+The Stripe backend is opt-in. Blank PAYMENT_PROVIDER/STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET leaves it unavailable. Secret values are intentionally not supplied. See [provider setup](provider-setup.md).
+
+## Contracts and invariants
+
+- Authenticated `POST /v1/invoices/{id}/checkout`, body `{}`: administrator/accountant or owning patient. Creates one durable checkout per invoice, using its current remaining balance (ETB minor units, 1 through 99999999). A doctor or unrelated patient cannot obtain a client secret. Amount, currency, invoice/checkout metadata and idempotency key are server-derived. Secrets are returned under no-store response headers and are not persisted or logged.
+- The adapter creates a PaymentIntent without confirming it or accepting card details. Same-checkout requests use the same provider idempotency key. Once the provider ID is known, retries retrieve that intent. Unbound requests older than 23 hours are refused to avoid blindly reusing a provider key beyond its retention window. These require operator reconciliation.
+- Public `POST /v1/webhooks/stripe` is the only added session/Origin exception. It requires the configured endpoint secret, exact raw-body HMAC verification, constant-time signature comparison, a timestamp within five minutes and matching test/live mode. Bodies are limited to 64 KiB. Unknown event types are acknowledged without posting. Snapshot payment_intent.succeeded events are handled; thin-event retrieval is not implemented.
+- Verified success must match checkout metadata, amount, currency and provider identity. The transaction locks checkout/invoice, retains a hashed event record and unique intent receipt, posts one immutable stripe-method invoice payment, updates the balance and audits the action. Different event IDs for the same intent cannot post twice. The raw provider payload is not stored.
+- Changed balance, unexpected amount/currency/identity or unknown HMS checkout produces a retained review event without changing the invoice balance. `GET /v1/payment-reviews?page=1` exposes 25 review events per page only to admin/accountant.
+
+The current integration allows one checkout lifecycle per invoice. Provider cancellation, repeated collection after refunds, provider refund execution, review resolution and settlement/fee reconciliation remain pending. A provider success can represent money received while an invoice remains under review; operators must resolve that discrepancy with provider evidence. Manual refund forms still record already-completed movements and do not call Stripe. New frontend checkout integration is Section 4 work.
+
+Tests use fake credentials, a loopback HTTP provider, and locally generated webhook signatures. No real sandbox or live provider credentials were used. Tests cover duplicate checkout/event/intent handling, raw body changes, missing/wrong/stale/future signatures, wrong mode, body bounds, source-derived amounts, authorization and excess-payment review. These establish local behavior, not live processing or settlement.
