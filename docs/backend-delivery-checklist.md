@@ -375,3 +375,7 @@ Migration 008 was applied to the existing local database, the API restarted with
 ### Diagnostics backend increment
 
 Migration 009 and typed Go domain/application/PostgreSQL/HTTP layers implement test catalogs and the diagnostic lifecycle. Patient release is explicit; signed/previously released results are retained across amendments. [Contract and remaining scope](backend-diagnostics-contract.md). Go tests with isolated PostgreSQL enabled and vet passed. Provider blanks and setup are documented separately; no external credentials were needed for these tests.
+
+### Continuous verification setup
+
+Added a GitHub Actions workflow covering disposable PostgreSQL migrations, Go tests/vet/builds, web checks/build, npm production dependency audit, Mailpit/captured-message API integration and existing Chrome workflows. [Verification setup](continuous-verification.md). Local web tests and formatting passed; production dependency audit returned zero vulnerabilities after allowing access to the npm advisory endpoint. Workflow YAML parsed/formatted with Prettier. Hosted execution is not yet claimed successful and the full CI checklist item remains open until verified.

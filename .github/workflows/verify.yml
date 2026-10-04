@@ -1,0 +1,88 @@
+name: Verify HMS
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: hms_ci
+          POSTGRES_PASSWORD: isolated_ci_only
+          POSTGRES_DB: hms_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hms_ci -d hms_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      mailpit:
+        image: axllent/mailpit:latest
+        ports: ["1025:1025", "8025:8025"]
+    env:
+      DATABASE_URL: postgresql://hms_ci:isolated_ci_only@127.0.0.1:5432/hms_ci
+      HMS_TEST_DATABASE_URL: postgresql://hms_ci:isolated_ci_only@127.0.0.1:5432/hms_ci
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      GO_API_URL: http://127.0.0.1:8080
+      API_ADDR: 127.0.0.1:8080
+      APP_ENV: development
+      SMS_PROVIDER: capture
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1025"
+      SMTP_FROM: noreply@hms.local
+      MAIL_FROM: noreply@hms.local
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/api/go.mod
+          cache-dependency-path: services/api/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Create isolated test configuration
+        run: |
+          node --input-type=module -e 'import {randomBytes} from "node:crypto"; import {writeFileSync,appendFileSync} from "node:fs"; const secret=randomBytes(32).toString("hex"); writeFileSync("apps/web/.env.local", "BETTER_AUTH_SECRET="+secret+"\n"); appendFileSync(process.env.GITHUB_ENV,"BETTER_AUTH_SECRET="+secret+"\n");'
+      - name: Migrations and backend checks
+        run: |
+          npm run db:migrate
+          cd services/api
+          go test -count=1 ./...
+          go vet ./...
+          go build -o bin/api ./cmd/api
+          go build -o bin/worker ./cmd/worker
+      - name: Web checks and build
+        run: |
+          npm run test
+          npm run format:check
+          npm run build
+          npm run typecheck
+      - name: Dependency vulnerability gate
+        run: npm audit --omit=dev --audit-level=high
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Start isolated services
+        run: |
+          mkdir -p .local
+          services/api/bin/api > .local/api-ci.log 2>&1 &
+          services/api/bin/worker > .local/worker-ci.log 2>&1 &
+          npm run dev > .local/web-ci.log 2>&1 &
+          node --input-type=module -e 'for(let n=0;n<90;n++){try{const r=await fetch("http://127.0.0.1:3000/login");if(r.ok)process.exit(0)}catch{}await new Promise(r=>setTimeout(r,1000))}process.exit(1)'
+      - name: Authentication and API integration
+        run: npm run test:integration
+      - name: Existing connected browser regression
+        run: |
+          export HMS_CHROME_PATH="$(node --input-type=module -e 'import {chromium} from "@playwright/test"; console.log(chromium.executablePath())')"
+          npm run test:connected
