@@ -9,12 +9,14 @@ import {
   closeSync,
   readdirSync,
   readFileSync,
+  writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.cwd();
+const firebaseMode = process.argv.includes("--firebase");
 const dsn = new URL(process.env.DATABASE_URL);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
   throw Error("Browser QA requires a loopback PostgreSQL database");
@@ -121,6 +123,48 @@ try {
   for (const key of Object.keys(env))
     if (key.includes("FIREBASE") || key === "GOOGLE_APPLICATION_CREDENTIALS")
       env[key] = "";
+  if (firebaseMode) {
+    const authPort = await port();
+    env.FIREBASE_PROJECT_ID = `demo-hms-${token.slice(0, 12)}`;
+    env.FIREBASE_AUTH_EMULATOR_HOST = `127.0.0.1:${authPort}`;
+    env.FIREBASE_CLI_DISABLE_USAGE_TRACKING = "true";
+    env.XDG_CONFIG_HOME = resolve(webRoot, "../firebase-config");
+    env.CI = "true";
+    const config = resolve(webRoot, "../firebase.json");
+    writeFileSync(
+      config,
+      JSON.stringify({
+        emulators: {
+          auth: { host: "127.0.0.1", port: authPort },
+          hub: { host: "127.0.0.1", port: await port() },
+          logging: { host: "127.0.0.1", port: await port() },
+          ui: { enabled: false },
+          singleProjectMode: true,
+        },
+      }),
+    );
+    const emulator = start(
+      process.execPath,
+      [
+        resolve(root, "node_modules/firebase-tools/lib/bin/firebase.js"),
+        "emulators:start",
+        "--only",
+        "auth",
+        "--project",
+        env.FIREBASE_PROJECT_ID,
+        "--config",
+        config,
+        "--non-interactive",
+      ],
+      env,
+      resolve(webRoot, ".."),
+      "firebase",
+    );
+    await ready(
+      `http://${env.FIREBASE_AUTH_EMULATOR_HOST}/emulator/v1/projects/${env.FIREBASE_PROJECT_ID}/config`,
+      emulator,
+    );
+  }
   const binary = resolve(
     root,
     `services/api/bin/qa-api${process.platform === "win32" ? ".exe" : ""}`,
@@ -151,16 +195,26 @@ try {
     ready(env.BETTER_AUTH_URL + "/login", web),
   ]);
   await new Promise((ok, fail) => {
-    const test = spawn(process.execPath, ["scripts/verify-connected.mjs"], {
-      cwd: root,
-      env,
-      stdio: "inherit",
-      windowsHide: true,
-    });
+    const test = spawn(
+      process.execPath,
+      [
+        firebaseMode
+          ? "scripts/verify-firebase.mjs"
+          : "scripts/verify-connected.mjs",
+      ],
+      {
+        cwd: root,
+        env,
+        stdio: "inherit",
+        windowsHide: true,
+      },
+    );
     children.push(test);
     test.once("error", fail);
     test.once("exit", (code) =>
-      code === 0 ? ok() : fail(Error("Connected browser verification failed")),
+      code === 0
+        ? ok()
+        : fail(Error("Isolated integration verification failed")),
     );
   });
 } finally {
@@ -182,7 +236,5 @@ try {
   if (created && /^hms_browser_[a-f0-9]{24}$/.test(schema))
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
   await admin.end();
-  console.log(
-    "Isolated browser QA schema removed; development records retained.",
-  );
+  console.log("Isolated QA schema removed; development records retained.");
 }

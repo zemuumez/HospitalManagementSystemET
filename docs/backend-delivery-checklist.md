@@ -28,7 +28,8 @@ Updated: 2026-10-04. Scope: **one hospital**, Next.js/Tailwind, Go clean archite
 - [x] Development SMS capture and Mailpit email/password-reset delivery tested without contacting real recipients.
 - [x] Configurable Twilio adapter; ambiguous send outcomes are marked uncertain rather than blindly resent.
 - [x] Firebase bridge code: verified recent phone proof, explicit account binding, replay prevention and Better Auth session issuance.
-- [ ] Successful Firebase OTP/link/sign-in end-to-end verification. Configuration/emulator success-path testing remains open.
+- [x] Firebase Auth emulator OTP/link/sign-in through Better Auth and Go, including concurrent linking/replay, recent-session, takeover, disabled-account and revoked-token checks.
+- [ ] Real Firebase project/OTP configuration and controlled live-device verification.
 
 ### 1.2 Step 1: staff administration and scheduling
 
@@ -149,7 +150,7 @@ Backend-first progress:
 - [ ] Staff profile edits, audited role changes and safe reassignment/deprovisioning of active clinical work.
 - [ ] Real staff MFA/step-up authentication; replace or remove the security-preview demonstration before production.
 - [ ] Password recovery completion, reset expiry/replay tests, session management and revoke-all UI.
-- [ ] Firebase emulator success-path tests: OTP, link, login, revoked token, replay, disabled account and concurrent linking.
+- [x] Firebase emulator success-path tests: OTP, link, login, revoked token, replay, disabled account and concurrent linking (`npm run test:firebase`).
 - [ ] Firebase production project configuration, authorized domains and OTP anti-abuse limits.
 - [ ] Audited phone-change/unlink/recovery process that cannot claim someone else's account.
 - [ ] Full role/action/record matrix for admin, doctor, patient, nurse, receptionist, pharmacist, accountant, case manager and lab technician.
@@ -429,3 +430,7 @@ Migration 016 links released diagnostic orders to one immutable invoice. Admin/a
 ### Optional payment-provider backend
 
 Migration 017 and the Go Stripe adapter implement server-derived checkout and signed-success-event ledger posting. All credential fields remain blank; no live provider request or charge occurred. Tests use a loopback fake provider and locally signed payloads, cover request metadata/idempotency, mode/signature/raw-body/timestamp rejection, duplicate checkout/event/intent races, patient scope and overpayment review. Go tests/vet passed. Setup instructions now document the implemented webhook route and explicitly separate sandbox/live credentials. Full provider refunds, cancellation, settlement and operator resolution remain open. [Contract](backend-online-payments.md).
+
+### Firebase Auth emulator verification
+
+`npm run test:firebase` creates a demo Firebase project and loopback Auth emulator inside the disposable schema/service harness. Real emulator OTP confirmation produces tokens consumed by the existing Better Auth bridge; the resulting session is checked through Go. Tests passed for competing link requests, proof replay, takeover attempts, old linking sessions, disabled accounts and revoked Firebase tokens. No credentials or real SMS are needed. CI includes the same command and now audits development dependencies too. Firebase CLI is pinned, with scoped overrides for patched FTP/OpenTelemetry packages and a brace-free Chokidar release; the Auth-emulator use case passed after overrides. Full npm audit: zero vulnerabilities. General use of other Firebase CLI emulators is not covered by this suite.

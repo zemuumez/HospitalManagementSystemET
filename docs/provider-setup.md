@@ -32,6 +32,8 @@ For server verification, prefer a workload identity/Application Default Credenti
 
 Production must omit both emulator variables entirely. Rebuild Next.js after changing NEXT_PUBLIC_* fields; restart the web service after changing server credentials. Test with an existing hospital account: sign in by email, link the verified phone, sign out, then phone-sign-in. Confirm an unlinked phone cannot take over an existing account. These successful live-provider checks remain pending until you configure your project.
 
+Local verification is available now: `npm run test:firebase` runs real Auth-emulator OTP/link/sign-in tests with a generated demo project and isolated services. It needs the local PostgreSQL connection and installed npm development dependencies, but no Firebase keys, service-account file, phone device or paid SMS. See [CI/testing details](continuous-verification.md). This does not verify production reCAPTCHA, SMS carrier delivery or project quotas.
+
 ## 3. Operational SMS with Twilio
 
 1. Create/select a Twilio account and obtain its Account SID and Auth Token from the console.

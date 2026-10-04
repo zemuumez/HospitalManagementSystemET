@@ -70,7 +70,7 @@ jobs:
           npm run build
           npm run typecheck
       - name: Dependency vulnerability gate
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --audit-level=high
       - name: Install test browser
         run: npx playwright install --with-deps chromium
       - name: Start isolated services
@@ -86,3 +86,5 @@ jobs:
         run: |
           export HMS_CHROME_PATH="$(node --input-type=module -e 'import {chromium} from "@playwright/test"; console.log(chromium.executablePath())')"
           npm run test:connected
+      - name: Firebase Auth emulator integration
+        run: npm run test:firebase
