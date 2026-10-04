@@ -216,14 +216,14 @@ Backend-first progress:
 
 - [x] Pathology/radiology test definitions and typed parameters with retained unit/reference-range labels (migration 009).
 - [x] Diagnostic catalog revision/archive with retained parameters/tariffs, linked revision series, active-only ordering and concurrent revision protection (migration 024).
-- [ ] Full category/unit master CRUD, remaining original fields and charge categories.
+- [x] Full category/unit master CRUD, remaining original fields and charge categories (migration 039; `diagnostic_category`, `diagnostic_unit`, `/v1/diagnostic-categories`, `/v1/diagnostic-units`).
 - [x] Encounter-linked orders, unique sample/accession references, collection/processing, doctor sign-off/release and retained result amendments; concurrency/privacy tests.
 - [x] Lab sample rejection/recollection with required rejection reasons, immutable collection/rejection history, globally retained sample references and no replacement after results exist (migration 026).
-- [ ] Complete original report parity and reviewer specialty/team policy.
-- [ ] Authorized report files and patient portal report release.
-- [ ] Diagnosis templates/tests/results and linkage to cases/encounters.
-- [ ] Vaccination catalog, administered doses, lot/expiry records and schedules.
-- [ ] Birth/death/operation/investigation reports with authorized edits and printable outputs.
+- [x] Complete original report parity and reviewer specialty/team policy (migration 039; doctor/lab-technician attribution and released report tracking).
+- [x] Authorized report files and patient portal report release (migration 039; `diagnostic_report_file`, `/v1/diagnostic-orders/{id}/files`, `/v1/diagnostic-report-files/{id}/release`).
+- [x] Diagnosis templates/tests/results and linkage to cases/encounters (migration 039; `diagnosis_template`, `/v1/diagnosis-templates`).
+- [x] Vaccination catalog, administered doses, lot/expiry records and schedules (migration 039; `vaccine_catalog`, `patient_vaccination`, `/v1/vaccines`, `/v1/patients/{id}/vaccinations`).
+- [x] Birth/death/operation/investigation reports with authorized edits and printable outputs (migration 039; `birth_report`, `death_report`, `operation_report`, `investigation_report`, `/v1/vital-reports/*`, `/v1/patients/{id}/investigations`).
 
 ### G. Pharmacy, blood bank and inventory
 

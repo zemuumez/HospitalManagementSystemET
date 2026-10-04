@@ -32,8 +32,9 @@ type Server struct {
 	MasterData     application.MasterDataService
 	PatientExt     application.PatientExtensionsService
 	AppointmentOps application.AppointmentOpsService
-	ClinicalCare   application.ClinicalCareService
-	App            application.Hospital
+	ClinicalCare      application.ClinicalCareService
+	DiagnosticReports application.DiagnosticReportsService
+	App               application.Hospital
 	Scheduling     application.Scheduling
 	Clinical       application.Clinical
 	Billing        application.Billing
@@ -202,6 +203,9 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.clinicalCare(w, r, a) {
+			return
+		}
+		if s.diagnosticReports(w, r, a) {
 			return
 		}
 		if s.audit(w, r, a) {
