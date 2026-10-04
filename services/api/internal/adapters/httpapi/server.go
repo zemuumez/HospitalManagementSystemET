@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,11 +17,12 @@ type ActorStore interface {
 	Actor(context.Context, string) (domain.Actor, error)
 }
 type Server struct {
-	App     application.Hospital
-	Actors  ActorStore
-	AuthURL string
-	Origin  string
-	Client  *http.Client
+	App        application.Hospital
+	Scheduling application.Scheduling
+	Actors     ActorStore
+	AuthURL    string
+	Origin     string
+	Client     *http.Client
 }
 
 func write(w http.ResponseWriter, status int, v any) {
@@ -43,7 +45,15 @@ func fail(w http.ResponseWriter, err error) {
 	}
 	if errors.Is(err, domain.ErrConflict) {
 		status = 409
-		message = "This request key was already used for a different message"
+		message = "This request key was already used for different data"
+	}
+	if errors.Is(err, domain.ErrNotFound) {
+		status = 404
+		message = "Record not found"
+	}
+	if errors.Is(err, domain.ErrStale) {
+		status = 409
+		message = "The record changed or the selected time is unavailable. Refresh and try again."
 	}
 	write(w, status, map[string]string{"error": message})
 }
@@ -105,6 +115,64 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		switch {
+		case r.URL.Path == "/v1/doctors" && r.Method == "GET":
+			out, e := s.Scheduling.Doctors(r.Context(), a)
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			write(w, 200, map[string]any{"doctors": out})
+		case r.URL.Path == "/v1/doctors" && r.Method == "POST":
+			var d domain.Doctor
+			if !decode(w, r, &d) {
+				return
+			}
+			out, e := s.Scheduling.SaveDoctor(r.Context(), a, d)
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			write(w, 200, out)
+		case r.URL.Path == "/v1/slots" && r.Method == "GET":
+			out, e := s.Scheduling.Slots(r.Context(), a, r.URL.Query().Get("doctorId"), r.URL.Query().Get("date"))
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			write(w, 200, map[string]any{"slots": out, "timezone": "Africa/Addis_Ababa"})
+		case r.URL.Path == "/v1/appointments" && r.Method == "GET":
+			page := 1
+			if raw := r.URL.Query().Get("page"); raw != "" {
+				page, _ = strconv.Atoi(raw)
+			}
+			out, e := s.Scheduling.Appointments(r.Context(), a, page)
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			write(w, 200, map[string]any{"appointments": out, "page": page, "pageSize": 25})
+		case r.URL.Path == "/v1/appointments" && r.Method == "POST":
+			var i domain.AppointmentInput
+			if !decode(w, r, &i) {
+				return
+			}
+			out, e := s.Scheduling.Book(r.Context(), a, i, r.Header.Get("Idempotency-Key"))
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			write(w, 201, out)
+		case strings.HasPrefix(r.URL.Path, "/v1/appointments/") && r.Method == "PATCH":
+			var c domain.AppointmentChange
+			if !decode(w, r, &c) {
+				return
+			}
+			out, e := s.Scheduling.Change(r.Context(), a, strings.TrimPrefix(r.URL.Path, "/v1/appointments/"), c)
+			if e != nil {
+				fail(w, e)
+				return
+			}
+			write(w, 200, out)
 		case r.URL.Path == "/v1/me" && r.Method == "GET":
 			write(w, 200, map[string]any{"user": a, "permissions": a.Permissions()})
 		case r.URL.Path == "/v1/overview" && r.Method == "GET":

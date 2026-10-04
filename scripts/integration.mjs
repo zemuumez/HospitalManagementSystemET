@@ -125,6 +125,147 @@ try {
     ).json();
     assert.equal(stats.patientCount, 1);
   }
+
+  // Scheduling contracts: source-derived hours, scoped records, races and retries.
+  await expectStatus("/api/staff", 403, { cookie: patient.cookie });
+  const staffResult = await request("/api/staff", {
+    cookie: admin.cookie,
+    method: "POST",
+    body: {
+      name: "Integration nurse",
+      email: `nurse-${randomUUID()}@example.test`,
+      role: "nurse",
+      password: randomUUID() + "Aa1!",
+    },
+  });
+  assert.equal(staffResult.status, 201, await staffResult.clone().text());
+  const staffID = (await staffResult.json()).id;
+  ids.push(staffID);
+  await expectStatus("/api/staff", 409, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: { id: admin.id, active: false },
+  });
+  await expectStatus("/api/staff", 200, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: { id: staffID, active: false },
+  });
+  const schedule = {
+    id: doctor.id,
+    name: "",
+    department: "General medicine",
+    slotMinutes: 30,
+    version: 0,
+    hours: Array.from({ length: 7 }, (_, weekday) => ({
+      weekday,
+      startMinute: 540,
+      endMinute: 1020,
+    })),
+  };
+  await expectStatus("/api/hms/doctors", 403, {
+    cookie: patient.cookie,
+    method: "POST",
+    body: schedule,
+  });
+  await expectStatus("/api/hms/doctors", 200, {
+    cookie: admin.cookie,
+    method: "POST",
+    body: schedule,
+  });
+  const day = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+  const slotResult = await request(
+    `/api/hms/slots?doctorId=${doctor.id}&date=${day}`,
+    { cookie: admin.cookie },
+  );
+  assert.equal(slotResult.status, 200, await slotResult.clone().text());
+  const slots = (await slotResult.json()).slots;
+  assert.equal(slots.length, 16);
+  const booking = {
+    patientId: patients[0],
+    doctorId: doctor.id,
+    startsAt: slots[0],
+    problem: "Synthetic appointment",
+    notifySms: false,
+  };
+  await expectStatus("/api/hms/appointments", 404, {
+    cookie: patient.cookie,
+    method: "POST",
+    key: randomUUID(),
+    body: { ...booking, patientId: patients[1] },
+  });
+  const bookingKey = randomUUID();
+  const booked = await Promise.all(
+    [1, 2].map(() =>
+      request("/api/hms/appointments", {
+        cookie: admin.cookie,
+        method: "POST",
+        key: bookingKey,
+        body: booking,
+      }),
+    ),
+  );
+  for (const r of booked) assert.equal(r.status, 201, await r.clone().text());
+  const [first, duplicate] = await Promise.all(booked.map((r) => r.json()));
+  assert.equal(first.id, duplicate.id);
+  await expectStatus("/api/hms/appointments", 409, {
+    cookie: admin.cookie,
+    method: "POST",
+    key: bookingKey,
+    body: { ...booking, problem: "changed" },
+  });
+  await expectStatus("/api/hms/appointments", 409, {
+    cookie: admin.cookie,
+    method: "POST",
+    key: randomUUID(),
+    body: { ...booking, patientId: patients[1] },
+  });
+  const race = await Promise.all(
+    [patients[0], patients[1]].map((patientId) =>
+      request("/api/hms/appointments", {
+        cookie: admin.cookie,
+        method: "POST",
+        key: randomUUID(),
+        body: { ...booking, patientId, startsAt: slots[1] },
+      }),
+    ),
+  );
+  assert.deepEqual(race.map((r) => r.status).sort(), [201, 409]);
+  await expectStatus("/api/hms/doctors", 409, {
+    cookie: admin.cookie,
+    method: "POST",
+    body: { ...schedule, version: 1 },
+  });
+  const owned = await (
+    await request("/api/hms/appointments", { cookie: patient.cookie })
+  ).json();
+  assert.ok(owned.appointments.every((a) => a.patientId === patients[0]));
+  assert.ok(owned.appointments.some((a) => a.id === first.id));
+  await expectStatus(`/api/hms/appointments/${first.id}`, 422, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: { status: "completed", version: 1 },
+  });
+  await expectStatus(`/api/hms/appointments/${first.id}`, 200, {
+    cookie: patient.cookie,
+    method: "PATCH",
+    body: { status: "cancelled", version: 1 },
+  });
+  await expectStatus(`/api/hms/appointments/${first.id}`, 409, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: { status: "arrived", version: 1 },
+  });
+  const refreshed = await (
+    await request(`/api/hms/slots?doctorId=${doctor.id}&date=${day}`, {
+      cookie: admin.cookie,
+    })
+  ).json();
+  assert.ok(refreshed.slots.includes(slots[0]));
+  assert.ok(!refreshed.slots.includes(slots[1]));
+  console.log(
+    "PASS: admin-only staff provisioning and disablement; scheduling validation, ownership, concurrent booking, idempotency, schedule conflict, lifecycle and released slots.",
+  );
   await db.query("UPDATE staff_access SET active=false WHERE user_id=$1", [
     patient.id,
   ]);
@@ -211,6 +352,18 @@ try {
     "PASS: session auth, CSRF, role denial, patient/doctor record scope and aggregates, validation, disablement, invalid Firebase proof, concurrent message deduplication, captured SMS, Mailpit email/reset, logout revocation.",
   );
 } finally {
+  await db.query("DELETE FROM appointment WHERE created_by=ANY($1::text[])", [
+    ids,
+  ]);
+  await db.query("DELETE FROM doctor_absence WHERE doctor_id=ANY($1::text[])", [
+    ids,
+  ]);
+  await db.query("DELETE FROM doctor_hours WHERE doctor_id=ANY($1::text[])", [
+    ids,
+  ]);
+  await db.query("DELETE FROM doctor_profile WHERE user_id=ANY($1::text[])", [
+    ids,
+  ]);
   await db.query("DELETE FROM patient WHERE id=ANY($1::uuid[])", [patients]);
   await db.query("DELETE FROM message_outbox WHERE actor_id=ANY($1::text[])", [
     ids,

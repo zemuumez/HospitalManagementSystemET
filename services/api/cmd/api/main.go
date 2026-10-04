@@ -50,7 +50,7 @@ func main() {
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
-	handler := httpapi.Server{App: application.Hospital{Store: store, Now: time.Now}, Actors: store, AuthURL: authURL, Origin: authURL, Client: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}.Handler()
+	handler := httpapi.Server{App: application.Hospital{Store: store, Now: time.Now}, Scheduling: application.Scheduling{Store: store, Now: time.Now}, Actors: store, AuthURL: authURL, Origin: authURL, Client: &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}.Handler()
 	server := &http.Server{Addr: addr, Handler: http.TimeoutHandler(handler, 15*time.Second, `{"error":"Request timed out"}`), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	go func() {
 		<-ctx.Done()

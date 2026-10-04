@@ -5,10 +5,22 @@ async function proxy(
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params;
-  if (
-    path.length !== 1 ||
-    !["me", "overview", "patients", "messages"].includes(path[0])
-  )
+  const allowed =
+    path.length === 1 &&
+    [
+      "me",
+      "overview",
+      "patients",
+      "messages",
+      "doctors",
+      "slots",
+      "appointments",
+    ].includes(path[0]);
+  const appointment =
+    path.length === 2 &&
+    path[0] === "appointments" &&
+    /^[0-9a-f-]{36}$/i.test(path[1]);
+  if (!allowed && !appointment)
     return Response.json({ error: "Not found" }, { status: 404 });
   const origin = process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3000";
   if (request.method !== "GET" && request.headers.get("origin") !== origin)
@@ -34,7 +46,7 @@ async function proxy(
   }
   try {
     const response = await fetch(
-      `${process.env.GO_API_URL ?? "http://127.0.0.1:8080"}/v1/${path[0]}${request.nextUrl.search}`,
+      `${process.env.GO_API_URL ?? "http://127.0.0.1:8080"}/v1/${path.join("/")}${request.nextUrl.search}`,
       {
         method: request.method,
         body,
@@ -65,4 +77,4 @@ async function proxy(
     );
   }
 }
-export { proxy as GET, proxy as POST };
+export { proxy as GET, proxy as POST, proxy as PATCH };
