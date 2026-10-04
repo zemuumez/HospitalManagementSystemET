@@ -199,18 +199,18 @@ Backend-first progress:
 - [x] Atomic bed occupancy and immutable signed notes.
 - [x] Versioned ready/maintenance/unavailable bed states, scoped transfers and retained admission/transfer/discharge history (migration 011; concurrent and authorization tests).
 - [x] Bed-type master IDs, descriptions, versioned rename/archive and bed references with compatibility for existing forms (migration 014).
-- [ ] Complete original bed assignment fields and historical occupancy reports.
+- [x] Complete original bed assignment fields and historical occupancy reports (migration 038; `bed_assignment`, `BedOccupancyReport`, `/v1/bed-occupancy/report`, `/v1/bed-assignments`).
 - [x] Versioned nurse assignment/revocation, scoped nursing encounters and immutable timestamped vitals with explicit units, validation and correction chains (migration 015).
-- [ ] Broader care-team delegation, clinical range policies/alerts and patient-visible observation release.
-- [ ] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments.
+- [x] Broader care-team delegation, clinical range policies/alerts and patient-visible observation release (migration 038; `encounter_care_team`, `patient_visible` on notes and vitals, `/v1/encounters/{id}/care-team`).
+- [x] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments (migration 038; `encounter_diagnosis`, `encounter_procedure`, `encounter_attachment`, `/v1/encounters/{id}/*`).
 - [x] Signed encounter medication orders with medicine references, dose, route, frequency, duration, instructions and explicit quantity; assigned-doctor signing and retained cancellation.
-- [ ] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF.
-- [ ] Encounter charges/payments and invoice linkage; discharge financial policy must be explicit.
-- [ ] Admission packages/insurance/guardians and full original admission fields.
+- [x] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF (migration 034; `prescription`, `prescription_item`, `/v1/prescriptions`).
+- [x] Encounter charges/payments and invoice linkage; discharge financial policy must be explicit (migration 038; `encounter_billing`, financial clearance, anti-double-billing `service_invoice_link`, `/v1/encounters/{id}/billing`).
+- [x] Admission packages/insurance/guardians and full original admission fields (migration 038; `ipd_admission_details`, `/v1/encounters/{id}/admission-details`).
 - [x] Signed note/discharge addenda with linked original records, required correction reasons, scoped reads, idempotent signing and database-retained discharge text/time/status (migration 021).
-- [ ] Discharge summary templates, original print/PDF parity and complete structured discharge document fields.
-- [ ] OPD repeat visits, follow-ups, referral handling and patient-visible summaries.
-- [ ] Odontogram patient/tooth/procedure history and image/print/export persistence.
+- [x] Discharge summary templates, original print/PDF parity and complete structured discharge document fields (migration 038; `discharge_summary`, `/v1/encounters/{id}/discharge-summary`).
+- [x] OPD repeat visits, follow-ups, referral handling and patient-visible summaries (migration 038; `opd_follow_up`, `patient_referral`, `/v1/patients/{id}/follow-ups`, `/v1/patients/{id}/referrals`).
+- [x] Odontogram patient/tooth/procedure history and image/print/export persistence (migration 038; `patient_odontogram_entry`, `/v1/patients/{id}/odontogram`).
 
 ### F. Diagnostics and treatment records
 
