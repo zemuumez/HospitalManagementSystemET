@@ -8,6 +8,8 @@ import (
 )
 
 type ClinicalRepository interface {
+	Addenda(context.Context, domain.Actor, string, int) ([]domain.Addendum, error)
+	AddAddendum(context.Context, domain.Actor, string, domain.AddendumInput, string) (domain.Addendum, error)
 	AssignNurse(context.Context, domain.Actor, string, domain.NurseAssignment) (domain.EncounterNurse, error)
 	Nurses(context.Context, domain.Actor, string) ([]domain.EncounterNurse, error)
 	NursingEncounters(context.Context, domain.Actor, int) ([]domain.Encounter, error)

@@ -204,7 +204,8 @@ Backend-first progress:
 - [ ] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF.
 - [ ] Encounter charges/payments and invoice linkage; discharge financial policy must be explicit.
 - [ ] Admission packages/insurance/guardians and full original admission fields.
-- [ ] Discharge summary templates, signing, print/PDF and post-discharge correction/addendum workflow.
+- [x] Signed note/discharge addenda with linked original records, required correction reasons, scoped reads, idempotent signing and database-retained discharge text/time/status (migration 021).
+- [ ] Discharge summary templates, original print/PDF parity and complete structured discharge document fields.
 - [ ] OPD repeat visits, follow-ups, referral handling and patient-visible summaries.
 - [ ] Odontogram patient/tooth/procedure history and image/print/export persistence.
 

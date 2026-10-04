@@ -1,0 +1,9 @@
+# Signed clinical addenda
+
+Migration 021 retains signed discharge text/time/status and adds immutable corrections. The original Laravel IPD billing workflow includes discharge status and a discharge-slip PDF; this increment adds explicit correction provenance as a deliberate security/history improvement. It does not claim parity with that PDF or its billing-discharge coupling.
+
+`POST /v1/encounters/{id}/addenda` requires an assigned doctor session and Idempotency-Key (16–80 characters). Body: `{kind, noteId, body, reason}`. `kind` is `note` with a note ID from the same encounter, or `discharge` with an empty note ID after discharge. Body is 1–10,000 characters; reason is 1–1,000 characters. Author and signing timestamp are server-set. Note addenda may be recorded after discharge; a discharge addendum requires the signed discharge first. Signing never replaces original text or reopens the stay. Additional corrections are further signed addenda.
+
+`GET /v1/encounters/{id}/addenda?page=1` returns up to 25 newest addenda. Administrators, the assigned doctor and the explicitly linked patient may read; reception and other staff cannot. This follows existing patient access to signed encounter summaries and uses no public link. Record authorization is rechecked on idempotent write retries. Retrying the same body/key returns the same record; changed content conflicts. Cross-encounter note references are prevented both by the API and a composite database foreign key. Read/sign operations are audited.
+
+Tests exercise concurrent identical submissions, conflicting retries, cross-encounter references, doctor/admin/reception/patient scope, pre-discharge rejection, post-discharge signing, immutable original discharge and addendum update/delete rejection. Structured discharge templates, PDF rendering, clinical review policy and the frontend addendum workflow remain open.

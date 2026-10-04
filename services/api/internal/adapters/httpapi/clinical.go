@@ -113,6 +113,24 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 		}
 		id := parts[0]
 		switch {
+		case parts[1] == "addenda" && r.Method == "GET":
+			out, e := s.Clinical.Addenda(r.Context(), a, id, page)
+			if e != nil {
+				fail(w, e)
+			} else {
+				write(w, 200, map[string]any{"addenda": out, "page": page, "pageSize": 25})
+			}
+		case parts[1] == "addenda" && r.Method == "POST":
+			var i domain.AddendumInput
+			if !decode(w, r, &i) {
+				return true
+			}
+			out, e := s.Clinical.AddAddendum(r.Context(), a, id, i, r.Header.Get("Idempotency-Key"))
+			if e != nil {
+				fail(w, e)
+			} else {
+				write(w, 201, out)
+			}
 		case parts[1] == "bed-history" && r.Method == "GET":
 			out, e := s.Clinical.BedHistory(r.Context(), a, id, page)
 			if e != nil {
