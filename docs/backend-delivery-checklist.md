@@ -214,7 +214,8 @@ Backend-first progress:
 ### F. Diagnostics and treatment records
 
 - [x] Pathology/radiology test definitions and typed parameters with retained unit/reference-range labels (migration 009).
-- [ ] Full category/unit master CRUD, catalog revision/archive, remaining original fields and charge categories.
+- [x] Diagnostic catalog revision/archive with retained parameters/tariffs, linked revision series, active-only ordering and concurrent revision protection (migration 024).
+- [ ] Full category/unit master CRUD, remaining original fields and charge categories.
 - [x] Encounter-linked orders, unique sample/accession references, collection/processing, doctor sign-off/release and retained result amendments; concurrency/privacy tests.
 - [ ] Sample rejection/recollection, complete original report parity and reviewer specialty/team policy.
 - [ ] Authorized report files and patient portal report release.

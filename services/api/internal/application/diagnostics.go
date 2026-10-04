@@ -3,9 +3,13 @@ package application
 import (
 	"context"
 	"hms.local/api/internal/domain"
+	"strings"
 )
 
 type DiagnosticsRepository interface {
+	ReviseDiagnosticTest(context.Context, domain.Actor, string, domain.DiagnosticRevisionInput) (domain.DiagnosticTest, error)
+	ArchiveDiagnosticTest(context.Context, domain.Actor, string, domain.DiagnosticArchiveInput) error
+	DiagnosticRevisions(context.Context, string, int) ([]domain.DiagnosticTest, error)
 	DiagnosticTests(context.Context, string, int) ([]domain.DiagnosticTest, error)
 	CreateDiagnosticTest(context.Context, domain.Actor, domain.DiagnosticTestInput) (domain.DiagnosticTest, error)
 	DiagnosticOrders(context.Context, domain.Actor, string, int) ([]domain.DiagnosticOrder, error)
@@ -92,4 +96,38 @@ func (d Diagnostics) Results(ctx context.Context, a domain.Actor, id string, pag
 		return nil, domain.ErrValidation
 	}
 	return d.Store.DiagnosticResults(ctx, a, id, page)
+}
+
+func (d Diagnostics) ReviseTest(ctx context.Context, a domain.Actor, id string, i domain.DiagnosticRevisionInput) (domain.DiagnosticTest, error) {
+	if a.Role != "admin" && a.Role != "lab_technician" {
+		return domain.DiagnosticTest{}, domain.ErrForbidden
+	}
+	i.Reason = strings.TrimSpace(i.Reason)
+	if !domain.UUIDPattern.MatchString(id) || strings.ContainsRune(i.Reason, 0) || i.Version < 1 || i.Version > 1000000000 || len(i.Reason) < 1 || len([]rune(i.Reason)) > 1000 {
+		return domain.DiagnosticTest{}, domain.ErrValidation
+	}
+	i.Parameters = append([]domain.DiagnosticParameter(nil), i.Parameters...)
+	if e := i.DiagnosticTestInput.Validate(); e != nil {
+		return domain.DiagnosticTest{}, e
+	}
+	return d.Store.ReviseDiagnosticTest(ctx, a, id, i)
+}
+func (d Diagnostics) ArchiveTest(ctx context.Context, a domain.Actor, id string, i domain.DiagnosticArchiveInput) error {
+	if a.Role != "admin" && a.Role != "lab_technician" {
+		return domain.ErrForbidden
+	}
+	i.Reason = strings.TrimSpace(i.Reason)
+	if !domain.UUIDPattern.MatchString(id) || strings.ContainsRune(i.Reason, 0) || i.Version < 1 || i.Version > 1000000000 || len(i.Reason) < 1 || len([]rune(i.Reason)) > 1000 {
+		return domain.ErrValidation
+	}
+	return d.Store.ArchiveDiagnosticTest(ctx, a, id, i)
+}
+func (d Diagnostics) TestRevisions(ctx context.Context, a domain.Actor, id string, page int) ([]domain.DiagnosticTest, error) {
+	if !a.Can("diagnostics.catalog") {
+		return nil, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) || !pageOK(page) {
+		return nil, domain.ErrValidation
+	}
+	return d.Store.DiagnosticRevisions(ctx, id, page)
 }

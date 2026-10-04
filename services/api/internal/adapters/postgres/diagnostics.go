@@ -7,12 +7,12 @@ import (
 	"hms.local/api/internal/domain"
 )
 
-const diagnosticTestFields = `id,kind,name,short_name,category,method,report_days,charge_minor`
+const diagnosticTestFields = `id,kind,name,short_name,category,method,report_days,charge_minor,active,version,revision,COALESCE(root_id::text,id::text),COALESCE(supersedes::text,'')`
 
 func scanDiagnosticTest(row pgx.Row) (domain.DiagnosticTest, error) {
 	var t domain.DiagnosticTest
 	t.Parameters = []domain.DiagnosticParameter{}
-	e := row.Scan(&t.ID, &t.Kind, &t.Name, &t.ShortName, &t.Category, &t.Method, &t.ReportDays, &t.ChargeMinor)
+	e := row.Scan(&t.ID, &t.Kind, &t.Name, &t.ShortName, &t.Category, &t.Method, &t.ReportDays, &t.ChargeMinor, &t.Active, &t.Version, &t.Revision, &t.RootID, &t.Supersedes)
 	return t, clinicalError(e)
 }
 func diagnosticParameters(ctx context.Context, q querier, id string) ([]domain.DiagnosticParameter, error) {
@@ -32,7 +32,7 @@ func diagnosticParameters(ctx context.Context, q querier, id string) ([]domain.D
 	return out, rows.Err()
 }
 func (s Store) DiagnosticTests(ctx context.Context, search string, page int) ([]domain.DiagnosticTest, error) {
-	rows, e := s.DB.Query(ctx, `SELECT `+diagnosticTestFields+` FROM diagnostic_test WHERE ($1='' OR strpos(lower(name),lower($1))>0) ORDER BY kind,name,id LIMIT 25 OFFSET $2`, search, (page-1)*25)
+	rows, e := s.DB.Query(ctx, `SELECT `+diagnosticTestFields+` FROM diagnostic_test WHERE active AND ($1='' OR strpos(lower(name),lower($1))>0) ORDER BY kind,name,id LIMIT 25 OFFSET $2`, search, (page-1)*25)
 	if e != nil {
 		return nil, e
 	}
@@ -59,7 +59,7 @@ func (s Store) DiagnosticTests(ctx context.Context, search string, page int) ([]
 	return out, nil
 }
 func (s Store) CreateDiagnosticTest(ctx context.Context, a domain.Actor, i domain.DiagnosticTestInput) (domain.DiagnosticTest, error) {
-	out := domain.DiagnosticTest{DiagnosticTestInput: i}
+	out := domain.DiagnosticTest{DiagnosticTestInput: i, Active: true, Version: 1, Revision: 1}
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
 		return out, e
@@ -69,6 +69,7 @@ func (s Store) CreateDiagnosticTest(ctx context.Context, a domain.Actor, i domai
 	if e != nil {
 		return out, clinicalError(e)
 	}
+	out.RootID = out.ID
 	for _, p := range i.Parameters {
 		if _, e = tx.Exec(ctx, `INSERT INTO diagnostic_parameter(test_id,position,name,unit,reference_range,value_type) VALUES($1,$2,$3,$4,$5,$6)`, out.ID, p.Position, p.Name, p.Unit, p.ReferenceRange, p.ValueType); e != nil {
 			return out, e
@@ -153,7 +154,7 @@ func (s Store) CreateDiagnosticOrder(ctx context.Context, a domain.Actor, i doma
 		return out, domain.ErrStale
 	}
 	var test string
-	e = tx.QueryRow(ctx, `SELECT id FROM diagnostic_test WHERE id=$1 FOR SHARE`, i.TestID).Scan(&test)
+	e = tx.QueryRow(ctx, `SELECT id FROM diagnostic_test WHERE id=$1 AND active FOR SHARE`, i.TestID).Scan(&test)
 	if e != nil {
 		return out, clinicalError(e)
 	}

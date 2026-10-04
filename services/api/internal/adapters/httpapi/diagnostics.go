@@ -27,6 +27,33 @@ func (s Server) diagnostics(w http.ResponseWriter, r *http.Request, a domain.Act
 		}
 		out, e = s.Diagnostics.CreateTest(r.Context(), a, i)
 		status = 201
+	case strings.HasPrefix(r.URL.Path, "/v1/diagnostic-tests/"):
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/diagnostic-tests/"), "/")
+		if len(parts) != 2 {
+			return false
+		}
+		switch {
+		case parts[1] == "revisions" && r.Method == "POST":
+			var i domain.DiagnosticRevisionInput
+			if !decode(w, r, &i) {
+				return true
+			}
+			out, e = s.Diagnostics.ReviseTest(r.Context(), a, parts[0], i)
+			status = 201
+		case parts[1] == "revisions" && r.Method == "GET":
+			var data []domain.DiagnosticTest
+			data, e = s.Diagnostics.TestRevisions(r.Context(), a, parts[0], page)
+			out = map[string]any{"tests": data, "page": page, "pageSize": 25}
+		case parts[1] == "archive" && r.Method == "POST":
+			var i domain.DiagnosticArchiveInput
+			if !decode(w, r, &i) {
+				return true
+			}
+			e = s.Diagnostics.ArchiveTest(r.Context(), a, parts[0], i)
+			out = map[string]bool{"saved": e == nil}
+		default:
+			return false
+		}
 	case r.URL.Path == "/v1/diagnostic-orders" && r.Method == "GET":
 		var data []domain.DiagnosticOrder
 		data, e = s.Diagnostics.Orders(r.Context(), a, r.URL.Query().Get("encounterId"), page)

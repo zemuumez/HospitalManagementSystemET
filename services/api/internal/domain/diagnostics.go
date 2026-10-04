@@ -25,6 +25,11 @@ type DiagnosticTestInput struct {
 	Parameters  []DiagnosticParameter `json:"parameters"`
 }
 type DiagnosticTest struct {
+	Active     bool   `json:"active"`
+	Version    int    `json:"version"`
+	Revision   int    `json:"revision"`
+	RootID     string `json:"rootId"`
+	Supersedes string `json:"supersedes"`
 	DiagnosticTestInput
 	ID string `json:"id"`
 }
@@ -139,4 +144,14 @@ type DiagnosticResult struct {
 	Signed          bool                  `json:"signed"`
 	Released        bool                  `json:"released"`
 	CreatedAt       time.Time             `json:"createdAt"`
+}
+
+type DiagnosticRevisionInput struct {
+	DiagnosticTestInput
+	Version int    `json:"version"`
+	Reason  string `json:"reason"`
+}
+type DiagnosticArchiveInput struct {
+	Version int    `json:"version"`
+	Reason  string `json:"reason"`
 }

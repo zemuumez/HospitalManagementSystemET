@@ -209,4 +209,66 @@ func testDiagnostics(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			t.Fatalf("diagnostic HTTP wanted %d got %d: %s", tc.want, w.Code, w.Body.String())
 		}
 	}
+	revision := domain.DiagnosticRevisionInput{DiagnosticTestInput: test.DiagnosticTestInput, Version: 1, Reason: "Updated assay definition"}
+	revision.ChargeMinor = 250
+	revision.Parameters = []domain.DiagnosticParameter{{Name: "New parameter", Unit: "new-unit", ValueType: "text"}}
+	if _, e = d.ReviseTest(ctx, doctor, test.ID, revision); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal(e)
+	}
+	var revised [2]domain.DiagnosticTest
+	for n := 0; n < 2; n++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			revised[index], errs[index] = d.ReviseTest(ctx, lab, test.ID, revision)
+		}(n)
+	}
+	wg.Wait()
+	if !((errs[0] == nil && errors.Is(errs[1], domain.ErrStale)) || (errs[1] == nil && errors.Is(errs[0], domain.ErrStale))) {
+		t.Fatal("catalog revision race", errs)
+	}
+	newest := revised[0]
+	if errs[0] != nil {
+		newest = revised[1]
+	}
+	if newest.Revision != 2 || newest.RootID != test.ID || newest.Supersedes != test.ID || !newest.Active {
+		t.Fatal(newest)
+	}
+	history, e := d.TestRevisions(ctx, doctor, newest.ID, 1)
+	if e != nil || len(history) != 2 || history[1].Active || history[1].Parameters[0].Unit != "test-unit" || history[1].ChargeMinor != 100 {
+		t.Fatal(history, e)
+	}
+	if _, e = d.Order(ctx, doctor, input, "diagnostic-archived-rejected"); !errors.Is(e, domain.ErrNotFound) {
+		t.Fatal("archived test ordered", e)
+	}
+	retry, e = d.Order(ctx, doctor, input, "diagnostic-order-001")
+	if e != nil || retry.ID != order.ID {
+		t.Fatal("existing order retry after revision", e)
+	}
+	catalog, e := d.Tests(ctx, doctor, "Synthetic assay", 1)
+	if e != nil || len(catalog) != 1 || catalog[0].ID != newest.ID {
+		t.Fatal(catalog, e)
+	}
+	if e = d.ArchiveTest(ctx, lab, newest.ID, domain.DiagnosticArchiveInput{Version: 1, Reason: "Retire method"}); e != nil {
+		t.Fatal(e)
+	}
+	if e = d.ArchiveTest(ctx, lab, newest.ID, domain.DiagnosticArchiveInput{Version: 1, Reason: "Repeat"}); !errors.Is(e, domain.ErrStale) {
+		t.Fatal(e)
+	}
+	for _, sql := range []string{`UPDATE diagnostic_test SET charge_minor=999 WHERE id=$1`, `DELETE FROM diagnostic_test WHERE id=$1`, `UPDATE diagnostic_test SET active=true,version=version+1 WHERE id=$1`} {
+		if _, e = db.Exec(ctx, sql, test.ID); e == nil {
+			t.Fatal("catalog history changed")
+		}
+	}
+	if _, e = db.Exec(ctx, `DELETE FROM diagnostic_catalog_event`); e == nil {
+		t.Fatal("catalog event removed")
+	}
+	req := httptest.NewRequest("GET", "/v1/diagnostic-tests/"+test.ID+"/revisions", nil)
+	req.Header.Set("Cookie", "session=doctor")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+
 }
