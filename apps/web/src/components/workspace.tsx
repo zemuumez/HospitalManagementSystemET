@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Activity,
   Bell,
@@ -38,6 +38,7 @@ import {
   visibleGroups,
   groupScreens,
 } from "@/lib/legacy";
+import { roleNavigation, portalSections } from "@/lib/role-preview";
 type Identity = { user: User; permissions: string[] };
 const PreviewRoleContext = createContext("Admin");
 export const usePreviewRole = () => useContext(PreviewRoleContext);
@@ -68,6 +69,16 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState(false);
   const [notifications, setNotifications] = useState(false);
   const path = usePathname();
+  const router = useRouter();
+  useEffect(() => {
+    const saved = sessionStorage.getItem("hms-preview-role");
+    if (saved && previewRoles.includes(saved)) setRole(saved);
+  }, []);
+  function changeRole(next: string) {
+    setRole(next);
+    sessionStorage.setItem("hms-preview-role", next);
+    router.push("/dashboard");
+  }
   const isLive = ["/live-patients", "/communications", "/account"].includes(
     path,
   );
@@ -136,62 +147,46 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                 <ChartPie size={18} />
                 <span>{t("Dashboard")}</span>
               </Link>
-              {visibleGroups(role)
-                .filter((g) => !disabledModules.includes(g))
-                .filter(
-                  (g) =>
-                    (g + " " + t(g))
-                      .toLowerCase()
-                      .includes(search.toLowerCase()) ||
-                    screens.some(
-                      (s) =>
-                        s.group === g &&
-                        (s.title + " " + t(s.title))
-                          .toLowerCase()
-                          .includes(search.toLowerCase()),
-                    ),
+              {roleNavigation(role)
+                .filter((link) => !disabledModules.includes(link.group || ""))
+                .filter((link) =>
+                  (link.title + " " + t(link.title))
+                    .toLowerCase()
+                    .includes(search.toLowerCase()),
                 )
-                .map((g) => {
-                  const Icon =
-                    (
-                      {
-                        "Patient Smart Cards": CreditCard,
-                        Users: Users,
-                        Appointments: CalendarDays,
-                        Attendance: Users,
-                        "Manage Attendance": ClipboardList,
-                        "IPD - Patient In": BedDouble,
-                        "OPD - Patient Out": Stethoscope,
-                        Billings: CreditCard,
-                        "Bed Management": BedDouble,
-                        "Blood Banks": Droplets,
-                        Doctors: Stethoscope,
-                        Medicines: Pill,
-                        Patients: Users,
-                        Settings: Settings,
-                      } as Record<string, typeof FileText>
-                    )[g] || FileText;
-                  const first = groupScreens(g).find(
-                    (s) =>
-                      s.group === g &&
-                      ((s.title + " " + t(s.title))
-                        .toLowerCase()
-                        .includes(search.toLowerCase()) ||
-                        (g + " " + t(g))
-                          .toLowerCase()
-                          .includes(search.toLowerCase())),
-                  )!;
-                  return (
-                    <Link
-                      key={g}
-                      className={`legacy-nav ${group === g ? "active" : ""}`}
-                      href={screenHref(first)}
-                    >
-                      <Icon size={18} />
-                      <span>{t(g)}</span>
-                    </Link>
-                  );
-                })}
+                .map((link) => (
+                  <Link
+                    key={link.href}
+                    className={`legacy-nav ${path === link.href || (link.group && group === link.group) ? "active" : ""}`}
+                    href={link.href}
+                  >
+                    {(() => {
+                      const Icon =
+                        (
+                          {
+                            "Patient Smart Cards": CreditCard,
+                            Users,
+                            Appointments: CalendarDays,
+                            Attendance: Users,
+                            "Manage Attendance": ClipboardList,
+                            "IPD - Patient In": BedDouble,
+                            "OPD - Patient Out": Stethoscope,
+                            Billings: CreditCard,
+                            "Bed Management": BedDouble,
+                            "Blood Banks": Droplets,
+                            Doctors: Stethoscope,
+                            Medicines: Pill,
+                            Patients: Users,
+                            Settings,
+                            Prescriptions: FileText,
+                            Odontogram: HeartPulse,
+                          } as Record<string, typeof FileText>
+                        )[link.title] || FileText;
+                      return <Icon size={18} />;
+                    })()}
+                    <span>{t(link.title)}</span>
+                  </Link>
+                ))}
             </nav>
           </aside>
           <div className="legacy-body">
@@ -205,22 +200,35 @@ export function Workspace({ children }: { children: React.ReactNode }) {
               </button>
               <nav className="legacy-submenu" aria-label="Module navigation">
                 {group ? (
-                  groupScreens(group).map((s) => (
-                    <Link
-                      key={s.id}
-                      className={selected?.id === s.id ? "active" : ""}
-                      href={screenHref(s)}
-                    >
-                      {t(s.title)}
-                    </Link>
-                  ))
+                  groupScreens(group)
+                    .filter(
+                      (s) =>
+                        role === "Admin" ||
+                        !["admins", "users", "doctor-departments"].includes(
+                          s.id,
+                        ),
+                    )
+                    .map((s) => (
+                      <Link
+                        key={s.id}
+                        className={selected?.id === s.id ? "active" : ""}
+                        href={screenHref(s)}
+                      >
+                        {t(s.title)}
+                      </Link>
+                    ))
                 ) : (
                   <Link className="active" href={path}>
                     {path === "/dashboard"
-                      ? "Dashboard"
+                      ? t("Dashboard")
                       : path === "/account"
                         ? "My Profile"
-                        : "Communications"}
+                        : path.startsWith("/portal/")
+                          ? t(
+                              portalSections[path.split("/")[2]]?.title ||
+                                "Dashboard",
+                            )
+                          : t("Communications")}
                   </Link>
                 )}
               </nav>
@@ -289,10 +297,12 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                   <select
                     aria-label="Preview role"
                     value={role}
-                    onChange={(e) => setRole(e.target.value)}
+                    onChange={(e) => changeRole(e.target.value)}
                   >
                     {previewRoles.map((r) => (
-                      <option key={r}>{r}</option>
+                      <option key={r} value={r}>
+                        {t(r)}
+                      </option>
                     ))}
                   </select>
                 </label>

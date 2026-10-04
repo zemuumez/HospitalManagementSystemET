@@ -14,6 +14,7 @@ import {
 import { useState } from "react";
 import { usePreviewRole } from "@/components/workspace";
 import { visibleGroups, screens } from "@/lib/legacy";
+import { RoleDashboard } from "@/components/role-portal";
 const widgets = [
   ["Total Invoices", "12,500", "invoices", CreditCard],
   ["Total Bills", "8,250", "bills", FileText],
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const role = usePreviewRole();
   const allowed = visibleGroups(role);
   const [period, setPeriod] = useState("This Month");
+  if (role !== "Admin") return <RoleDashboard />;
   return (
     <section>
       <div className="page-heading">

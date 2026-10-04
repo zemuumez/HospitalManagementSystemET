@@ -1882,3 +1882,29 @@ html[lang="am"] .label {
     width: 75px;
   }
 }
+
+.role-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+@media print {
+  .legacy-sidebar,
+  .legacy-header,
+  .preview-strip,
+  .legacy-footer,
+  button {
+    display: none !important;
+  }
+  dialog[open] {
+    position: static !important;
+    max-width: none !important;
+    max-height: none !important;
+    width: 100% !important;
+    box-shadow: none !important;
+  }
+  body:has(dialog[open]) main > section > :not(dialog) {
+    display: none !important;
+  }
+}
