@@ -26,7 +26,7 @@ func (s Store) Patients(ctx context.Context, a domain.Actor, search string, page
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, `SELECT id,medical_record_number,given_name,family_name,date_of_birth::text,phone,created_at FROM patient WHERE `+scope+` AND ($3='' OR strpos(lower(given_name || ' ' || family_name),lower($3))>0 OR medical_record_number::text=$3) ORDER BY created_at DESC,id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
+	rows, err := tx.Query(ctx, `SELECT id,medical_record_number,given_name,family_name,date_of_birth::text,phone,created_at,COALESCE(user_id,''),COALESCE(clinician_user_id,'') FROM patient WHERE `+scope+` AND ($3='' OR strpos(lower(given_name || ' ' || family_name),lower($3))>0 OR medical_record_number::text=$3) ORDER BY created_at DESC,id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (s Store) Patients(ctx context.Context, a domain.Actor, search string, page
 	for rows.Next() {
 		var p domain.Patient
 		var mrn int64
-		if err = rows.Scan(&p.ID, &mrn, &p.GivenName, &p.FamilyName, &p.DateOfBirth, &p.Phone, &p.CreatedAt); err != nil {
+		if err = rows.Scan(&p.ID, &mrn, &p.GivenName, &p.FamilyName, &p.DateOfBirth, &p.Phone, &p.CreatedAt, &p.UserID, &p.ClinicianID); err != nil {
 			rows.Close()
 			return nil, err
 		}

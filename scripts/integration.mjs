@@ -108,10 +108,26 @@ try {
     const p = await r.json();
     patients.push(p.id);
   }
-  await db.query(
-    "UPDATE patient SET user_id=$1,clinician_user_id=$2 WHERE id=$3",
-    [patient.id, doctor.id, patients[0]],
-  );
+  await expectStatus(`/api/hms/patients/${patients[0]}`, 403, {
+    cookie: patient.cookie,
+    method: "PATCH",
+    body: { userId: patient.id, clinicianId: doctor.id },
+  });
+  await expectStatus(`/api/hms/patients/${patients[0]}`, 200, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: { userId: patient.id, clinicianId: doctor.id },
+  });
+  await expectStatus(`/api/hms/patients/${patients[1]}`, 409, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: { userId: patient.id, clinicianId: doctor.id },
+  });
+  await expectStatus(`/api/hms/patients/${patients[0]}`, 409, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: { userId: "", clinicianId: doctor.id },
+  });
   for (const actor of [patient, doctor]) {
     const result = await (
       await request("/api/hms/patients?search=Synthetic", {

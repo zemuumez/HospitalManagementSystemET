@@ -83,9 +83,16 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem("hms-preview-role", next);
     router.push("/dashboard");
   }
-  const isLive = ["/live-patients", "/communications", "/account"].includes(
-    path,
-  );
+  const isLive = [
+    "/patients",
+    "/live-patients",
+    "/communications",
+    "/account",
+    "/modules/users",
+    "/modules/schedules",
+    "/modules/appointments",
+    "/portal/appointments",
+  ].includes(path);
   const selected = screens.find((s) => screenHref(s) === path);
   const group = selected?.group;
   useEffect(() => {
@@ -324,10 +331,8 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                   </select>
                 </label>
               )}
-              <Link href={isLive ? "/patients" : "/live-patients"}>
-                {isLive
-                  ? t("Return to frontend preview")
-                  : t("Open live patient register")}
+              <Link href={isLive ? "/dashboard" : "/patients"}>
+                {isLive ? t("Dashboard") : t("Open live patient register")}
               </Link>
             </div>
             <main id="main-content" className="legacy-main">

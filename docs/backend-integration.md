@@ -12,7 +12,7 @@ Validation: Go tests/vet, TypeScript, and the running Next/Go/PostgreSQL integra
 
 ## Still required for full backend parity
 
-- Integrate the frontend forms, patient portal links, profile editing and staff invitation lifecycle.
+- Complete profile editing and the staff invitation lifecycle; preserve the remaining original patient demographics and ancillary form fields when integrating them.
 - Doctor holidays/absence management, rescheduling, hospital opening hours, appointment fees/payments and timed reminders.
 - OPD/IPD, case/admission/discharge workflows, beds and clinical record signing.
 - Prescriptions, pharmacy/inventory movements, laboratory/radiology, blood bank, vaccines and odontogram persistence.
@@ -21,3 +21,9 @@ Validation: Go tests/vet, TypeScript, and the running Next/Go/PostgreSQL integra
 - Provider credential setup and end-to-end Firebase/live SMS verification, deployment hardening, backups and restore checks.
 
 The frontend preview modules are not evidence of backend completion. This document records implemented behavior and remaining work separately.
+
+## Verified step 2: connected screens and patient access
+
+Users, Schedules, Appointments, patient registration and portal appointments now use persistent records. Administrator-only patient account/care-team linking validates account roles and prevents reassignment of existing portal ownership. The preview role selector never grants API permissions. Unintegrated modules retain their preview notice.
+
+The connected browser test creates a synthetic administrator, provisions a doctor through the UI, saves a schedule, registers a patient, books an appointment and verifies it after reload. Desktop/mobile checks passed without browser errors; all fixtures are removed. Run `node --env-file=apps/web/.env.local scripts/verify-connected.mjs` against local development services. API integration tests also cover ownership linkage and duplicate account-link refusal. The older preview regression script predates these connected workflows and must not be used to submit connected forms.

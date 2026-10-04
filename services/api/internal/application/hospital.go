@@ -7,12 +7,24 @@ import (
 )
 
 type Repository interface {
+	LinkPatient(context.Context, domain.Actor, string, domain.PatientAccess) error
 	Patients(context.Context, domain.Actor, string, int) ([]domain.Patient, error)
 	RegisterPatient(context.Context, domain.Actor, domain.PatientInput) (domain.Patient, error)
 	Overview(context.Context, domain.Actor) (domain.Overview, error)
 	Enqueue(context.Context, domain.Actor, domain.MessageInput, string) (domain.Message, error)
 	Messages(context.Context) ([]domain.Message, error)
 }
+
+func (h Hospital) LinkPatient(ctx context.Context, a domain.Actor, id string, access domain.PatientAccess) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) || len(access.UserID) > 128 || len(access.ClinicianID) > 128 {
+		return domain.ErrValidation
+	}
+	return h.Store.LinkPatient(ctx, a, id, access)
+}
+
 type Hospital struct {
 	Store Repository
 	Now   func() time.Time

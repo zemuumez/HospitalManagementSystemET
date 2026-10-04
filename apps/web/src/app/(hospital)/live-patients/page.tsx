@@ -1,4 +1,5 @@
 "use client";
+import { PatientAccessEditor } from "@/components/connected-scheduling";
 import { useLanguage } from "@/components/language";
 import { useEffect, useState, useCallback } from "react";
 import { Modal } from "@/components/modal";
@@ -9,6 +10,7 @@ export default function Patients() {
   const { t } = useLanguage();
 
   const identity = useIdentity();
+  const [accessPatient, setAccessPatient] = useState<Patient | null>(null);
   const [rows, setRows] = useState<Patient[]>([]);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -90,7 +92,7 @@ export default function Patients() {
           {t(error)}
         </p>
       )}
-      <section className="card overflow-hidden">
+      <section className="legacy-card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 p-5">
           <form
             className="flex w-full max-w-md gap-2"
@@ -119,7 +121,7 @@ export default function Patients() {
           <span className="text-xs text-muted">{t("25 records per page")}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="legacy-table">
             <thead className="bg-[#fafcfc] text-[10px] uppercase tracking-wider text-muted">
               <tr>
                 {[
@@ -128,9 +130,10 @@ export default function Patients() {
                   "Date of birth",
                   "Phone",
                   "Registered",
+                  "Access",
                 ].map((h) => (
                   <th key={h} className="px-6 py-4 font-medium">
-                    {h}
+                    {t(h)}
                   </th>
                 ))}
               </tr>
@@ -158,6 +161,16 @@ export default function Patients() {
                     </td>
                     <td className="px-6 py-5 text-muted">
                       {new Date(p.createdAt).toLocaleDateString()}
+                    </td>
+                    <td>
+                      {identity?.user.role === "admin" && (
+                        <button
+                          className="secondary"
+                          onClick={() => setAccessPatient(p)}
+                        >
+                          {t("Patient access")}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -208,6 +221,13 @@ export default function Patients() {
           </div>
         </div>
       </section>
+      {accessPatient && (
+        <PatientAccessEditor
+          patient={accessPatient}
+          onClose={() => setAccessPatient(null)}
+          onSaved={load}
+        />
+      )}
       {modal && identity?.permissions.includes("patients.create") && (
         <Modal titleId="register-title" onClose={() => setModal(false)}>
           <section className="p-7">

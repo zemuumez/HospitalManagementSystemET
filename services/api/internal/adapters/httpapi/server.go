@@ -115,6 +115,16 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1/patients/") && r.Method == "PATCH":
+			var access domain.PatientAccess
+			if !decode(w, r, &access) {
+				return
+			}
+			if e := s.App.LinkPatient(r.Context(), a, strings.TrimPrefix(r.URL.Path, "/v1/patients/"), access); e != nil {
+				fail(w, e)
+				return
+			}
+			write(w, 200, map[string]bool{"saved": true})
 		case r.URL.Path == "/v1/doctors" && r.Method == "GET":
 			out, e := s.Scheduling.Doctors(r.Context(), a)
 			if e != nil {

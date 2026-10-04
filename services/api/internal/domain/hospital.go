@@ -70,10 +70,16 @@ func (p *PatientInput) Validate(now time.Time) error {
 }
 
 type Patient struct {
-	ID  string `json:"id"`
-	MRN string `json:"mrn"`
+	UserID      string `json:"userId"`
+	ClinicianID string `json:"clinicianId"`
+	ID          string `json:"id"`
+	MRN         string `json:"mrn"`
 	PatientInput
 	CreatedAt time.Time `json:"createdAt"`
+}
+type PatientAccess struct {
+	UserID      string `json:"userId"`
+	ClinicianID string `json:"clinicianId"`
 }
 type Overview struct {
 	PatientCount    int `json:"patientCount"`

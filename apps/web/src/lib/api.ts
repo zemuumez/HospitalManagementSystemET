@@ -1,5 +1,7 @@
 export type User = { id: string; name: string; role: string };
 export type Patient = {
+  userId: string;
+  clinicianId: string;
   id: string;
   mrn: string;
   givenName: string;

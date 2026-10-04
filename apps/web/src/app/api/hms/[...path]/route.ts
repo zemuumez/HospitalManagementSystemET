@@ -18,7 +18,7 @@ async function proxy(
     ].includes(path[0]);
   const appointment =
     path.length === 2 &&
-    path[0] === "appointments" &&
+    ["appointments", "patients"].includes(path[0]) &&
     /^[0-9a-f-]{36}$/i.test(path[1]);
   if (!allowed && !appointment)
     return Response.json({ error: "Not found" }, { status: 404 });
