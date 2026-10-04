@@ -117,6 +117,17 @@ The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The comple
 
 ## 3. Full backend implementation checklist
 
+**Current delivery order (user instruction): complete backend work in this section before starting further Section 4 UI integration.** Existing connected screens remain in place. Each verified backend increment is committed and pushed separately. Unchecked compound items can contain working core behavior; Sections 1–2 describe that evidence without claiming full module parity.
+
+Production Firebase/SMS credentials, deployment infrastructure, local tax requirements, independent assessment and user acceptance require external configuration or decisions. These are tracked explicitly, not marked complete based on local implementation alone.
+
+Backend-first progress:
+
+- [x] Issued invoice header/line protection and commit-time completeness validation; migration 005 and isolated PostgreSQL mutation/payment tests.
+- [ ] Prescriptions and pharmacy/inventory, including transactional dispensing and source billing linkage.
+- [ ] Remaining A–J work below. This section is not complete.
+
+
 ### A. Source parity and domain contracts
 
 - [ ] Complete authored Laravel controllers, requests, repositories, policies, models, migrations, jobs, routes and views review for every module.
@@ -202,7 +213,7 @@ The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The comple
 
 ### H. Billing, finance and payroll
 
-- [ ] Charge accounts and immutable issued invoice/line snapshots.
+- [x] Charge accounts and immutable issued invoice/line snapshots (migration 005; database rejects header/line changes, late line insertion, deletion and incomplete invoice commits).
 - [x] Core invoice integer totals, server-calculated percentage discounts and documented rounding.
 - [ ] Tax rules, tax calculation, tax reports and wider workflow pricing.
 - [ ] Bills/invoices, itemized services, quantities, printable receipts and original print-template parity.
@@ -323,9 +334,15 @@ The first broad development-mode run encountered one service-restart timeout and
 1. Review the affected original source and identify the business rules and missing frontend behaviors.
 2. Implement additive migrations, typed domain/application contracts and transactional adapters.
 3. Add authentication, role/record scope, validation, audit events and retry/concurrency handling.
-4. Connect the UI while preserving the original design and label unfinished behavior honestly.
+4. Complete backend contracts and database/API verification first. Defer further UI integration to Section 4, as requested; preserve current screens.
 5. Run meaningful unit/database/API/browser checks and inspect the result.
 6. Update this checklist, the module inventory and known limitations with actual evidence.
 7. Commit the completed step and push to `origin/main`; never include local secrets, database files or legacy archives.
 
 Next implementation: prescriptions, pharmacy/inventory movements and their billing linkage, followed by diagnostics and the remaining domain areas above. No new approval is needed for the already authorized development work.
+
+### Backend-first increment: issued invoice integrity
+
+Migration 005 seals issued invoices, prevents snapshot edits/deletion and late line insertion, and checks line totals at transaction commit. Payment/refund updates remain supported and passed the existing concurrency suite. The legacy InvoiceRepository permits destructive invoice updates; immutable issued records are an intentional accounting-integrity change. A dedicated correction/void workflow remains open.
+
+Verification: Go tests with `HMS_TEST_DATABASE_URL` enabled (fresh schema, all migrations, invoice mutation rejection, incomplete-commit rejection, payments/refunds and HTTP checks) and `go vet ./...` passed. The shared-development-database browser suite now exercises invoice form entry without issuing an undeletable test invoice; database posting coverage stays in disposable schemas. Earlier 156-check browser results are historical, not a claim of a new full browser run.

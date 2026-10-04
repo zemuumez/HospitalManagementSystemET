@@ -196,6 +196,23 @@ func TestClinicalTransactions(t *testing.T) {
 	if e != nil || invoice.TotalMinor != 899 {
 		t.Fatal("invoice totals", e, invoice.TotalMinor)
 	}
+	for _, statement := range []string{
+		`UPDATE invoice SET total_minor=1 WHERE id=$1`,
+		`UPDATE invoice SET patient_id='00000000-0000-0000-0000-000000000001' WHERE id=$1`,
+		`UPDATE invoice SET sealed=false WHERE id=$1`,
+		`DELETE FROM invoice WHERE id=$1`,
+		`UPDATE invoice_line SET quantity=1 WHERE invoice_id=$1`,
+		`DELETE FROM invoice_line WHERE invoice_id=$1`,
+		`INSERT INTO invoice_line SELECT invoice_id,2,account_id,account_name,description,quantity,unit_price_minor FROM invoice_line WHERE invoice_id=$1`,
+	} {
+		if _, err := db.Exec(ctx, statement, invoice.ID); err == nil {
+			t.Fatalf("issued invoice mutation succeeded: %s", statement)
+		}
+	}
+	// An incomplete invoice must not survive a commit, even if an adapter omits sealing.
+	if _, err := db.Exec(ctx, `INSERT INTO invoice(patient_id,invoice_date,subtotal_minor,discount_basis_points,total_minor,created_by,request_key,request_hash) VALUES($1,CURRENT_DATE,10,0,10,'admin','incomplete-invoice','hash')`, patients[0].ID); err == nil {
+		t.Fatal("incomplete invoice committed")
+	}
 	again, e := billing.CreateInvoice(ctx, actors[0], invoiceInput, "invoice-key-00000001")
 	if e != nil || again.ID != invoice.ID {
 		t.Fatal("invoice retry", e)

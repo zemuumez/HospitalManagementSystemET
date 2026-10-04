@@ -168,6 +168,9 @@ func (s Store) CreateInvoice(ctx context.Context, a domain.Actor, i domain.Invoi
 			return out, e
 		}
 	}
+	if _, e = tx.Exec(ctx, `UPDATE invoice SET sealed=true WHERE id=$1`, id); e != nil {
+		return out, e
+	}
 	if _, e = tx.Exec(ctx, `INSERT INTO audit_event(actor_id,action,resource_id) VALUES($1,'invoice.issued',$2)`, a.ID, id); e != nil {
 		return out, e
 	}
