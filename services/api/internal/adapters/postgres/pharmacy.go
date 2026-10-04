@@ -291,11 +291,12 @@ func (s Store) MoveStock(ctx context.Context, a domain.Actor, i domain.StockInpu
 	if med != "" && med != batchMed {
 		return out, domain.ErrValidation
 	}
+	var salePrice *int64
 	delta := -i.Quantity
 	switch i.Kind {
 	case "dispense":
 		var active bool
-		e = tx.QueryRow(ctx, `SELECT active FROM medicine WHERE id=$1 FOR SHARE`, batchMed).Scan(&active)
+		e = tx.QueryRow(ctx, `SELECT active,selling_price_minor FROM medicine WHERE id=$1 FOR SHARE`, batchMed).Scan(&active, &salePrice)
 		if e != nil {
 			return out, e
 		}
@@ -326,7 +327,7 @@ func (s Store) MoveStock(ctx context.Context, a domain.Actor, i domain.StockInpu
 	if balance+delta < 0 {
 		return out, domain.ErrStale
 	}
-	out, e = scanStock(tx.QueryRow(ctx, `INSERT INTO pharmacy_movement(batch_id,order_id,kind,quantity,original_id,reason,actor_id,request_key,request_hash) VALUES($1,NULLIF($2,'')::uuid,$3,$4,NULLIF($5,'')::uuid,$6,$7,$8,$9) RETURNING `+stockFields, i.BatchID, i.OrderID, i.Kind, i.Quantity, i.OriginalID, i.Reason, a.ID, key, wanted))
+	out, e = scanStock(tx.QueryRow(ctx, `INSERT INTO pharmacy_movement(batch_id,order_id,kind,quantity,original_id,reason,actor_id,request_key,request_hash,unit_sale_price_minor) VALUES($1,NULLIF($2,'')::uuid,$3,$4,NULLIF($5,'')::uuid,$6,$7,$8,$9,$10) RETURNING `+stockFields, i.BatchID, i.OrderID, i.Kind, i.Quantity, i.OriginalID, i.Reason, a.ID, key, wanted, salePrice))
 	if e != nil {
 		return out, clinicalError(e)
 	}

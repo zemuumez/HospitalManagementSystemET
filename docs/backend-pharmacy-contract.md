@@ -40,4 +40,12 @@ The disposable-schema suite covers receipt/signing/dispensing/return retries, ch
 
 ## Still open
 
-Full original prescription fields and grouped/versioned documents; catalog/master CRUD; complete purchase headers/tax/payables; recall and quarantine assessment; batch selection assistance; prescription renewal/replacement; pharmacy billing and financial reversals; general inventory; blood bank; exports and printing; frontend integration. Existing financial/clinical APIs remain separate from this increment.
+Full original prescription fields and grouped/versioned documents; catalog/master CRUD; complete purchase headers/tax/payables; recall and quarantine assessment; batch selection assistance; prescription renewal/replacement; pharmacy billing and financial reversals; general inventory; blood bank; exports and printing; frontend integration. Pharmacy invoice linkage is implemented below; full medicine-bill parity and return credits remain open.
+
+## Pharmacy source billing (migration 007)
+
+POST `/v1/pharmacy-movements/{id}/invoice` accepts `{accountId, discountBasisPoints}` and an Idempotency-Key. Only admin/accountant may issue financial invoices. Patient, quantity and unit price come from the actual dispensing record and cannot be supplied by the caller. Dispensing now captures the catalog sale price; historical records without a captured price are rejected instead of silently using a new price. Zero-value supply is not invoiced by this endpoint.
+
+A transaction locks the dispensing source, snapshots the charge account and creates/seals the invoice plus an immutable unique source association. Concurrent requests with different keys return the same invoice when account/discount agree; altered terms conflict. Standard invoice payment/refund rules apply. Returning medicine does not automatically create a credit or initiate a refund; that linked financial correction workflow remains open.
+
+Tests verify concurrent duplicate billing, price preservation after catalog edits, exact discounted total, pharmacist financial denial, patient invoice ownership, immutable source linkage and authenticated HTTP creation. Local migrations 005-007 applied successfully; the local API now runs `services/api/bin/api-pharmacy.exe`. The existing live integration suite and synthetic Chrome connected-workflow regression passed after the update. No new pharmacy frontend integration was added.

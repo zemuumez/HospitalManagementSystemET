@@ -86,3 +86,9 @@ type Payment struct {
 	Direction string    `json:"direction"`
 	CreatedAt time.Time `json:"createdAt"`
 }
+
+// A pharmacy invoice derives patient, quantity and price from a real dispensing.
+type PharmacyInvoiceInput struct {
+	AccountID           string `json:"accountId"`
+	DiscountBasisPoints int64  `json:"discountBasisPoints"`
+}

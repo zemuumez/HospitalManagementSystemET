@@ -73,7 +73,7 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Medicines (`medicines`) | Medicine | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
 | Medicine Purchases (`purchase-medicines`) | Medicine | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
 | Used Medicines (`used-medicine`) | Medicine | Pharmacy/medication core API tested; full source parity and frontend integration pending | Open |
-| Medicine Bills (`medicine-bills`) | Medicine | Preview only; typed backend, integration and workflow QA pending | Open |
+| Medicine Bills (`medicine-bills`) | Medicine | Dispensing-to-invoice backend linkage tested; full medicine bills/credits and UI integration pending | Open |
 | Patients (`patients`) | Patients | Essential registration and portal/doctor linkage; full fields/edit pending | Open |
 | Patient Cases (`patient-cases`) | Patients | Create/list with patient and doctor; edit/closure/full case fields pending | Open |
 | Case Handlers (`case-handlers`) | Patients | Preview only; typed backend, integration and workflow QA pending | Open |

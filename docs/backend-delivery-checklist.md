@@ -111,7 +111,7 @@ Manual payment forms record completed money movements; they do not send bank tra
 | Notes/discharge | Encounter `/notes` and `/discharge` | Encounter details | Attachments, amendments, templates, print/PDF |
 | Messaging | `/v1/messages` | Communications | Preferences, callbacks, scheduled delivery, reconciliation |
 | Billing | `/v1/charge-accounts`, `/v1/invoices`, invoice detail/payments, billing patient index | Accounts, Invoices, portal invoices | Gateways, taxes, voiding/corrections, print, reconciliation, source charges |
-| Pharmacy | `/v1/medicines`, `/v1/medicine-batches`, `/v1/medication-orders`, `/v1/pharmacy-movements` | None; backend-first | Full document/master parity, billing linkage; [contract](backend-pharmacy-contract.md) |
+| Pharmacy | `/v1/medicines`, `/v1/medicine-batches`, `/v1/medication-orders`, `/v1/pharmacy-movements` | None; backend-first | Full document/master parity, return credits; [contract](backend-pharmacy-contract.md) |
 | Other original modules | No completed API yet | Marked frontend previews | See module coverage appendix |
 
 The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The complete original-screen inventory is in [backend-module-coverage.md](backend-module-coverage.md).
@@ -223,7 +223,8 @@ Backend-first progress:
 - [x] Core invoice partial/full payments, idempotent posting, overpayment prevention and append-only refunds.
 - [ ] Expanded reversal/voiding approvals and reconciliation workflows.
 - [ ] Payment provider integrations, signed webhooks, event replay protection and settlement reconciliation.
-- [ ] IPD/OPD/pharmacy/ambulance/lab charges linked to their source workflows without duplicate billing.
+- [x] Pharmacy dispensing-to-invoice linkage with captured prices and unique immutable source associations; concurrent duplicate billing tested (migration 007).
+- [ ] IPD/OPD/ambulance/lab charges linked to their source workflows without duplicate billing.
 - [ ] Expenses, income, account transfers and daily/monthly financial reports.
 - [ ] Insurance, packages, policy details, claims and patient responsibility.
 - [ ] Employee payroll, allowances/deductions, approval, payout and payroll slips.
@@ -353,3 +354,9 @@ Verification: Go tests with `HMS_TEST_DATABASE_URL` enabled (fresh schema, all m
 ### Backend-first increment: pharmacy and signed medication core
 
 See [pharmacy contracts, source differences and remaining work](backend-pharmacy-contract.md). Migration 006, typed domain/application/repository code and authenticated Go routes implement catalog creation/search, batch receipts, signed encounter medication orders, cancellation, partial dispensing, returns and disposal. All Go tests with isolated PostgreSQL enabled and vet passed. New frontend integration is deferred. Completed core items are split from remaining full-document/master-data parity above; Section 3 is still incomplete.
+
+### Backend-first increment: pharmacy invoice linkage
+
+Migration 007 captures sale prices when medicine is dispensed and links a source movement to one issued invoice. Quantity/patient/price are server-derived; only admin/accountant may bill. Concurrent requests cannot bill the same source twice. Return credits, full medicine bills and other domain charge integrations remain open.
+
+Verification: isolated PostgreSQL and HTTP tests, Go vet/build, the live authentication/scheduling/message integration suite and the existing synthetic Chrome connected-workflow regression passed. Local migrations 005-007 applied and the API restarted with the new build. No new Section 4 frontend integration was undertaken.

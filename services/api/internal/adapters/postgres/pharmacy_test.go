@@ -107,6 +107,43 @@ func testPharmacy(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.A
 	if e != nil || issueRetry.ID != issued.ID {
 		t.Fatal("duplicate dispensing", e)
 	}
+	// Billing uses the captured dispensing price and deduplicates across request keys.
+	billing := application.Billing{Store: store, Now: func() time.Time { return now }}
+	account, e := billing.CreateAccount(ctx, admin, "Pharmacy")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = db.Exec(ctx, `UPDATE medicine SET selling_price_minor=999 WHERE id=$1`, med.ID); e != nil {
+		t.Fatal(e)
+	}
+	billInput := domain.PharmacyInvoiceInput{AccountID: account.ID, DiscountBasisPoints: 1000}
+	var invoices [2]domain.Invoice
+	var invoiceErrors [2]error
+	for n := 0; n < 2; n++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			invoices[n], invoiceErrors[n] = billing.BillDispensing(ctx, admin, issued.ID, billInput, fmt.Sprintf("pharmacy-invoice-%08d", n))
+		}(n)
+	}
+	wg.Wait()
+	if invoiceErrors[0] != nil || invoiceErrors[1] != nil || invoices[0].ID != invoices[1].ID || invoices[0].TotalMinor != 360 {
+		t.Fatal("pharmacy invoice dedup/snapshot", invoiceErrors, invoices)
+	}
+	if _, e = billing.BillDispensing(ctx, pharmacist, issued.ID, billInput, "unauthorized-invoice-key"); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal("pharmacist issued finance invoice", e)
+	}
+	changedBill := billInput
+	changedBill.DiscountBasisPoints = 0
+	if _, e = billing.BillDispensing(ctx, admin, issued.ID, changedBill, "changed-pharmacy-invoice"); !errors.Is(e, domain.ErrConflict) {
+		t.Fatal("source billed again with different total", e)
+	}
+	if _, e = billing.Invoice(ctx, patient, invoices[0].ID); e != nil {
+		t.Fatal("patient source invoice visibility", e)
+	}
+	if _, e = db.Exec(ctx, `DELETE FROM pharmacy_invoice WHERE movement_id=$1`, issued.ID); e == nil {
+		t.Fatal("source billing association deleted")
+	}
 	returned := domain.StockInput{BatchID: batch.ID, OrderID: order.ID, Kind: "return", Quantity: 2, OriginalID: issued.ID, Reason: "Synthetic return"}
 	ret, e := ph.Move(ctx, pharmacist, returned, "return-key-00000001")
 	if e != nil {
@@ -186,11 +223,13 @@ func testPharmacy(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.A
 		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))
 	}))
 	defer auth.Close()
-	handler := httpapi.Server{Pharmacy: ph, Actors: store, AuthURL: auth.URL, Origin: "http://hospital.test", Client: auth.Client()}.Handler()
+	handler := httpapi.Server{Pharmacy: ph, Billing: billing, Actors: store, AuthURL: auth.URL, Origin: "http://hospital.test", Client: auth.Client()}.Handler()
 	for _, tc := range []struct {
 		actor, method, path, body, origin string
 		want                              int
 	}{
+		{"admin", "POST", "/v1/pharmacy-movements/" + issued.ID + "/invoice", fmt.Sprintf(`{"accountId":%q,"discountBasisPoints":1000}`, account.ID), "http://hospital.test", 201},
+		{"pharmacist", "POST", "/v1/pharmacy-movements/" + issued.ID + "/invoice", fmt.Sprintf(`{"accountId":%q,"discountBasisPoints":1000}`, account.ID), "http://hospital.test", 403},
 		{"patient", "GET", "/v1/medicine-batches?medicineId=" + med.ID, "", "", 403},
 		{"pharmacist", "GET", "/v1/medicine-batches?medicineId=" + med.ID, "", "", 200},
 		{"pharmacist", "POST", "/v1/medicines", `{"name":"test","extra":true}`, "http://hospital.test", 400},
@@ -198,6 +237,7 @@ func testPharmacy(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.A
 		{"pharmacist", "POST", "/v1/pharmacy-movements", `{}`, "http://hospital.test", 422},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Idempotency-Key", "pharmacy-http-key-0001")
 		req.Header.Set("Cookie", "session="+tc.actor)
 		req.Header.Set("Origin", tc.origin)
 		w := httptest.NewRecorder()
