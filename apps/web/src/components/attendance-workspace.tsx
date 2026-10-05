@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -14,6 +14,9 @@ import {
   Calendar,
   ClipboardList,
   X,
+  CheckCircle2,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { useLanguage } from "./language";
 import { Modal } from "./modal";
@@ -272,6 +275,17 @@ const duration = (n: number) =>
   `${String(Math.floor(Math.max(0, n) / 60)).padStart(2, "0")}:${String(Math.max(0, n) % 60).padStart(2, "0")}`;
 export function AttendanceWorkspace({ id }: { id: string }) {
   const { t } = useLanguage();
+
+  const attendanceTabs = [
+    { id: "attendance", label: "Attendance Dashboard", href: "/modules/attendance" },
+    { id: "attendance-shifts", label: "Attendance Shifts", href: "/modules/attendance-shifts" },
+    { id: "attendance-assignments", label: "Duty Assignments", href: "/modules/attendance-assignments" },
+    { id: "attendance-leaves", label: "Leave Requests", href: "/modules/attendance-leaves" },
+    { id: "attendance-requests", label: "Attendance Requests", href: "/modules/attendance-requests" },
+    { id: "attendance-report", label: "Attendance Report", href: "/modules/attendance-report" },
+    { id: "manage-attendance", label: "Manage Attendance", href: "/modules/manage-attendance" },
+  ];
+
   const [data, setData] = useState(initial),
     [ready, setReady] = useState(false),
     [search, setSearch] = useState(""),
@@ -284,6 +298,78 @@ export function AttendanceWorkspace({ id }: { id: string }) {
     [editing, setEditing] = useState<Row | null>(null),
     [view, setView] = useState<Row | null>(null),
     [error, setError] = useState("");
+
+  const [apiConnected, setApiConnected] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [apiSuccessBanner, setApiSuccessBanner] = useState("");
+  const [apiErrorBanner, setApiErrorBanner] = useState("");
+
+  const loadAttendanceData = useCallback(async () => {
+    setIsSyncing(true);
+    let connected = false;
+    try {
+      const [shiftsRes, assignRes] = await Promise.all([
+        fetch("/api/hms/attendance/shifts").catch(() => null),
+        fetch("/api/hms/attendance/assignments").catch(() => null),
+      ]);
+
+      if (shiftsRes && shiftsRes.ok) {
+        const d = await shiftsRes.json();
+        const raw = Array.isArray(d) ? d : d.shifts || [];
+        if (raw.length > 0) {
+          const mappedShifts: Row[] = raw.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            code: s.name.split(" ").map((w: string) => w[0]).join("").toUpperCase() || "SH",
+            start: (s.startTime || "08:00:00").slice(0, 5),
+            end: (s.endTime || "17:00:00").slice(0, 5),
+            grace: String(s.gracePeriodMinutes ?? 10),
+            break: String(s.breakDurationMinutes ?? 45),
+            default: s.active ? "Is Default" : "Not Default",
+            status: s.active ? "Active" : "Inactive",
+            staffCount: "0",
+          }));
+          setData((prev) => ({
+            ...prev,
+            "attendance-shifts": mappedShifts,
+          }));
+          connected = true;
+        }
+      }
+
+      if (assignRes && assignRes.ok) {
+        const d = await assignRes.json();
+        const raw = Array.isArray(d) ? d : d.assignments || [];
+        if (raw.length > 0) {
+          const mappedAssigns: Row[] = raw.map((a: any) => ({
+            id: a.id,
+            staff: a.staffName || a.staffId || "Staff Member",
+            shift: a.shiftName || "Day Shift",
+            from: a.effectiveFrom || "2026-10-01",
+            to: a.effectiveTo || "",
+            status: "Active",
+            note: "Active assignment",
+          }));
+          setData((prev) => ({
+            ...prev,
+            "attendance-assignments": mappedAssigns,
+          }));
+          connected = true;
+        }
+      }
+
+      setApiConnected(connected);
+    } catch {
+      setApiConnected(false);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAttendanceData();
+  }, [loadAttendanceData]);
+
   useEffect(() => {
     try {
       setData(
@@ -459,6 +545,101 @@ export function AttendanceWorkspace({ id }: { id: string }) {
   if (id === "attendance")
     return (
       <section>
+        {/* Subtabs Navigation */}
+        <div className="module-subtabs-nav" style={{ marginBottom: "20px" }}>
+          {attendanceTabs.map((tab) => {
+            const isActive = id === tab.id;
+            return (
+              <Link
+                key={tab.id}
+                href={tab.href}
+                className={`subtab-btn ${isActive ? "active" : ""}`}
+              >
+                {t(tab.label)}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Live Backend Connection Banner */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+            border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
+            borderRadius: "8px",
+            padding: "10px 16px",
+            marginBottom: "16px",
+            fontSize: "13px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {apiConnected ? (
+              <CheckCircle2 size={16} color="#10b981" />
+            ) : (
+              <AlertCircle size={16} color="#3b82f6" />
+            )}
+            <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+              {apiConnected
+                ? t("Connected to PostgreSQL Backend (/v1/attendance)")
+                : t("Local Clinical Preview Mode (Attendance Ready)")}
+            </span>
+            <span style={{ color: "#94a3b8" }}>•</span>
+            <span style={{ color: "#cbd5e1" }}>
+              {shifts.length} {t("shifts")} | {data["attendance-assignments"].length} {t("assignments")}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => loadAttendanceData()}
+            disabled={isSyncing}
+            style={{
+              background: "transparent",
+              border: "1px solid #475569",
+              color: "#e2e8f0",
+              borderRadius: "6px",
+              padding: "4px 10px",
+              fontSize: "12px",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+            title={t("Sync Attendance")}
+          >
+            <RefreshCw size={12} className={isSyncing ? "animate-spin" : ""} />
+            {isSyncing ? t("Syncing...") : t("Sync Data")}
+          </button>
+        </div>
+
+        {apiSuccessBanner && (
+          <div
+            style={{
+              background: "rgba(16, 185, 129, 0.15)",
+              border: "1px solid #10b981",
+              color: "#34d399",
+              padding: "10px 14px",
+              borderRadius: "6px",
+              marginBottom: "14px",
+              fontSize: "13px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span>{apiSuccessBanner}</span>
+            <button
+              onClick={() => setApiSuccessBanner("")}
+              style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         <div className="page-heading">
           <div>
             <h1>{t("Attendance Dashboard")}</h1>
@@ -571,6 +752,101 @@ export function AttendanceWorkspace({ id }: { id: string }) {
     );
   return (
     <section>
+      {/* Subtabs Navigation */}
+      <div className="module-subtabs-nav" style={{ marginBottom: "20px" }}>
+        {attendanceTabs.map((tab) => {
+          const isActive = id === tab.id;
+          return (
+            <Link
+              key={tab.id}
+              href={tab.href}
+              className={`subtab-btn ${isActive ? "active" : ""}`}
+            >
+              {t(tab.label)}
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* Live Backend Connection Banner */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+          border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
+          borderRadius: "8px",
+          padding: "10px 16px",
+          marginBottom: "16px",
+          fontSize: "13px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {apiConnected ? (
+            <CheckCircle2 size={16} color="#10b981" />
+          ) : (
+            <AlertCircle size={16} color="#3b82f6" />
+          )}
+          <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+            {apiConnected
+              ? t("Connected to PostgreSQL Backend (/v1/attendance)")
+              : t("Local Clinical Preview Mode (Attendance Ready)")}
+          </span>
+          <span style={{ color: "#94a3b8" }}>•</span>
+          <span style={{ color: "#cbd5e1" }}>
+            {shifts.length} {t("shifts")} | {data["attendance-assignments"].length} {t("assignments")}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => loadAttendanceData()}
+          disabled={isSyncing}
+          style={{
+            background: "transparent",
+            border: "1px solid #475569",
+            color: "#e2e8f0",
+            borderRadius: "6px",
+            padding: "4px 10px",
+            fontSize: "12px",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+          title={t("Sync Attendance")}
+        >
+          <RefreshCw size={12} className={isSyncing ? "animate-spin" : ""} />
+          {isSyncing ? t("Syncing...") : t("Sync Data")}
+        </button>
+      </div>
+
+      {apiSuccessBanner && (
+        <div
+          style={{
+            background: "rgba(16, 185, 129, 0.15)",
+            border: "1px solid #10b981",
+            color: "#34d399",
+            padding: "10px 14px",
+            borderRadius: "6px",
+            marginBottom: "14px",
+            fontSize: "13px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>{apiSuccessBanner}</span>
+          <button
+            onClick={() => setApiSuccessBanner("")}
+            style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <div className="page-heading">
         <div>
           <h1>{t(config.title)}</h1>
@@ -728,7 +1004,7 @@ export function AttendanceWorkspace({ id }: { id: string }) {
         >
           <form
             className="p-6"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               if (editing.to && editing.from && editing.to < editing.from) {
                 setError("End date must be on or after the start date.");
@@ -743,6 +1019,31 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                     ? "Late"
                     : "Present";
               }
+
+              if (id === "attendance-shifts") {
+                try {
+                  const startTime = (row.start || "08:00") + (row.start.split(":").length === 2 ? ":00" : "");
+                  const endTime = (row.end || "17:00") + (row.end.split(":").length === 2 ? ":00" : "");
+                  const res = await fetch("/api/hms/attendance/shifts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      name: row.name,
+                      startTime,
+                      endTime,
+                      gracePeriodMinutes: Number(row.grace || 10),
+                      breakDurationMinutes: Number(row.break || 45),
+                      active: row.status !== "Inactive",
+                    }),
+                  });
+                  if (res.ok) {
+                    setApiSuccessBanner(t("Shift saved and committed to database!"));
+                  }
+                } catch {
+                  // preview fallback
+                }
+              }
+
               setData((old) => ({
                 ...old,
                 [source]: (old[source] || []).some((r) => r.id === row.id)

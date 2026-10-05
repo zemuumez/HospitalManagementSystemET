@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,6 +16,8 @@ import {
   AlertCircle,
   Check,
   ChevronDown,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import { useLanguage } from "./language";
 
@@ -31,10 +33,12 @@ interface MedicineRow {
 
 interface PrescriptionItem {
   id: string;
+  patientId?: string;
   patientName: string;
   patientEmail: string;
   patientInitials: string;
   patientColor: string;
+  doctorId?: string;
   doctorName: string;
   doctorEmail: string;
   doctorInitials: string;
@@ -237,7 +241,7 @@ const INITIAL_PRESCRIPTIONS: PrescriptionItem[] = [
   },
 ];
 
-const AVAILABLE_MEDICINES = [
+const INITIAL_MEDICINES = [
   "Paracetamol 500mg",
   "Amoxicillin 500mg",
   "Ibuprofen 400mg",
@@ -248,7 +252,7 @@ const AVAILABLE_MEDICINES = [
   "Ciprofloxacin 500mg",
 ];
 
-const MEDICINE_CATEGORIES = [
+const INITIAL_CATEGORIES = [
   "Antibiotics",
   "Analgesics",
   "Antipyretics",
@@ -257,7 +261,7 @@ const MEDICINE_CATEGORIES = [
   "Cardiovascular",
 ];
 
-const MEDICINE_BRANDS = [
+const INITIAL_BRANDS = [
   "Pfizer",
   "GlaxoSmithKline",
   "Novartis",
@@ -275,6 +279,178 @@ export function PrescriptionsWorkspace() {
   const [prescriptions, setPrescriptions] = useState<PrescriptionItem[]>(
     INITIAL_PRESCRIPTIONS,
   );
+
+  // Backend live sync state
+  const [apiConnected, setApiConnected] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiSuccessBanner, setApiSuccessBanner] = useState("");
+  const [apiErrorBanner, setApiErrorBanner] = useState("");
+
+  const [availableMedicines, setAvailableMedicines] = useState<string[]>(INITIAL_MEDICINES);
+  const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
+  const [brands, setBrands] = useState<string[]>(INITIAL_BRANDS);
+  const [patientOptions, setPatientOptions] = useState<Array<{ id: string; name: string; mrn: string }>>([]);
+  const [doctorOptions, setDoctorOptions] = useState<Array<{ id: string; name: string; department?: string }>>([]);
+
+  const loadPrescriptionsData = useCallback(async () => {
+    setIsSyncing(true);
+    let connected = false;
+    try {
+      const [rxRes, patRes, docRes, medRes, catRes, brandRes] = await Promise.all([
+        fetch("/api/hms/prescriptions").catch(() => null),
+        fetch("/api/hms/patients").catch(() => null),
+        fetch("/api/hms/doctors").catch(() => null),
+        fetch("/api/hms/medicines").catch(() => null),
+        fetch("/api/hms/medicine-categories").catch(() => null),
+        fetch("/api/hms/medicine-brands").catch(() => null),
+      ]);
+
+      let pats: Array<{ id: string; name: string; mrn: string }> = [];
+      if (patRes && patRes.ok) {
+        const data = await patRes.json();
+        const raw = Array.isArray(data) ? data : data.patients || [];
+        if (raw.length > 0) {
+          pats = raw.map((p: any) => ({
+            id: p.id,
+            name: p.name || p.full_name || `Patient ${p.mrn || p.id.slice(0, 6)}`,
+            mrn: p.mrn || "",
+          }));
+          setPatientOptions(pats);
+          connected = true;
+        }
+      }
+
+      let docs: Array<{ id: string; name: string; department?: string }> = [];
+      if (docRes && docRes.ok) {
+        const data = await docRes.json();
+        const raw = Array.isArray(data) ? data : data.doctors || [];
+        if (raw.length > 0) {
+          docs = raw.map((d: any) => ({
+            id: d.id,
+            name: d.name || `Dr. ${d.id.slice(0, 6)}`,
+            department: d.department || "",
+          }));
+          setDoctorOptions(docs);
+          connected = true;
+        }
+      }
+
+      if (medRes && medRes.ok) {
+        const data = await medRes.json();
+        const raw = Array.isArray(data) ? data : data.medicines || [];
+        if (raw.length > 0) {
+          const names = raw.map((m: any) => m.name).filter(Boolean);
+          setAvailableMedicines((prev) => Array.from(new Set([...prev, ...names])));
+          connected = true;
+        }
+      }
+
+      if (catRes && catRes.ok) {
+        const data = await catRes.json();
+        const raw = Array.isArray(data) ? data : data.categories || [];
+        if (raw.length > 0) {
+          const catNames = raw.map((c: any) => c.name).filter(Boolean);
+          setCategories((prev) => Array.from(new Set([...prev, ...catNames])));
+        }
+      }
+
+      if (brandRes && brandRes.ok) {
+        const data = await brandRes.json();
+        const raw = Array.isArray(data) ? data : data.brands || [];
+        if (raw.length > 0) {
+          const bNames = raw.map((b: any) => b.name).filter(Boolean);
+          setBrands((prev) => Array.from(new Set([...prev, ...bNames])));
+        }
+      }
+
+      if (rxRes && rxRes.ok) {
+        const data = await rxRes.json();
+        const raw = Array.isArray(data) ? data : data.prescriptions || [];
+        if (raw.length > 0) {
+          const mapped: PrescriptionItem[] = raw.map((r: any) => {
+            const pat = pats.find((p) => p.id === r.patient_id);
+            const doc = docs.find((d) => d.id === r.doctor_id);
+            const patName = pat?.name || (r.patient_id ? `Patient (${r.patient_id.slice(0, 6)})` : "Patient");
+            const docName = doc?.name || (r.doctor_id ? `Dr. (${r.doctor_id.slice(0, 6)})` : "Doctor");
+            return {
+              id: r.id,
+              patientId: r.patient_id,
+              patientName: patName,
+              patientEmail: `${patName.toLowerCase().replace(/\s+/g, "")}@example.com`,
+              patientInitials: patName.slice(0, 2).toUpperCase(),
+              patientColor: "#3b82f6",
+              doctorId: r.doctor_id,
+              doctorName: docName,
+              doctorEmail: `${docName.toLowerCase().replace(/\s+/g, "")}@hospital.local`,
+              doctorInitials: docName.slice(0, 2).toUpperCase(),
+              doctorColor: "#10b981",
+              addedAt: r.created_at
+                ? new Date(r.created_at).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : "Today",
+              status: r.status === 1,
+              healthInsurance: r.health_insurance,
+              lowIncome: r.low_income,
+              reference: r.reference,
+              medicines: Array.isArray(r.medicines)
+                ? r.medicines.map((m: any, idx: number) => ({
+                    id: m.id || `m-${idx}`,
+                    medicine: m.medicine_name || m.name || "",
+                    dosage: m.dosage || "",
+                    doseDuration: m.day || "7 days",
+                    time: m.time || "After Meal",
+                    doseInterval: "Daily",
+                    comment: m.comment || "",
+                  }))
+                : [],
+              physicalInfo: {
+                highBloodPressure: r.high_blood_pressure,
+                foodAllergies: r.food_allergies,
+                tendencyBleed: r.tendency_bleed,
+                heartDisease: r.heart_disease,
+                diabetic: r.diabetic,
+                femalePregnancy: r.female_pregnancy,
+                breastFeeding: r.breast_feeding,
+                currentMedication: r.current_medication,
+                surgery: r.surgery,
+                accident: r.accident,
+                others: r.others,
+                pulseRate: r.plus_rate,
+                temperature: r.temperature,
+                problemDescription: r.problem_description,
+              },
+              test: r.test,
+              advice: r.advice,
+              nextVisit: {
+                value: parseInt(r.next_visit_qty) || 7,
+                unit: (r.next_visit_time?.toLowerCase() === "months"
+                  ? "Months"
+                  : r.next_visit_time?.toLowerCase() === "weeks"
+                    ? "Weeks"
+                    : "Days") as "Days" | "Weeks" | "Months",
+              },
+            };
+          });
+          setPrescriptions(mapped);
+          connected = true;
+        }
+      }
+
+      setApiConnected(connected);
+    } catch {
+      setApiConnected(false);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPrescriptionsData();
+  }, [loadPrescriptionsData]);
 
   // View state: 'list' or 'create'
   const [mode, setMode] = useState<"list" | "create">("list");
@@ -408,47 +584,184 @@ export function PrescriptionsWorkspace() {
     }
   };
 
-  const handleSavePrescription = (e: React.FormEvent) => {
+  const handleToggleStatus = async (rx: PrescriptionItem) => {
+    const nextStatus = !rx.status;
+    setPrescriptions((prev) =>
+      prev.map((p) => (p.id === rx.id ? { ...p, status: nextStatus } : p)),
+    );
+    try {
+      await fetch(`/api/hms/prescriptions/${rx.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus ? 1 : 0 }),
+      });
+    } catch {
+      // Local preview fallback maintained
+    }
+  };
+
+  const handleSavePrescription = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formPatient || !formDoctor) {
       alert("Please select both a patient and a doctor.");
       return;
     }
 
-    const newRx: PrescriptionItem = {
-      id: `rx-${Date.now()}`,
-      patientName: formPatient,
-      patientEmail: `${formPatient.toLowerCase().replace(/\s+/g, "")}@example.com`,
-      patientInitials: formPatient.slice(0, 2).toUpperCase(),
-      patientColor: "#3b82f6",
-      doctorName: formDoctor,
-      doctorEmail: `${formDoctor.toLowerCase().replace(/\s+/g, "")}@hospital.local`,
-      doctorInitials: formDoctor.slice(0, 2).toUpperCase(),
-      doctorColor: "#10b981",
-      addedAt: new Date().toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }),
-      status: formStatus,
-      healthInsurance: formHealthInsurance,
-      lowIncome: formLowIncome,
+    const filteredMeds = formMedicines.filter((m) => m.medicine && m.medicine.trim().length > 0);
+    if (filteredMeds.length === 0) {
+      alert("Please specify at least one medicine with dosage.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    const selectedPatient = patientOptions.find(
+      (p) => p.id === formPatient || p.name === formPatient,
+    );
+    const selectedDoctor = doctorOptions.find(
+      (d) => d.id === formDoctor || d.name === formDoctor,
+    );
+
+    const patientId = selectedPatient?.id || (formPatient.includes("-") ? formPatient : "00000000-0000-0000-0000-000000000001");
+    const doctorId = selectedDoctor?.id || (formDoctor.includes("-") ? formDoctor : "00000000-0000-0000-0000-000000000002");
+
+    const payload = {
+      patient_id: patientId,
+      doctor_id: doctorId,
+      health_insurance: formHealthInsurance,
+      low_income: formLowIncome,
       reference: formReference,
-      medicines: formMedicines.filter((m) => m.medicine),
-      physicalInfo,
+      food_allergies: physicalInfo.foodAllergies,
+      tendency_bleed: physicalInfo.tendencyBleed,
+      heart_disease: physicalInfo.heartDisease,
+      high_blood_pressure: physicalInfo.highBloodPressure,
+      diabetic: physicalInfo.diabetic,
+      surgery: physicalInfo.surgery,
+      accident: physicalInfo.accident,
+      others: physicalInfo.others,
+      current_medication: physicalInfo.currentMedication,
+      female_pregnancy: physicalInfo.femalePregnancy,
+      breast_feeding: physicalInfo.breastFeeding,
+      plus_rate: physicalInfo.pulseRate,
+      temperature: physicalInfo.temperature,
+      problem_description: physicalInfo.problemDescription,
       test: formTest,
       advice: formAdvice,
-      nextVisit: { value: nextVisitValue, unit: nextVisitUnit },
+      next_visit_qty: String(nextVisitValue),
+      next_visit_time: nextVisitUnit.toLowerCase(),
+      medicines: filteredMeds.map((m) => ({
+        medicine_name: m.medicine,
+        dosage: m.dosage || "1 Dose",
+        day: m.doseDuration || "7 days",
+        time: m.time || "After Meal",
+        comment: m.comment || "",
+      })),
     };
 
-    setPrescriptions([newRx, ...prescriptions]);
+    let savedRx: PrescriptionItem | null = null;
+    try {
+      const res = await fetch("/api/hms/prescriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        savedRx = {
+          id: created.id,
+          patientId: created.patient_id,
+          patientName: selectedPatient?.name || formPatient,
+          patientEmail: `${(selectedPatient?.name || formPatient).toLowerCase().replace(/\s+/g, "")}@example.com`,
+          patientInitials: (selectedPatient?.name || formPatient).slice(0, 2).toUpperCase(),
+          patientColor: "#3b82f6",
+          doctorId: created.doctor_id,
+          doctorName: selectedDoctor?.name || formDoctor,
+          doctorEmail: `${(selectedDoctor?.name || formDoctor).toLowerCase().replace(/\s+/g, "")}@hospital.local`,
+          doctorInitials: (selectedDoctor?.name || formDoctor).slice(0, 2).toUpperCase(),
+          doctorColor: "#10b981",
+          addedAt: new Date().toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+          status: formStatus,
+          healthInsurance: formHealthInsurance,
+          lowIncome: formLowIncome,
+          reference: formReference,
+          medicines: filteredMeds,
+          physicalInfo,
+          test: formTest,
+          advice: formAdvice,
+          nextVisit: { value: nextVisitValue, unit: nextVisitUnit },
+        };
+        setApiSuccessBanner(t("Prescription successfully created and committed to database!"));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setApiErrorBanner(err.error || t("Prescription saved locally in preview mode."));
+      }
+    } catch {
+      setApiErrorBanner(t("Server offline. Prescription recorded in preview mode."));
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    if (!savedRx) {
+      savedRx = {
+        id: `rx-${Date.now()}`,
+        patientName: selectedPatient?.name || formPatient,
+        patientEmail: `${(selectedPatient?.name || formPatient).toLowerCase().replace(/\s+/g, "")}@example.com`,
+        patientInitials: (selectedPatient?.name || formPatient).slice(0, 2).toUpperCase(),
+        patientColor: "#3b82f6",
+        doctorName: selectedDoctor?.name || formDoctor,
+        doctorEmail: `${(selectedDoctor?.name || formDoctor).toLowerCase().replace(/\s+/g, "")}@hospital.local`,
+        doctorInitials: (selectedDoctor?.name || formDoctor).slice(0, 2).toUpperCase(),
+        doctorColor: "#10b981",
+        addedAt: new Date().toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+        status: formStatus,
+        healthInsurance: formHealthInsurance,
+        lowIncome: formLowIncome,
+        reference: formReference,
+        medicines: filteredMeds,
+        physicalInfo,
+        test: formTest,
+        advice: formAdvice,
+        nextVisit: { value: nextVisitValue, unit: nextVisitUnit },
+      };
+    }
+
+    setPrescriptions([savedRx, ...prescriptions]);
     setMode("list");
   };
 
-  const handleSaveNewMedicine = (e: React.FormEvent) => {
+  const handleSaveNewMedicine = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMedForm.medicine) return;
-    AVAILABLE_MEDICINES.push(newMedForm.medicine);
+
+    try {
+      await fetch("/api/hms/medicines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newMedForm.medicine,
+          salt_composition: newMedForm.saltComposition,
+          buying_price_minor: Math.round((parseFloat(newMedForm.buyingPrice) || 0) * 100),
+          selling_price_minor: Math.round((parseFloat(newMedForm.sellingPrice) || 0) * 100),
+          side_effects: newMedForm.sideEffects,
+          description: newMedForm.description,
+        }),
+      });
+    } catch {
+      // offline fallback
+    }
+
+    setAvailableMedicines((prev) => Array.from(new Set([...prev, newMedForm.medicine])));
     setShowNewMedicineModal(false);
     setNewMedForm({
       medicine: "",
@@ -515,7 +828,7 @@ export function PrescriptionsWorkspace() {
                   }
                 >
                   <option value="">{t("Select Category")}</option>
-                  {MEDICINE_CATEGORIES.map((cat) => (
+                  {categories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
@@ -545,7 +858,7 @@ export function PrescriptionsWorkspace() {
                   }
                 >
                   <option value="">{t("Select Brand")}</option>
-                  {MEDICINE_BRANDS.map((b) => (
+                  {brands.map((b) => (
                     <option key={b} value={b}>
                       {b}
                     </option>
@@ -735,12 +1048,22 @@ export function PrescriptionsWorkspace() {
                   onChange={(e) => setFormPatient(e.target.value)}
                 >
                   <option value="">{t("Select Patient")}</option>
-                  <option value="ABBA ADAMU">ABBA ADAMU</option>
-                  <option value="AA Ahmed">AA Ahmed</option>
-                  <option value="SAN K">SAN K</option>
-                  <option value="Srinivas D">Srinivas D</option>
-                  <option value="Aamer Idris">Aamer Idris</option>
-                  <option value="Aljun Cardona">Aljun Cardona</option>
+                  {patientOptions.length > 0 ? (
+                    patientOptions.map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name} {p.mrn ? `(${p.mrn})` : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="ABBA ADAMU">ABBA ADAMU</option>
+                      <option value="AA Ahmed">AA Ahmed</option>
+                      <option value="SAN K">SAN K</option>
+                      <option value="Srinivas D">Srinivas D</option>
+                      <option value="Aamer Idris">Aamer Idris</option>
+                      <option value="Aljun Cardona">Aljun Cardona</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -755,13 +1078,23 @@ export function PrescriptionsWorkspace() {
                   onChange={(e) => setFormDoctor(e.target.value)}
                 >
                   <option value="">{t("Select Doctor")}</option>
-                  <option value="Dr. Dharman K">Dr. Dharman K</option>
-                  <option value="Dr. Annie Bsseor">Dr. Annie Bsseor</option>
-                  <option value="Dr. Harish Mohan">Dr. Harish Mohan</option>
-                  <option value="Dr. Abdiqafar Haaaa">
-                    Dr. Abdiqafar Haaaa
-                  </option>
-                  <option value="Dr. Ali Sahil">Dr. Ali Sahil</option>
+                  {doctorOptions.length > 0 ? (
+                    doctorOptions.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name} {d.department ? `(${d.department})` : ""}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Dr. Dharman K">Dr. Dharman K</option>
+                      <option value="Dr. Annie Bsseor">Dr. Annie Bsseor</option>
+                      <option value="Dr. Harish Mohan">Dr. Harish Mohan</option>
+                      <option value="Dr. Abdiqafar Haaaa">
+                        Dr. Abdiqafar Haaaa
+                      </option>
+                      <option value="Dr. Ali Sahil">Dr. Ali Sahil</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -899,7 +1232,7 @@ export function PrescriptionsWorkspace() {
                           }}
                         >
                           <option value="">{t("Select Medicine")}</option>
-                          {AVAILABLE_MEDICINES.map((m) => (
+                          {availableMedicines.map((m) => (
                             <option key={m} value={m}>
                               {m}
                             </option>
@@ -1315,8 +1648,19 @@ export function PrescriptionsWorkspace() {
                 gap: "12px",
               }}
             >
-              <button type="submit" className="btn-action-blue">
-                {t("Save")}
+              <button
+                type="submit"
+                className="btn-action-blue"
+                disabled={isSubmitting}
+                style={{
+                  opacity: isSubmitting ? 0.7 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                {isSubmitting && <RefreshCw size={14} className="animate-spin" />}
+                {isSubmitting ? t("Saving...") : t("Save")}
               </button>
               <button
                 type="button"
@@ -1337,6 +1681,110 @@ export function PrescriptionsWorkspace() {
   // DEFAULT SCREEN: Prescriptions Table (Screenshot 174820)
   return (
     <div className="legacy-page-container" style={{ padding: "24px" }}>
+      {/* Live Backend Connection Banner */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+          border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
+          borderRadius: "8px",
+          padding: "10px 16px",
+          marginBottom: "16px",
+          fontSize: "13px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {apiConnected ? (
+            <CheckCircle2 size={16} color="#10b981" />
+          ) : (
+            <AlertCircle size={16} color="#3b82f6" />
+          )}
+          <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+            {apiConnected
+              ? t("Connected to PostgreSQL Backend (/v1/prescriptions)")
+              : t("Local Clinical Preview Mode (Prescriptions Ready)")}
+          </span>
+          <span style={{ color: "#94a3b8" }}>•</span>
+          <span style={{ color: "#cbd5e1" }}>
+            {prescriptions.length} {t("prescriptions total")}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => loadPrescriptionsData()}
+          disabled={isSyncing}
+          style={{
+            background: "transparent",
+            border: "1px solid #475569",
+            color: "#e2e8f0",
+            borderRadius: "6px",
+            padding: "4px 10px",
+            fontSize: "12px",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+          title={t("Sync Prescriptions")}
+        >
+          <RefreshCw size={12} className={isSyncing ? "animate-spin" : ""} />
+          {isSyncing ? t("Syncing...") : t("Sync Data")}
+        </button>
+      </div>
+
+      {apiSuccessBanner && (
+        <div
+          style={{
+            background: "rgba(16, 185, 129, 0.15)",
+            border: "1px solid #10b981",
+            color: "#34d399",
+            padding: "10px 14px",
+            borderRadius: "6px",
+            marginBottom: "14px",
+            fontSize: "13px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>{apiSuccessBanner}</span>
+          <button
+            onClick={() => setApiSuccessBanner("")}
+            style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {apiErrorBanner && (
+        <div
+          style={{
+            background: "rgba(239, 68, 68, 0.15)",
+            border: "1px solid #ef4444",
+            color: "#f87171",
+            padding: "10px 14px",
+            borderRadius: "6px",
+            marginBottom: "14px",
+            fontSize: "13px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>{apiErrorBanner}</span>
+          <button
+            onClick={() => setApiErrorBanner("")}
+            style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer" }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="billing-toolbar">
         <div className="billing-search-box">
@@ -1434,15 +1882,7 @@ export function PrescriptionsWorkspace() {
                         <input
                           type="checkbox"
                           checked={rx.status}
-                          onChange={() =>
-                            setPrescriptions(
-                              prescriptions.map((p) =>
-                                p.id === rx.id
-                                  ? { ...p, status: !p.status }
-                                  : p,
-                              ),
-                            )
-                          }
+                          onChange={() => handleToggleStatus(rx)}
                         />
                         <span className="slider round" />
                       </label>
@@ -1585,7 +2025,7 @@ export function PrescriptionsWorkspace() {
                     }
                   >
                     <option value="">{t("Select Category")}</option>
-                    {MEDICINE_CATEGORIES.map((cat) => (
+                    {categories.map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}
                       </option>
@@ -1615,7 +2055,7 @@ export function PrescriptionsWorkspace() {
                     }
                   >
                     <option value="">{t("Select Brand")}</option>
-                    {MEDICINE_BRANDS.map((b) => (
+                    {brands.map((b) => (
                       <option key={b} value={b}>
                         {b}
                       </option>

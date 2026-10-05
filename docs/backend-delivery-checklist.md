@@ -107,12 +107,16 @@ Manual payment forms record completed money movements; they do not send bank tra
 |---|---|---|---|
 | Identity | Better Auth `/api/auth/*`; administrator `/api/staff` | Login, reset, account, Users | Invitations, MFA, recovery, richer staff profiles |
 | Patients | Registration/list, scoped detail, profile PATCH/revisions, administrator access linking | Essential register and access linking only | Profile UI, remaining fields/files, care team |
-| Scheduling | `/v1/doctors`, `/v1/slots`, `/v1/appointments`, appointment PATCH | Schedules, Appointments, portal appointments | Calendars, queues, absence UI, fees, reminders |
+| Scheduling | `/v1/doctors`, `/v1/slots`, `/v1/appointments`, `/v1/doctor-departments`, `/v1/doctor-absences`, appointment PATCH | Schedules, Appointments, Doctors, Doctor Departments, Holidays, Breaks, portal appointments | Calendars, queues, fees, reminders |
 | Clinical | `/v1/beds`, `/v1/cases`, `/v1/encounters` | Beds, Cases, OPD/IPD and portal lists | Original submodules and fields |
 | Notes/discharge | Encounter `/notes` and `/discharge` | Encounter details | Attachments, amendments, templates, print/PDF |
 | Messaging | `/v1/messages` | Communications | Preferences, callbacks, scheduled delivery, reconciliation |
-| Billing | `/v1/charge-accounts`, `/v1/invoices`, invoice detail/payments, billing patient index | Accounts, Invoices, portal invoices | Gateways, taxes, voiding/corrections, print, reconciliation, source charges |
-| Pharmacy | `/v1/medicines`, `/v1/medicine-batches`, `/v1/medication-orders`, `/v1/pharmacy-movements` | None; backend-first | Full document/master parity, return credits; [contract](backend-pharmacy-contract.md) |
+| Billing | `/v1/charge-accounts`, `/v1/invoices`, invoice detail/payments, billing patient index | Accounts, Invoices, Billing Payments, Advance Payments, Payment Reports, Bills, Payrolls, portal invoices | Gateways, taxes, voiding/corrections, print, reconciliation, source charges |
+| Pharmacy & Prescriptions | `/v1/medicines`, `/v1/medicine-categories`, `/v1/medicine-brands`, `/v1/prescriptions`, `/v1/medication-orders`, `/v1/pharmacy-movements` | Medicines, Brands, Categories, Purchases, Prescriptions, Dispensation | Full document/master parity, return credits; [contract](backend-pharmacy-contract.md) |
+| Blood Bank | `/v1/blood-bank`, `/v1/blood-donors`, `/v1/blood-donations`, `/v1/blood-issues` | Blood Banks, Donors, Donations, Issues, Reports | Compatibility testing workflows, screening laboratory details |
+| Services & Logistics | `/v1/services`, `/v1/ambulances`, `/v1/ambulance-calls`, `/v1/packages`, `/v1/insurances` | Services, Ambulances, Ambulance Calls, Packages, Insurances | Driver tracking, live GPS, external claim portal |
+| Diagnostics & Pathology | `/v1/diagnostic-categories`, `/v1/diagnostic-units`, `/v1/diagnostic-tests`, `/v1/diagnostic-orders` | Pathology Categories, Units, Parameters, Tests | Imaging DICOM viewer, laboratory equipment integration |
+| Attendance & HR | `/v1/attendance/shifts`, `/v1/attendance/assignments`, `/v1/attendance/summary`, `/v1/attendance/today`, `/v1/attendance/clock-in`, `/v1/attendance/clock-out` | Attendance Dashboard, Shifts, Assignments, Duties, Leaves, Requests, Reports | Biometric hardware integration, RFID readers |
 | Other original modules | No completed API yet | Marked frontend previews | See module coverage appendix |
 
 The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The complete original-screen inventory is in [backend-module-coverage.md](backend-module-coverage.md).

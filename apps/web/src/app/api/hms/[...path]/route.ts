@@ -63,6 +63,7 @@ const allowedRoot = new Set([
   "doctor-departments",
   "doctor-holidays",
   "doctor-breaks",
+  "doctor-absences",
   "employee-payrolls",
   "payrolls",
   "expenses",
@@ -97,7 +98,20 @@ function isAllowedPath(path: string[]): boolean {
 
   if (path.length === 2) {
     if (path[0] === "bed-occupancy" && path[1] === "report") return true;
-    if (path[0] === "attendance" && ["check-in", "check-out"].includes(path[1]))
+    if (
+      path[0] === "attendance" &&
+      [
+        "check-in",
+        "check-out",
+        "shifts",
+        "assignments",
+        "today",
+        "clock-in",
+        "clock-out",
+        "records",
+        "summary",
+      ].includes(path[1])
+    )
       return true;
     if (
       path[0] === "finance" &&
@@ -150,6 +164,14 @@ function isAllowedPath(path: string[]): boolean {
     }
     if (path[0] === "employee-payrolls") {
       return path[2] === "slip";
+    }
+    if (path[0] === "attendance") {
+      if (path[1] === "breaks" && ["start", "end"].includes(path[2])) return true;
+      if (path[1] === "records" && ["history", "approval"].includes(path[2])) return true;
+      if (path[1] === "shifts") return true;
+    }
+    if (path[0] === "doctor-departments" && ["archive", "revisions"].includes(path[2])) {
+      return true;
     }
   }
 

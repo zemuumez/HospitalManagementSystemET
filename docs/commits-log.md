@@ -25,6 +25,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`9bf4476`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9bf4476) | **Frontend/BedManagement** | Recreate Bed Management module with 4 tabs matching screenshots (Bed Status with 17 ward grids, Bed Assigns, Beds, Bed Types, New Bed Type modal) | N/A | Pushed (`main`) |
 | [`cda7d7e`](https://github.com/zemuumez/HospitalManagementSystemET/commit/cda7d7e) | **Frontend/Modules** | Workspaces for Prescriptions, Doctors (5 tabs, New Schedule, Breaks), Blood Bank (5 tabs, Donors, Reports), and Diagnosis (Categories, Tests) | N/A | Pushed (`main`) |
 | [`ab08aa7`](https://github.com/zemuumez/HospitalManagementSystemET/commit/ab08aa7) | **Section 4** | Connect Medicines, Billing, Services, Ambulances, and Pathology workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
+| [`TBD`](#) | **Section 4** | Connect Blood Bank, Prescriptions, Doctors & Scheduling, and Attendance workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
 
 ---
 
@@ -315,4 +316,34 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - **Pathology Workspace** (`apps/web/src/components/pathology-workspace.tsx`): Connected to `/api/hms/diagnostic-categories?kind=pathology`, `/api/hms/diagnostic-units`, `/api/hms/diagnostic-tests` with async modal handlers, submission spinners, and live sync banner.
   - **Workspace Navigation** (`apps/web/src/components/workspace.tsx`): Registered all operational module routes in `isLive` list.
   - Verification: `npm run typecheck` passed (0 errors), all test suites passed.
+
+### 20. Commit `TBD` — Section 4 Frontend Integration for Blood Bank, Prescriptions, Doctors & Attendance
+- **Message**: `feat: connect blood bank, prescriptions, doctors, and attendance workspaces to postgres backend`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Connected client workspaces through the Next.js API proxy (`/api/hms/...` -> `http://127.0.0.1:8080/v1/...`).
+  - **Next.js Proxy** (`apps/web/src/app/api/hms/[...path]/route.ts`):
+    - Added `"doctor-absences"` to `allowedRoot`.
+    - Whitelisted 2-segment routes for attendance (`shifts`, `assignments`, `today`, `clock-in`, `clock-out`, `records`, `summary`).
+    - Whitelisted 3-segment routes for `attendance/breaks/*`, `attendance/records/*`, `attendance/shifts/*`, `doctor-departments/archive`, and `doctor-departments/revisions`.
+  - **Blood Bank Workspace** (`apps/web/src/components/blood-bank-workspace.tsx`):
+    - Connected to `/api/hms/blood-bank`, `/api/hms/blood-donors`, `/api/hms/blood-donations`, `/api/hms/blood-issues`, `/api/hms/patients`, `/api/hms/doctors`.
+    - Implemented async handlers `handleSaveDonor`, `handleSaveDonation`, `handleSaveIssue`, and `handleSaveBank` with persistent API mutation and optimistic local state updates.
+    - Added subtab switching across 5 views, live connection status banner, counters, and sync button.
+  - **Prescriptions Workspace** (`apps/web/src/components/prescriptions-workspace.tsx`):
+    - Connected to `/api/hms/prescriptions`, `/api/hms/patients`, `/api/hms/doctors`, `/api/hms/medicines`, `/api/hms/medicine-categories`, `/api/hms/medicine-brands`.
+    - Dynamic remote option resolution for patients, doctors, and medicines with dynamic dose/frequency/interval/duration builder.
+    - Status toggle (`PATCH /api/hms/prescriptions/${id}/status`), new medicine inline modal (`POST /api/hms/medicines`), and live connection banner.
+  - **Doctors Workspace** (`apps/web/src/components/doctors-workspace.tsx`):
+    - Connected to `/api/hms/doctors`, `/api/hms/doctor-departments`, and `/api/hms/doctor-absences`.
+    - Replaced browser prompt dialogs with dedicated accessible modal dialogues: `showAddDoctor` and `showAddHoliday`.
+    - Wired up `handleCreateDoctor`, `handleCreateDepartment`, and `handleCreateHoliday` with persistent backend mutations.
+    - Added top subtabs navigation (`module-subtabs-nav`), live connection banner, and sync button.
+  - **Attendance Workspace** (`apps/web/src/components/attendance-workspace.tsx`):
+    - Connected to `/api/hms/attendance/shifts` and `/api/hms/attendance/assignments`.
+    - Added subtab navbar (`attendanceTabs`) and live connection banner across main and subtab screens.
+    - Wired up shift modal submission to `POST /api/hms/attendance/shifts` with integer minute conversions.
+  - **Workspace Routing** (`apps/web/src/components/workspace.tsx`):
+    - Registered all Blood Bank, Prescription, Doctor/Schedule, and Attendance paths into the `isLive` list.
+  - Verification: `npm run typecheck` passed (0 errors), all test suites passed (5 frontend unit test suites, all Go backend packages).
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,6 +16,8 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import { useLanguage } from "./language";
 
@@ -340,6 +342,15 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
 
+  // Subtabs
+  const tabs = [
+    { id: "doctors", label: "Doctors", href: "/modules/doctors" },
+    { id: "doctor-departments", label: "Doctor Departments", href: "/modules/doctor-departments" },
+    { id: "schedules", label: "Schedules", href: "/modules/schedules" },
+    { id: "doctor-holidays", label: "Doctor Holidays", href: "/modules/doctor-holidays" },
+    { id: "breaks", label: "Breaks", href: "/modules/breaks" },
+  ];
+
   // Data states
   const [doctors, setDoctors] = useState<DoctorItem[]>(INITIAL_DOCTORS);
   const [departments, setDepartments] =
@@ -348,6 +359,264 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   const [schedules, setSchedules] =
     useState<DoctorScheduleItem[]>(INITIAL_SCHEDULES);
   const [holidays, setHolidays] = useState<HolidayItem[]>(INITIAL_HOLIDAYS);
+
+  // Backend live sync state
+  const [apiConnected, setApiConnected] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiSuccessBanner, setApiSuccessBanner] = useState("");
+  const [apiErrorBanner, setApiErrorBanner] = useState("");
+
+  // Add Doctor modal
+  const [showAddDoctor, setShowAddDoctor] = useState(false);
+  const [docName, setDocName] = useState("");
+  const [docDept, setDocDept] = useState("");
+  const [docPhone, setDocPhone] = useState("+251 91 123 4567");
+  const [docQual, setDocQual] = useState("MD, Specialist");
+
+  // Add Holiday modal
+  const [showAddHoliday, setShowAddHoliday] = useState(false);
+  const [holidayDoc, setHolidayDoc] = useState("");
+  const [holidayDate, setHolidayDate] = useState("");
+  const [holidayReason, setHolidayReason] = useState("");
+
+  const loadDoctorsData = useCallback(async () => {
+    setIsSyncing(true);
+    let connected = false;
+    try {
+      const [docRes, depRes, absRes] = await Promise.all([
+        fetch("/api/hms/doctors").catch(() => null),
+        fetch("/api/hms/doctor-departments").catch(() => null),
+        fetch("/api/hms/doctor-absences").catch(() => null),
+      ]);
+
+      if (docRes && docRes.ok) {
+        const data = await docRes.json();
+        const raw = Array.isArray(data) ? data : data.doctors || [];
+        if (raw.length > 0) {
+          const colors = [
+            "#f59e0b",
+            "#10b981",
+            "#3b82f6",
+            "#6366f1",
+            "#8b5cf6",
+            "#06b6d4",
+            "#ec4899",
+          ];
+          setDoctors(
+            raw.map((d: any, idx: number) => {
+              const name = d.name || `Doctor ${d.id.slice(0, 6)}`;
+              return {
+                id: d.id,
+                name: name.startsWith("Dr.") ? name : `Dr. ${name}`,
+                email:
+                  d.email ||
+                  `${d.id.toLowerCase().replace(/[^a-z0-9]/g, "")}@hospital.local`,
+                phone: d.phone || "+251 91 123 4567",
+                department: d.department || "General Medicine",
+                qualification: d.qualification || "MD, Specialist",
+                status: true,
+                avatarColor: colors[idx % colors.length],
+                initials: name
+                  .replace(/^Dr\.\s*/, "")
+                  .slice(0, 2)
+                  .toUpperCase(),
+              };
+            }),
+          );
+          connected = true;
+        }
+      }
+
+      if (depRes && depRes.ok) {
+        const data = await depRes.json();
+        const raw = Array.isArray(data) ? data : data.departments || [];
+        if (raw.length > 0) {
+          setDepartments(
+            raw.map((dept: any) => ({
+              id: dept.id,
+              title: dept.title || dept.name || "Department",
+              doctorsCount: dept.doctors_count ?? dept.doctorsCount ?? 0,
+            })),
+          );
+          connected = true;
+        }
+      }
+
+      if (absRes && absRes.ok) {
+        const data = await absRes.json();
+        const raw = Array.isArray(data) ? data : data.absences || [];
+        if (raw.length > 0) {
+          setHolidays(
+            raw.map((a: any) => ({
+              id: a.id,
+              doctorName:
+                a.doctorName ||
+                `Dr. (${a.doctorId?.slice(0, 6) || "Staff"})`,
+              date: a.date
+                ? new Date(a.date).toLocaleDateString("en-GB")
+                : "Today",
+              reason: a.reason || "Scheduled Leave",
+            })),
+          );
+          connected = true;
+        }
+      }
+
+      setApiConnected(connected);
+    } catch {
+      setApiConnected(false);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDoctorsData();
+  }, [loadDoctorsData]);
+
+  const handleCreateDoctor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!docName.trim()) return;
+
+    setIsSubmitting(true);
+    const newDocId = `doc-${Date.now()}`;
+    const cleanName = docName.startsWith("Dr.") ? docName : `Dr. ${docName}`;
+    const departmentName = docDept || departments[0]?.title || "General Medicine";
+
+    try {
+      const res = await fetch("/api/hms/doctors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: newDocId,
+          name: cleanName,
+          department: departmentName,
+          slotMinutes: 15,
+          version: 1,
+          hours: [
+            { weekday: 1, startMinute: 540, endMinute: 1020 },
+            { weekday: 2, startMinute: 540, endMinute: 1020 },
+            { weekday: 3, startMinute: 540, endMinute: 1020 },
+            { weekday: 4, startMinute: 540, endMinute: 1020 },
+            { weekday: 5, startMinute: 540, endMinute: 1020 },
+          ],
+        }),
+      });
+
+      if (res.ok) {
+        setApiSuccessBanner(t("Doctor saved and registered in database!"));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setApiErrorBanner(err.error || t("Saved locally in preview mode."));
+      }
+    } catch {
+      setApiErrorBanner(t("Server offline. Doctor added to local preview."));
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setDoctors([
+      {
+        id: newDocId,
+        name: cleanName,
+        email: `${docName.toLowerCase().replace(/[^a-z0-9]/g, "")}@hospital.local`,
+        phone: docPhone || "+251 91 123 4567",
+        department: departmentName,
+        qualification: docQual || "MD",
+        status: true,
+        avatarColor: "#5b73e8",
+        initials: docName.replace(/^Dr\.\s*/, "").slice(0, 2).toUpperCase(),
+      },
+      ...doctors,
+    ]);
+    setShowAddDoctor(false);
+    setDocName("");
+  };
+
+  const handleCreateDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deptTitle.trim()) return;
+
+    setIsSubmitting(true);
+    let createdId = `dep-${Date.now()}`;
+    try {
+      const res = await fetch("/api/hms/doctor-departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: deptTitle }),
+      });
+      if (res.ok) {
+        const out = await res.json();
+        createdId = out.id || createdId;
+        setApiSuccessBanner(t("Department created successfully!"));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setApiErrorBanner(err.error || t("Saved locally in preview mode."));
+      }
+    } catch {
+      setApiErrorBanner(t("Server offline. Department added to local preview."));
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setDepartments([
+      {
+        id: createdId,
+        title: deptTitle,
+        doctorsCount: 0,
+      },
+      ...departments,
+    ]);
+    setShowAddDept(false);
+    setDeptTitle("");
+  };
+
+  const handleCreateHoliday = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!holidayDoc || !holidayReason.trim()) return;
+
+    setIsSubmitting(true);
+    const selectedDoctor = doctors.find((d) => d.id === holidayDoc || d.name === holidayDoc);
+    const docId = selectedDoctor?.id || holidayDoc;
+
+    try {
+      const res = await fetch("/api/hms/doctor-absences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          doctorId: docId,
+          date: holidayDate || new Date().toISOString().slice(0, 10),
+          reason: holidayReason,
+        }),
+      });
+      if (res.ok) {
+        setApiSuccessBanner(t("Holiday leave booked successfully!"));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setApiErrorBanner(err.error || t("Holiday preserved in local preview."));
+      }
+    } catch {
+      setApiErrorBanner(t("Server offline. Holiday preserved in preview mode."));
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setHolidays([
+      {
+        id: `hol-${Date.now()}`,
+        doctorName: selectedDoctor?.name || holidayDoc,
+        date: holidayDate
+          ? new Date(holidayDate).toLocaleDateString("en-GB")
+          : "Today",
+        reason: holidayReason,
+      },
+      ...holidays,
+    ]);
+    setShowAddHoliday(false);
+    setHolidayReason("");
+    setHolidayDate("");
+  };
 
   // Sub-views
   const [viewMode, setViewMode] = useState<
@@ -767,6 +1036,126 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   // DEFAULT SCREEN: Sub-Tab Lists
   return (
     <div className="legacy-page-container" style={{ padding: "24px" }}>
+      {/* Subtabs navigation */}
+      <div className="module-subtabs-nav" style={{ marginBottom: "20px" }}>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <Link
+              key={tab.id}
+              href={tab.href}
+              className={`subtab-btn ${isActive ? "active" : ""}`}
+            >
+              {t(tab.label)}
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* Live Backend Connection Banner */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+          border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
+          borderRadius: "8px",
+          padding: "10px 16px",
+          marginBottom: "16px",
+          fontSize: "13px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {apiConnected ? (
+            <CheckCircle2 size={16} color="#10b981" />
+          ) : (
+            <AlertCircle size={16} color="#3b82f6" />
+          )}
+          <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+            {apiConnected
+              ? t("Connected to PostgreSQL Backend (/v1/doctors & /v1/doctor-departments)")
+              : t("Local Clinical Preview Mode (Doctors Ready)")}
+          </span>
+          <span style={{ color: "#94a3b8" }}>•</span>
+          <span style={{ color: "#cbd5e1" }}>
+            {doctors.length} {t("doctors")} | {departments.length} {t("departments")} | {holidays.length} {t("holidays")}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => loadDoctorsData()}
+          disabled={isSyncing}
+          style={{
+            background: "transparent",
+            border: "1px solid #475569",
+            color: "#e2e8f0",
+            borderRadius: "6px",
+            padding: "4px 10px",
+            fontSize: "12px",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+          title={t("Sync Doctors & Schedules")}
+        >
+          <RefreshCw size={12} className={isSyncing ? "animate-spin" : ""} />
+          {isSyncing ? t("Syncing...") : t("Sync Data")}
+        </button>
+      </div>
+
+      {apiSuccessBanner && (
+        <div
+          style={{
+            background: "rgba(16, 185, 129, 0.15)",
+            border: "1px solid #10b981",
+            color: "#34d399",
+            padding: "10px 14px",
+            borderRadius: "6px",
+            marginBottom: "14px",
+            fontSize: "13px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>{apiSuccessBanner}</span>
+          <button
+            onClick={() => setApiSuccessBanner("")}
+            style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {apiErrorBanner && (
+        <div
+          style={{
+            background: "rgba(239, 68, 68, 0.15)",
+            border: "1px solid #ef4444",
+            color: "#f87171",
+            padding: "10px 14px",
+            borderRadius: "6px",
+            marginBottom: "14px",
+            fontSize: "13px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>{apiErrorBanner}</span>
+          <button
+            onClick={() => setApiErrorBanner("")}
+            style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer" }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="billing-toolbar">
         <div className="billing-search-box">
@@ -782,25 +1171,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           {activeTab === "doctors" && (
             <button
               className="btn-action-blue"
-              onClick={() => {
-                const name = prompt("Enter Doctor Name:");
-                if (name) {
-                  setDoctors([
-                    {
-                      id: `doc-${Date.now()}`,
-                      name,
-                      email: `${name.toLowerCase().replace(/\s+/g, "")}@hospital.local`,
-                      phone: "+1 555-0100",
-                      department: "General Medicine",
-                      qualification: "MD",
-                      status: true,
-                      avatarColor: "#5b73e8",
-                      initials: name.slice(0, 2).toUpperCase(),
-                    },
-                    ...doctors,
-                  ]);
-                }
-              }}
+              onClick={() => setShowAddDoctor(true)}
             >
               + {t("New Doctor")}
             </button>
@@ -827,20 +1198,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           {activeTab === "doctor-holidays" && (
             <button
               className="btn-action-blue"
-              onClick={() => {
-                const reason = prompt("Enter Holiday Reason:");
-                if (reason) {
-                  setHolidays([
-                    {
-                      id: `hol-${Date.now()}`,
-                      doctorName: "Dr. Nero Patrick",
-                      date: "25 Oct 2026",
-                      reason,
-                    },
-                    ...holidays,
-                  ]);
-                }
-              }}
+              onClick={() => setShowAddHoliday(true)}
             >
               + {t("Add Doctor Holiday")}
             </button>
@@ -851,7 +1209,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               className="btn-action-blue"
               onClick={() => setViewMode("add-break")}
             >
-              {t("Add Break")}
+              + {t("Add Break")}
             </button>
           )}
         </div>
@@ -1290,23 +1648,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!deptTitle) return;
-                setDepartments([
-                  ...departments,
-                  {
-                    id: `dep-${Date.now()}`,
-                    title: deptTitle,
-                    doctorsCount: 0,
-                  },
-                ]);
-                setShowAddDept(false);
-                setDeptTitle("");
-              }}
-              className="modal-body-custom"
-            >
+            <form onSubmit={handleCreateDepartment} className="modal-body-custom">
               <div
                 className="form-group-custom"
                 style={{ marginBottom: "20px" }}
@@ -1330,13 +1672,203 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   gap: "12px",
                 }}
               >
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? t("Saving...") : t("Save")}
                 </button>
                 <button
                   type="button"
                   className="btn-action-secondary"
                   onClick={() => setShowAddDept(false)}
+                >
+                  {t("Cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Doctor Modal */}
+      {showAddDoctor && (
+        <div className="modal-backdrop-custom">
+          <div
+            className="modal-card-custom"
+            style={{ maxWidth: "550px", width: "100%" }}
+          >
+            <div className="modal-header-custom">
+              <h3 className="modal-title-custom">{t("New Doctor")}</h3>
+              <button
+                className="modal-close-btn"
+                onClick={() => setShowAddDoctor(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateDoctor} className="modal-body-custom">
+              <div style={{ marginBottom: "16px" }}>
+                <label className="form-label-custom">
+                  {t("Doctor Name")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  required
+                  placeholder="Dr. John Doe"
+                  className="form-input-custom"
+                  value={docName}
+                  onChange={(e) => setDocName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ marginBottom: "16px" }}>
+                <label className="form-label-custom">
+                  {t("Department")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <select
+                  required
+                  className="form-select-custom"
+                  value={docDept}
+                  onChange={(e) => setDocDept(e.target.value)}
+                >
+                  <option value="">{t("Select Department")}</option>
+                  {departments.map((dep) => (
+                    <option key={dep.id} value={dep.title}>
+                      {dep.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+                <div>
+                  <label className="form-label-custom">{t("Phone")}:</label>
+                  <input
+                    placeholder="+251 91 123 4567"
+                    className="form-input-custom"
+                    value={docPhone}
+                    onChange={(e) => setDocPhone(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Qualification")}:</label>
+                  <input
+                    placeholder="MD, Specialist"
+                    className="form-input-custom"
+                    value={docQual}
+                    onChange={(e) => setDocQual(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "12px",
+                }}
+              >
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? t("Saving...") : t("Save")}
+                </button>
+                <button
+                  type="button"
+                  className="btn-action-secondary"
+                  onClick={() => setShowAddDoctor(false)}
+                >
+                  {t("Cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Holiday Modal */}
+      {showAddHoliday && (
+        <div className="modal-backdrop-custom">
+          <div
+            className="modal-card-custom"
+            style={{ maxWidth: "500px", width: "100%" }}
+          >
+            <div className="modal-header-custom">
+              <h3 className="modal-title-custom">{t("Add Doctor Holiday")}</h3>
+              <button
+                className="modal-close-btn"
+                onClick={() => setShowAddHoliday(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateHoliday} className="modal-body-custom">
+              <div style={{ marginBottom: "16px" }}>
+                <label className="form-label-custom">
+                  {t("Doctor")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <select
+                  required
+                  className="form-select-custom"
+                  value={holidayDoc}
+                  onChange={(e) => setHolidayDoc(e.target.value)}
+                >
+                  <option value="">{t("Select Doctor")}</option>
+                  {doctors.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.name} ({doc.department})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "16px" }}>
+                <label className="form-label-custom">
+                  {t("Date")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  className="form-input-custom"
+                  value={holidayDate}
+                  onChange={(e) => setHolidayDate(e.target.value)}
+                />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label className="form-label-custom">
+                  {t("Reason")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  required
+                  placeholder={t("e.g. Annual Leave, Medical Conference")}
+                  className="form-input-custom"
+                  value={holidayReason}
+                  onChange={(e) => setHolidayReason(e.target.value)}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "12px",
+                }}
+              >
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? t("Saving...") : t("Save")}
+                </button>
+                <button
+                  type="button"
+                  className="btn-action-secondary"
+                  onClick={() => setShowAddHoliday(false)}
                 >
                   {t("Cancel")}
                 </button>

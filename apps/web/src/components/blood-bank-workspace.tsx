@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -14,6 +14,9 @@ import {
   Download,
   AlertCircle,
   Clock,
+  RefreshCw,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { useLanguage } from "./language";
 
@@ -419,6 +422,171 @@ export function BloodBankWorkspace({ id }: { id: string }) {
   const [reports, setReports] =
     useState<BloodDonorReportItem[]>(INITIAL_REPORTS);
 
+  // Subtabs
+  const tabs = [
+    { id: "blood-banks", label: "Blood Banks", href: "/modules/blood-banks" },
+    { id: "blood-donors", label: "Blood Donors", href: "/modules/blood-donors" },
+    { id: "blood-donations", label: "Blood Donations", href: "/modules/blood-donations" },
+    { id: "blood-issues", label: "Blood Issues", href: "/modules/blood-issues" },
+    { id: "blood-donor-reports", label: "Blood Donor Reports", href: "/modules/blood-donor-reports" },
+  ];
+
+  // Backend connection state
+  const [apiConnected, setApiConnected] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [apiSuccessBanner, setApiSuccessBanner] = useState("");
+  const [apiErrorBanner, setApiErrorBanner] = useState("");
+
+  const [patientOptions, setPatientOptions] = useState<Array<{ id: string; name: string; mrn: string }>>([]);
+  const [doctorOptions, setDoctorOptions] = useState<Array<{ id: string; name: string }>>([]);
+
+  // New Donation form state
+  const [donationDonorId, setDonationDonorId] = useState("");
+  const [donationBags, setDonationBags] = useState("1");
+  const [donationDate, setDonationDate] = useState("");
+
+  // New Issue form state
+  const [issuePatientId, setIssuePatientId] = useState("");
+  const [issueDoctorId, setIssueDoctorId] = useState("");
+  const [issueDonorId, setIssueDonorId] = useState("");
+  const [issueBloodGroup, setIssueBloodGroup] = useState("A+");
+  const [issueBags, setIssueBags] = useState("1");
+  const [issueAmount, setIssueAmount] = useState("150.00");
+  const [issueRemarks, setIssueRemarks] = useState("");
+
+  // New Bank Group form state
+  const [bankBloodGroup, setBankBloodGroup] = useState("A+");
+  const [bankRemainedBags, setBankRemainedBags] = useState("10");
+
+  const loadBloodBankData = useCallback(async () => {
+    setIsSyncing(true);
+    let connected = false;
+    try {
+      const [bankRes, donorRes, donationRes, issueRes, patientRes, doctorRes] = await Promise.all([
+        fetch("/api/hms/blood-bank").catch(() => null),
+        fetch("/api/hms/blood-donors").catch(() => null),
+        fetch("/api/hms/blood-donations").catch(() => null),
+        fetch("/api/hms/blood-issues").catch(() => null),
+        fetch("/api/hms/patients").catch(() => null),
+        fetch("/api/hms/doctors").catch(() => null),
+      ]);
+
+      if (bankRes && bankRes.ok) {
+        const data = await bankRes.json();
+        if (Array.isArray(data.blood_bank) && data.blood_bank.length > 0) {
+          setBloodBanks(
+            data.blood_bank.map((b: any) => ({
+              id: b.id,
+              bloodGroup: b.blood_group,
+              remainedBags: b.remained_bags,
+            }))
+          );
+        }
+        connected = true;
+      }
+
+      if (donorRes && donorRes.ok) {
+        const data = await donorRes.json();
+        if (Array.isArray(data.donors) && data.donors.length > 0) {
+          setDonors(
+            data.donors.map((d: any) => ({
+              id: d.id,
+              name: d.name,
+              email: "donor@hospital.et",
+              age: d.age || "N/A",
+              gender: d.gender === 1 ? "Female" : "Male",
+              bloodGroup: d.blood_group,
+              lastDonationTime: "12:00 PM",
+              lastDonationDate: d.last_donate_date
+                ? new Date(d.last_donate_date).toLocaleDateString("en-GB")
+                : "Today",
+            }))
+          );
+        }
+        connected = true;
+      }
+
+      if (donationRes && donationRes.ok) {
+        const data = await donationRes.json();
+        if (Array.isArray(data.donations) && data.donations.length > 0) {
+          setDonations(
+            data.donations.map((d: any) => ({
+              id: d.id,
+              donorName: d.donor_name || "Blood Donor",
+              bags: d.bags,
+              date: d.donation_date
+                ? new Date(d.donation_date).toLocaleDateString("en-GB")
+                : "Today",
+            }))
+          );
+        }
+        connected = true;
+      }
+
+      if (issueRes && issueRes.ok) {
+        const data = await issueRes.json();
+        if (Array.isArray(data.issues) && data.issues.length > 0) {
+          setIssues(
+            data.issues.map((bi: any) => ({
+              id: bi.id,
+              patientName: bi.patient_name || `Patient (${bi.patient_id?.slice(0, 6) || "P"})`,
+              patientEmail: "patient@hospital.et",
+              patientInitials: "PT",
+              patientColor: "#0284c7",
+              doctorName: bi.doctor_name || `Dr. Staff (${bi.doctor_id?.slice(0, 6) || "D"})`,
+              doctorEmail: "doctor@hospital.et",
+              doctorInitials: "DR",
+              doctorColor: "#10b981",
+              donorName: bi.donor_id ? `Donor (${bi.donor_id.slice(0, 6)})` : "Direct Reserve",
+              issueTime: "12:00 PM",
+              issueDate: bi.issue_date
+                ? new Date(bi.issue_date).toLocaleDateString("en-GB")
+                : "Today",
+              bloodGroup: bi.blood_group,
+              amount: "$" + ((bi.amount_minor || 0) / 100).toFixed(2),
+            }))
+          );
+        }
+        connected = true;
+      }
+
+      if (patientRes && patientRes.ok) {
+        const pData = await patientRes.json();
+        if (Array.isArray(pData.patients)) {
+          setPatientOptions(
+            pData.patients.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              mrn: p.mrn || p.id.slice(0, 8),
+            }))
+          );
+        }
+      }
+
+      if (doctorRes && doctorRes.ok) {
+        const dData = await doctorRes.json();
+        if (Array.isArray(dData.doctors)) {
+          setDoctorOptions(
+            dData.doctors.map((d: any) => ({
+              id: d.id,
+              name: d.name,
+            }))
+          );
+        }
+      }
+    } catch {
+      // dual offline preview fallback
+    } finally {
+      setIsSyncing(false);
+      setApiConnected(connected);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBloodBankData();
+  }, [loadBloodBankData]);
+
   // Modals
   const [showAddDonor, setShowAddDonor] = useState(false);
   const [showAddReport, setShowAddReport] = useState(false);
@@ -498,9 +666,66 @@ export function BloodBankWorkspace({ id }: { id: string }) {
     });
   };
 
-  const handleSaveDonor = (e: React.FormEvent) => {
+  const handleSaveDonor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!donorForm.name) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    const ageNum = parseInt(donorForm.age) || 25;
+    const genderInt = donorForm.gender === "Female" ? 1 : 0;
+    const donateDateObj = donorForm.lastDonationDate
+      ? new Date(donorForm.lastDonationDate)
+      : new Date();
+
+    try {
+      const res = await fetch("/api/hms/blood-donors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: donorForm.name.trim(),
+          age: ageNum,
+          gender: genderInt,
+          blood_group: donorForm.bloodGroup,
+          last_donate_date: donateDateObj.toISOString(),
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setDonors([
+          {
+            id: saved.id || `bd-${Date.now()}`,
+            name: saved.name || donorForm.name,
+            email: "donor@hospital.et",
+            age: ageNum,
+            gender: donorForm.gender,
+            bloodGroup: donorForm.bloodGroup,
+            lastDonationTime: "12:00 PM",
+            lastDonationDate: donorForm.lastDonationDate || "Today",
+          },
+          ...donors,
+        ]);
+        setApiSuccessBanner(t(`Blood donor "${donorForm.name}" registered in PostgreSQL`));
+        setApiConnected(true);
+        setShowAddDonor(false);
+        setDonorForm({
+          name: "",
+          email: "",
+          age: "",
+          gender: "Male",
+          bloodGroup: "O+",
+          lastDonationDate: "",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+
     const newDonor: BloodDonorItem = {
       id: `bd-${Date.now()}`,
       name: donorForm.name,
@@ -521,6 +746,210 @@ export function BloodBankWorkspace({ id }: { id: string }) {
       bloodGroup: "O+",
       lastDonationDate: "",
     });
+  };
+
+  const handleSaveDonation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!donationDonorId) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    const bagsNum = parseInt(donationBags) || 1;
+    const donateDateObj = donationDate ? new Date(donationDate) : new Date();
+    const donorObj = donors.find((d) => d.id === donationDonorId);
+
+    try {
+      const res = await fetch("/api/hms/blood-donations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          donor_id: donationDonorId,
+          bags: bagsNum,
+          donation_date: donateDateObj.toISOString(),
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setDonations([
+          {
+            id: saved.id || `bdn-${Date.now()}`,
+            donorName: donorObj?.name || "Blood Donor",
+            bags: bagsNum,
+            date: donateDateObj.toLocaleDateString("en-GB"),
+          },
+          ...donations,
+        ]);
+        setApiSuccessBanner(t(`Blood donation of ${bagsNum} bag(s) recorded in database`));
+        setApiConnected(true);
+        // Refresh inventory counts
+        fetch("/api/hms/blood-bank")
+          .then((r) => r.json())
+          .then((d) => {
+            if (Array.isArray(d.blood_bank)) {
+              setBloodBanks(
+                d.blood_bank.map((b: any) => ({
+                  id: b.id,
+                  bloodGroup: b.blood_group,
+                  remainedBags: b.remained_bags,
+                }))
+              );
+            }
+          })
+          .catch(() => null);
+        setShowAddDonation(false);
+        setDonationDonorId("");
+        setDonationBags("1");
+        setDonationDate("");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setDonations([
+      {
+        id: `bdn-${Date.now()}`,
+        donorName: donorObj?.name || "Blood Donor",
+        bags: bagsNum,
+        date: donateDateObj.toLocaleDateString("en-GB"),
+      },
+      ...donations,
+    ]);
+    setShowAddDonation(false);
+    setDonationDonorId("");
+    setDonationBags("1");
+    setDonationDate("");
+  };
+
+  const handleSaveIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetPatientId = issuePatientId || patientOptions[0]?.id;
+    const targetDoctorId = issueDoctorId || doctorOptions[0]?.id;
+    if (!targetPatientId || !targetDoctorId) return;
+
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    const bagsNum = parseInt(issueBags) || 1;
+    const amtNum = parseFloat(issueAmount) || 0;
+    const patientObj = patientOptions.find((p) => p.id === targetPatientId);
+    const doctorObj = doctorOptions.find((d) => d.id === targetDoctorId);
+    const donorObj = donors.find((d) => d.id === issueDonorId);
+
+    try {
+      const res = await fetch("/api/hms/blood-issues", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: targetPatientId,
+          doctor_id: targetDoctorId,
+          donor_id: issueDonorId || null,
+          blood_group: issueBloodGroup,
+          bags: bagsNum,
+          amount_minor: Math.round(amtNum * 100),
+          remarks: issueRemarks.trim() || "Blood issue for patient",
+          issue_date: new Date().toISOString(),
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setIssues([
+          {
+            id: saved.id || `bi-${Date.now()}`,
+            patientName: patientObj?.name || "Patient",
+            patientEmail: "patient@hospital.et",
+            patientInitials: (patientObj?.name?.slice(0, 2) || "PT").toUpperCase(),
+            patientColor: "#0284c7",
+            doctorName: doctorObj?.name || "Doctor",
+            doctorEmail: "doctor@hospital.et",
+            doctorInitials: (doctorObj?.name?.slice(0, 2) || "DR").toUpperCase(),
+            doctorColor: "#10b981",
+            donorName: donorObj?.name || "Direct Reserve",
+            issueTime: "12:00 PM",
+            issueDate: new Date().toLocaleDateString("en-GB"),
+            bloodGroup: issueBloodGroup,
+            amount: "$" + amtNum.toFixed(2),
+          },
+          ...issues,
+        ]);
+        setApiSuccessBanner(t(`Blood issue of ${bagsNum} bag(s) recorded in ledger`));
+        setApiConnected(true);
+        // Refresh inventory counts
+        fetch("/api/hms/blood-bank")
+          .then((r) => r.json())
+          .then((d) => {
+            if (Array.isArray(d.blood_bank)) {
+              setBloodBanks(
+                d.blood_bank.map((b: any) => ({
+                  id: b.id,
+                  bloodGroup: b.blood_group,
+                  remainedBags: b.remained_bags,
+                }))
+              );
+            }
+          })
+          .catch(() => null);
+        setShowAddIssue(false);
+        setIssuePatientId("");
+        setIssueDoctorId("");
+        setIssueDonorId("");
+        setIssueBags("1");
+        setIssueRemarks("");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setIssues([
+      {
+        id: `bi-${Date.now()}`,
+        patientName: patientObj?.name || "Patient",
+        patientEmail: "patient@hospital.et",
+        patientInitials: (patientObj?.name?.slice(0, 2) || "PT").toUpperCase(),
+        patientColor: "#0284c7",
+        doctorName: doctorObj?.name || "Doctor",
+        doctorEmail: "doctor@hospital.et",
+        doctorInitials: (doctorObj?.name?.slice(0, 2) || "DR").toUpperCase(),
+        doctorColor: "#10b981",
+        donorName: donorObj?.name || "Direct Reserve",
+        issueTime: "12:00 PM",
+        issueDate: new Date().toLocaleDateString("en-GB"),
+        bloodGroup: issueBloodGroup,
+        amount: "$" + amtNum.toFixed(2),
+      },
+      ...issues,
+    ]);
+    setShowAddIssue(false);
+    setIssuePatientId("");
+    setIssueDoctorId("");
+    setIssueDonorId("");
+    setIssueBags("1");
+    setIssueRemarks("");
+  };
+
+  const handleSaveBank = (e: React.FormEvent) => {
+    e.preventDefault();
+    const count = parseInt(bankRemainedBags) || 0;
+    setBloodBanks((prev) => {
+      const idx = prev.findIndex((b) => b.bloodGroup === bankBloodGroup);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], remainedBags: count };
+        return copy;
+      }
+      return [{ id: `bb-${Date.now()}`, bloodGroup: bankBloodGroup, remainedBags: count }, ...prev];
+    });
+    setApiSuccessBanner(t(`Blood group ${bankBloodGroup} inventory updated`));
+    setShowAddBank(false);
   };
 
   const handleSaveReport = (e: React.FormEvent) => {
@@ -573,6 +1002,104 @@ export function BloodBankWorkspace({ id }: { id: string }) {
 
   return (
     <div className="legacy-page-container" style={{ padding: "24px" }}>
+      {/* Top subtabs */}
+      <div className="module-subtabs-nav">
+        {tabs.map((tab) => (
+          <Link
+            key={tab.id}
+            href={tab.href}
+            className={`module-subtab-link ${activeTab === tab.id ? "active" : ""}`}
+          >
+            {t(tab.label)}
+          </Link>
+        ))}
+      </div>
+
+      {/* Backend API Connection Banner */}
+      <div className="d-flex flex-column gap-2 mb-3">
+        <div
+          className="d-flex align-items-center justify-content-between p-2 px-3 rounded border"
+          style={{
+            backgroundColor: apiConnected
+              ? "rgba(16, 185, 129, 0.08)"
+              : "rgba(59, 130, 246, 0.08)",
+            borderColor: apiConnected
+              ? "rgba(16, 185, 129, 0.3)"
+              : "rgba(59, 130, 246, 0.3)",
+          }}
+        >
+          <div className="d-flex align-items-center gap-2">
+            <span
+              style={{
+                display: "inline-block",
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                backgroundColor: apiConnected ? "#10b981" : "#3b82f6",
+              }}
+            />
+            <span className="fs-7 fw-semibold">
+              {apiConnected
+                ? t(
+                    "Connected to Go/PostgreSQL Blood Bank Service (/v1/blood-bank, /v1/blood-donors, /v1/blood-donations, /v1/blood-issues)",
+                  )
+                : t("Local preview mode · Syncing locally")}
+            </span>
+            <span
+              className="badge-available-stock fs-8 py-0 px-2"
+              style={{ fontSize: "11px" }}
+            >
+              {bloodBanks.length} {t("Groups")} · {donors.length} {t("Donors")} · {donations.length}{" "}
+              {t("Donations")} · {issues.length} {t("Issues")}
+            </span>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+              style={{ fontSize: "12px", padding: "2px 8px" }}
+              disabled={isSyncing}
+              onClick={loadBloodBankData}
+            >
+              <RefreshCw
+                size={12}
+                className={isSyncing ? "spinner-border spinner-border-sm" : ""}
+              />
+              {isSyncing ? t("Syncing...") : t("Sync Backend")}
+            </button>
+          </div>
+        </div>
+
+        {apiSuccessBanner && (
+          <div
+            className="d-flex align-items-center gap-2 p-2 px-3 rounded border text-success"
+            style={{
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              borderColor: "rgba(16, 185, 129, 0.3)",
+              fontSize: "13px",
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>{apiSuccessBanner}</span>
+          </div>
+        )}
+
+        {apiErrorBanner && (
+          <div
+            className="d-flex align-items-center gap-2 p-2 px-3 rounded border text-danger"
+            style={{
+              backgroundColor: "rgba(239, 68, 68, 0.1)",
+              borderColor: "rgba(239, 68, 68, 0.3)",
+              fontSize: "13px",
+            }}
+          >
+            <AlertCircle size={16} />
+            <span>{apiErrorBanner}</span>
+          </div>
+        )}
+      </div>
+
       {/* Search & Actions Toolbar */}
       <div className="billing-toolbar">
         <div className="billing-search-box">
@@ -1371,8 +1898,15 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   gap: "12px",
                 }}
               >
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue d-flex align-items-center gap-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting && (
+                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                  )}
+                  <span>{t("Save")}</span>
                 </button>
                 <button
                   type="button"
@@ -1604,13 +2138,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setShowAddIssue(false);
-              }}
-              className="modal-body-custom"
-            >
+            <form onSubmit={handleSaveIssue} className="modal-body-custom">
               <div
                 className="form-group-custom"
                 style={{ marginBottom: "16px" }}
@@ -1618,12 +2146,31 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                 <label className="form-label-custom">
                   {t("Patient")}: <span style={{ color: "#ef4444" }}>*</span>
                 </label>
-                <input
-                  required
-                  placeholder="Patient Name"
-                  className="form-input-custom"
-                />
+                {patientOptions.length > 0 ? (
+                  <select
+                    required
+                    className="form-select-custom"
+                    value={issuePatientId}
+                    onChange={(e) => setIssuePatientId(e.target.value)}
+                  >
+                    <option value="">-- {t("Select Patient")} --</option>
+                    {patientOptions.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.mrn})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    required
+                    placeholder="Patient ID / UUID"
+                    className="form-input-custom"
+                    value={issuePatientId}
+                    onChange={(e) => setIssuePatientId(e.target.value)}
+                  />
+                )}
               </div>
+
               <div
                 className="form-group-custom"
                 style={{ marginBottom: "16px" }}
@@ -1631,27 +2178,52 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                 <label className="form-label-custom">
                   {t("Doctor")}: <span style={{ color: "#ef4444" }}>*</span>
                 </label>
-                <input
-                  required
-                  placeholder="Doctor Name"
-                  className="form-input-custom"
-                />
+                {doctorOptions.length > 0 ? (
+                  <select
+                    required
+                    className="form-select-custom"
+                    value={issueDoctorId}
+                    onChange={(e) => setIssueDoctorId(e.target.value)}
+                  >
+                    <option value="">-- {t("Select Doctor")} --</option>
+                    {doctorOptions.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    required
+                    placeholder="Doctor ID / UUID"
+                    className="form-input-custom"
+                    value={issueDoctorId}
+                    onChange={(e) => setIssueDoctorId(e.target.value)}
+                  />
+                )}
               </div>
+
               <div
                 className="form-group-custom"
                 style={{ marginBottom: "16px" }}
               >
                 <label className="form-label-custom">
-                  {t("Donor Name")}: <span style={{ color: "#ef4444" }}>*</span>
+                  {t("Donor (Optional)")}:
                 </label>
-                <select className="form-select-custom">
+                <select
+                  className="form-select-custom"
+                  value={issueDonorId}
+                  onChange={(e) => setIssueDonorId(e.target.value)}
+                >
+                  <option value="">-- {t("Direct Supply / General Reserve")} --</option>
                   {donors.map((d) => (
-                    <option key={d.id} value={d.name}>
-                      {d.name}
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.bloodGroup})
                     </option>
                   ))}
                 </select>
               </div>
+
               <div
                 className="form-group-custom"
                 style={{ marginBottom: "16px" }}
@@ -1660,20 +2232,256 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   {t("Blood Group")}:{" "}
                   <span style={{ color: "#ef4444" }}>*</span>
                 </label>
-                <select className="form-select-custom">
+                <select
+                  className="form-select-custom"
+                  value={issueBloodGroup}
+                  onChange={(e) => setIssueBloodGroup(e.target.value)}
+                >
                   <option value="A+">A+</option>
+                  <option value="A-">A-</option>
                   <option value="B+">B+</option>
-                  <option value="O+">O+</option>
+                  <option value="B-">B-</option>
                   <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
                 </select>
               </div>
+
+              <div
+                className="form-group-custom"
+                style={{ marginBottom: "16px" }}
+              >
+                <label className="form-label-custom">
+                  {t("Bags")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  className="form-input-custom"
+                  value={issueBags}
+                  onChange={(e) => setIssueBags(e.target.value)}
+                />
+              </div>
+
+              <div
+                className="form-group-custom"
+                style={{ marginBottom: "16px" }}
+              >
+                <label className="form-label-custom">{t("Amount ($)")}:</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  className="form-input-custom"
+                  value={issueAmount}
+                  onChange={(e) => setIssueAmount(e.target.value)}
+                />
+              </div>
+
               <div
                 className="form-group-custom"
                 style={{ marginBottom: "20px" }}
               >
-                <label className="form-label-custom">{t("Amount")}:</label>
-                <input defaultValue="$150.00" className="form-input-custom" />
+                <label className="form-label-custom">{t("Remarks")}:</label>
+                <textarea
+                  rows={2}
+                  className="form-input-custom"
+                  placeholder={t("Remarks / Clinical notes")}
+                  value={issueRemarks}
+                  onChange={(e) => setIssueRemarks(e.target.value)}
+                />
               </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "12px",
+                }}
+              >
+                <button
+                  type="submit"
+                  className="btn-action-blue d-flex align-items-center gap-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting && (
+                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                  )}
+                  <span>{t("Save")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-action-secondary"
+                  onClick={() => setShowAddIssue(false)}
+                >
+                  {t("Cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: New Blood Donation */}
+      {showAddDonation && (
+        <div className="modal-backdrop-custom">
+          <div
+            className="modal-card-custom"
+            style={{ maxWidth: "520px", width: "100%" }}
+          >
+            <div className="modal-header-custom">
+              <h3 className="modal-title-custom">{t("New Blood Donation")}</h3>
+              <button
+                className="modal-close-btn"
+                onClick={() => setShowAddDonation(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveDonation} className="modal-body-custom">
+              <div
+                className="form-group-custom"
+                style={{ marginBottom: "16px" }}
+              >
+                <label className="form-label-custom">
+                  {t("Donor")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <select
+                  required
+                  className="form-select-custom"
+                  value={donationDonorId}
+                  onChange={(e) => setDonationDonorId(e.target.value)}
+                >
+                  <option value="">-- {t("Select Donor")} --</option>
+                  {donors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.bloodGroup})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div
+                className="form-group-custom"
+                style={{ marginBottom: "16px" }}
+              >
+                <label className="form-label-custom">
+                  {t("Bags")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  className="form-input-custom"
+                  value={donationBags}
+                  onChange={(e) => setDonationBags(e.target.value)}
+                />
+              </div>
+
+              <div
+                className="form-group-custom"
+                style={{ marginBottom: "24px" }}
+              >
+                <label className="form-label-custom">
+                  {t("Donation Date")}:
+                </label>
+                <input
+                  type="date"
+                  className="form-input-custom"
+                  value={donationDate}
+                  onChange={(e) => setDonationDate(e.target.value)}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "12px",
+                }}
+              >
+                <button
+                  type="submit"
+                  className="btn-action-blue d-flex align-items-center gap-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting && (
+                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                  )}
+                  <span>{t("Save")}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn-action-secondary"
+                  onClick={() => setShowAddDonation(false)}
+                >
+                  {t("Cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: New Blood Group */}
+      {showAddBank && (
+        <div className="modal-backdrop-custom">
+          <div
+            className="modal-card-custom"
+            style={{ maxWidth: "480px", width: "100%" }}
+          >
+            <div className="modal-header-custom">
+              <h3 className="modal-title-custom">{t("New Blood Group Stock")}</h3>
+              <button
+                className="modal-close-btn"
+                onClick={() => setShowAddBank(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveBank} className="modal-body-custom">
+              <div
+                className="form-group-custom"
+                style={{ marginBottom: "16px" }}
+              >
+                <label className="form-label-custom">
+                  {t("Blood Group")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <select
+                  className="form-select-custom"
+                  value={bankBloodGroup}
+                  onChange={(e) => setBankBloodGroup(e.target.value)}
+                >
+                  <option value="A+">A+</option>
+                  <option value="A-">A-</option>
+                  <option value="B+">B+</option>
+                  <option value="B-">B-</option>
+                  <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
+                </select>
+              </div>
+
+              <div
+                className="form-group-custom"
+                style={{ marginBottom: "24px" }}
+              >
+                <label className="form-label-custom">
+                  {t("Remained Bags")}: <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  required
+                  className="form-input-custom"
+                  value={bankRemainedBags}
+                  onChange={(e) => setBankRemainedBags(e.target.value)}
+                />
+              </div>
+
               <div
                 style={{
                   display: "flex",
@@ -1687,7 +2495,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                 <button
                   type="button"
                   className="btn-action-secondary"
-                  onClick={() => setShowAddIssue(false)}
+                  onClick={() => setShowAddBank(false)}
                 >
                   {t("Cancel")}
                 </button>
