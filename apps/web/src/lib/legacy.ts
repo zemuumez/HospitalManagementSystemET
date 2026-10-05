@@ -132,6 +132,26 @@ const overrides: Record<string, Partial<Screen>> = {
   bills: {
     columns: ["Bill ID", "Patient", "Bill Date", "Amount", "Status", "Action"],
   },
+  "bed-status": {
+    columns: ["Bed Status"],
+  },
+  "bed-assigns": {
+    columns: [
+      "IPD NO",
+      "PATIENT",
+      "BED",
+      "ASSIGN DATE",
+      "DISCHARGE DATE",
+      "STATUS",
+      "ACTION",
+    ],
+  },
+  beds: {
+    columns: ["BED ID", "BED", "BED TYPE", "CHARGE", "AVAILABLE", "ACTION"],
+  },
+  "bed-types": {
+    columns: ["BED TYPE", "ACTION"],
+  },
   enquiries: {
     fields: fields(
       "full_name:text:required|email:email:required|phone:tel|subject:text:required|message:textarea:required",
@@ -232,6 +252,10 @@ const baseScreens: Screen[] = [
   extra("manage-attendance", "Manage Attendance", "Manage Attendance"),
   extra("modules-setting", "Modules Setting", "Settings"),
   extra("patient-queue-theme", "Patient Queue Theme", "Settings"),
+  extra("bed-status", "Bed Status", "Bed Management"),
+  extra("bed-assigns", "Bed Assigns", "Bed Management"),
+  extra("beds", "Beds", "Bed Management"),
+  extra("bed-types", "Bed Types", "Bed Management"),
   {
     ...source.find((s) => s.id === "services")!,
     id: "front-cms-services",
@@ -371,6 +395,7 @@ const tabOrder: Record<string, string[]> = {
     "bills",
     "manual-billing-payments",
   ],
+  "Bed Management": ["bed-status", "bed-assigns", "beds", "bed-types"],
   Settings: [
     "settings",
     "hospital-schedule",

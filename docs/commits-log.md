@@ -22,6 +22,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`27d29dd`](https://github.com/zemuumez/HospitalManagementSystemET/commit/27d29dd) | **QA/Verification** | Expanded reference-page Playwright suite, isolated integration runner fixes, Prettier formatting | N/A | Pushed (`main`) |
 | [`4c6ec33`](https://github.com/zemuumez/HospitalManagementSystemET/commit/4c6ec33) | **3.A** | Source parity review, inactive/commented route audit, PDF role contradiction reconciliation, single-hospital architecture decisions, and OpenAPI 3.1 specification | N/A | Pushed |
 | [`8a7a23f`](https://github.com/zemuumez/HospitalManagementSystemET/commit/8a7a23f) | **Frontend/Billing** | Recreate billing module with 8 tabs matching legacy Laravel screenshots (Manual Billing Payments, Advance Payments, Payment Reports, Payments, Invoices, Accounts, Payrolls, Bills) | N/A | Pushed (`main`) |
+| [`9bf4476`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9bf4476) | **Frontend/BedManagement** | Recreate Bed Management module with 4 tabs matching screenshots (Bed Status with 17 ward grids, Bed Assigns, Beds, Bed Types, New Bed Type modal) | N/A | Pushed (`main`) |
 
 ---
 
@@ -199,4 +200,19 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - Added dedicated styling in `apps/web/src/app/globals.css` (.billing-toolbar, .billing-search-box, .btn-action-blue, .btn-icon-blue, .billing-card, .billing-table, .badge-green, .badge-red, .badge-amber, .badge-blue-link, .tx-date-badge) for dark & light modes.
   - Added full Amharic localization in `apps/web/src/lib/am.json` for all billing tabs, buttons, statuses, and headers.
   - Updated routing and aliases in `apps/web/src/app/(hospital)/modules/[slug]/page.tsx`, `apps/web/src/components/workspace.tsx`, and `apps/web/src/lib/legacy.ts`.
+
+### 15. Commit `9bf4476` — Frontend Bed Management (4 Tabs & Modal Matching Screenshots 1–10)
+- **Message**: `feat(bed-management): recreate bed management module with 4 tabs matching screenshots and legacy Laravel layout`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Created `apps/web/src/components/bed-management-workspace.tsx` implementing all 4 tabs with 100% fidelity to the 10 screenshots:
+    - `bed-status`: Header `Bed Status` + `Back` outline button; 17 ward category grids (ICU1, NICU, VIP Ward, Private Ward, General Ward Female, General Ward Male, Nulla assumenda, John Kennedy, PD Ward, ASAs, Regular, Al-Funduqiyah, General Ward, MIND UPSET, BORE ADIKUITHU, TENSION AGATHU, TAMIL) with "No Bed Available" empty state; occupied red heartbeat beds with patient labels; available green beds with bed labels; hover tooltip popovers with Bed Name, Patient, Phone, Admission Date, and Gender; interactive click-to-assign on available beds.
+    - `bed-assigns`: IPD NO blue pill link (HMS14, HMS13, etc.), circular avatar with 2-letter initials + patient link + email, Bed name link, Assign Date cyan link, Discharge Date, interactive status toggle switch, edit and delete buttons, search filter, page size selector, paginator, New Bed Assign modal.
+    - `beds`: Bed ID pill badge link (QICRIAOY, WMCYURHP, etc.), Bed name text, Bed Type blue link, Charge ($), Available status badge (`Yes` cyan / `No` red), edit/delete buttons, Actions dropdown with New Bed and Export to Excel, New Bed modal with Bed Name, Type, Charge, Description.
+    - `bed-types`: Bed Type blue link, edit/delete buttons, paginator, search filter, New Bed Type modal dialog matching Screenshot 10 (`Bed Type: *` input, `Description:` textarea, Save & Cancel buttons).
+  - Added dedicated styling in `apps/web/src/app/globals.css` (.bed-status-top-bar, .btn-back-outline, .ward-section-card, .ward-title, .ward-content-box, .no-bed-message, .ward-beds-container, .bed-status-item, .bed-hover-popover, .switch-toggle, .dropdown-action-menu, .modal-card-custom) for dark & light modes.
+  - Added full Amharic localization in `apps/web/src/lib/am.json` for all bed management tabs, wards, buttons, fields, and headers.
+  - Updated routing and aliases in `apps/web/src/app/(hospital)/modules/[slug]/page.tsx`, `apps/web/src/components/workspace.tsx`, and `apps/web/src/lib/legacy.ts`.
+  - Authored automated verification suite `scripts/verify-bed-management.mjs` and expanded `scripts/verify-reference-pages.mjs`.
+
 

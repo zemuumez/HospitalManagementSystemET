@@ -46,6 +46,10 @@ import { chromium } from "@playwright/test";
     "accounts",
     "employee-payrolls",
     "bills",
+    "bed-status",
+    "bed-assigns",
+    "beds",
+    "bed-types",
   ]) {
     await p.goto(
       "http://127.0.0.1:3000/" +
@@ -152,6 +156,17 @@ import { chromium } from "@playwright/test";
   await p.locator('[data-ready="true"]').waitFor();
   await p.getByRole("button", { name: "New Invoice", exact: true }).click();
   await p.locator("#billing-form-title").waitFor();
+  await p.getByRole("button", { name: "Cancel", exact: true }).click();
+  await p.goto("http://127.0.0.1:3000/modules/bed-assigns");
+  await p.locator('[data-ready="true"]').waitFor();
+  await p.locator(".billing-search-box input").fill("Vinay");
+  if ((await p.locator(".billing-table tbody tr").count()) !== 1)
+    throw Error("Bed assigns search did not filter correctly");
+  await p.locator(".billing-search-box input").fill("");
+  await p.goto("http://127.0.0.1:3000/modules/bed-types");
+  await p.locator('[data-ready="true"]').waitFor();
+  await p.getByRole("button", { name: "New Bed Type", exact: true }).click();
+  await p.locator("#bed-type-modal-title").waitFor();
   await p.getByRole("button", { name: "Cancel", exact: true }).click();
   await p.goto("http://127.0.0.1:3000/modules/attendance");
   await p.setViewportSize({ width: 390, height: 844 });

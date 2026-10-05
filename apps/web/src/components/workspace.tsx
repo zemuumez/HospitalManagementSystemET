@@ -131,7 +131,14 @@ export function Workspace({ children }: { children: React.ReactNode }) {
       "/modules/manual-bill-payments",
     ].includes(path)
       ? "Billings"
-      : undefined);
+      : [
+            "/modules/bed-status",
+            "/modules/bed-assigns",
+            "/modules/beds",
+            "/modules/bed-types",
+          ].includes(path)
+        ? "Bed Management"
+        : undefined);
   useEffect(() => {
     api<Identity>("me")
       .then((result) => {

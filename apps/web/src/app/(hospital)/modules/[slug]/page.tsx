@@ -12,6 +12,7 @@ import {
   ConnectedInvoices,
 } from "@/components/connected-billing";
 import { BillingWorkspace } from "@/components/billing-workspace";
+import { BedManagementWorkspace } from "@/components/bed-management-workspace";
 import { notFound } from "next/navigation";
 import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
@@ -22,6 +23,8 @@ export default async function ModulePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  if (["bed-status", "bed-assigns", "beds", "bed-types"].includes(slug))
+    return <BedManagementWorkspace key={slug} id={slug} />;
   if (
     [
       "manual-billing-payments",
@@ -46,8 +49,6 @@ export default async function ModulePage({
   const screen = screens.find((s) => s.id === slug);
   if (!screen) notFound();
   if (slug === "odontogram") return <OdontogramRegister />;
-  if (slug === "beds" || slug === "bed-status")
-    return <ConnectedClinical mode="beds" />;
   if (slug === "patient-cases") return <ConnectedClinical mode="cases" />;
   if (slug === "ipd-patient-departments")
     return <EncounterRegister kind="ipd" />;
