@@ -57,3 +57,18 @@ Additional verified commits:
 - `d978587`: authenticated encrypted backups, empty-target transactional restore, real-schema reconciliation and corrected acceptance claims.
 
 The uncached Go/PostgreSQL suite and vet pass through migration 045. Connected API integration and the synthetic encrypted backup/restore drill pass. New-module browser integration, full original parity and the open Section 3 deployment/business requirements are not implied by these tests. Real provider credentials remain blank.
+
+
+## Final local acceptance evidence
+
+The reviewed operational branch passed on 2026-10-05:
+
+- Uncached Go unit, PostgreSQL transaction/concurrency/authorization and HTTP tests through migration 045; `go vet`.
+- Web unit tests, formatting, production build and TypeScript checks.
+- Connected API integration: session/role/record isolation, CSRF, booking concurrency, captured SMS, Mailpit and revocation.
+- Existing connected browser journeys: billing/payment, bed/case/admission/discharge, staff/schedules/patient booking, reload persistence and mobile layout.
+- Firebase Auth emulator and MFA, password recovery, and staff invitations.
+- Real-schema reconciliation during every connected suite; encrypted synthetic database restore with wrong-key, tampering and nonempty-target denial.
+- Production dependency audit: zero vulnerabilities.
+
+These results support integrating the submitted development branch. They do not establish full Section 3 completion: the corrected checklist retains outstanding tax/insurance/accounting workflows, complete original-module parity, provider provisioning, private-file recovery/retention, production deployment/security review and user acceptance. New-module frontend integration remains Section 4.
