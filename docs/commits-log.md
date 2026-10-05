@@ -25,7 +25,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`9bf4476`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9bf4476) | **Frontend/BedManagement** | Recreate Bed Management module with 4 tabs matching screenshots (Bed Status with 17 ward grids, Bed Assigns, Beds, Bed Types, New Bed Type modal) | N/A | Pushed (`main`) |
 | [`cda7d7e`](https://github.com/zemuumez/HospitalManagementSystemET/commit/cda7d7e) | **Frontend/Modules** | Workspaces for Prescriptions, Doctors (5 tabs, New Schedule, Breaks), Blood Bank (5 tabs, Donors, Reports), and Diagnosis (Categories, Tests) | N/A | Pushed (`main`) |
 | [`ab08aa7`](https://github.com/zemuumez/HospitalManagementSystemET/commit/ab08aa7) | **Section 4** | Connect Medicines, Billing, Services, Ambulances, and Pathology workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
-| [`TBD`](#) | **Section 4** | Connect Blood Bank, Prescriptions, Doctors & Scheduling, and Attendance workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
+| [`62791ab`](#) | **Section 4** | Connect Blood Bank, Prescriptions, Doctors & Scheduling, and Attendance workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
 
 ---
 
@@ -317,7 +317,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - **Workspace Navigation** (`apps/web/src/components/workspace.tsx`): Registered all operational module routes in `isLive` list.
   - Verification: `npm run typecheck` passed (0 errors), all test suites passed.
 
-### 20. Commit `TBD` — Section 4 Frontend Integration for Blood Bank, Prescriptions, Doctors & Attendance
+### 20. Commit `62791ab` — Section 4 Frontend Integration for Blood Bank, Prescriptions, Doctors & Attendance
 - **Message**: `feat: connect blood bank, prescriptions, doctors, and attendance workspaces to postgres backend`
 - **Branch**: `main`
 - **Scope & Features**:
