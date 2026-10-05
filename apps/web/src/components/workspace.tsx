@@ -162,6 +162,17 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     "/modules/attendance-requests",
     "/modules/attendance-report",
     "/modules/manage-attendance",
+    "/modules/call-logs",
+    "/modules/visitors",
+    "/modules/postals",
+    "/modules/postal-receives",
+    "/modules/postal-dispatches",
+    "/modules/enquiries",
+    "/modules/complaints",
+    "/modules/items",
+    "/modules/item-categories",
+    "/modules/item-stocks",
+    "/modules/issued-items",
   ].includes(path);
   const selected = screens.find(
     (s) => screenHref(s) === path || `/modules/${s.id}` === path,
@@ -253,7 +264,24 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                                 path,
                               )
                             ? "Review"
-                            : undefined);
+                            : [
+                                  "/modules/call-logs",
+                                  "/modules/visitors",
+                                  "/modules/postals",
+                                  "/modules/postal-receives",
+                                  "/modules/postal-dispatches",
+                                  "/modules/enquiries",
+                                  "/modules/complaints",
+                                ].includes(path)
+                              ? "Front Office"
+                              : [
+                                    "/modules/items",
+                                    "/modules/item-categories",
+                                    "/modules/item-stocks",
+                                    "/modules/issued-items",
+                                  ].includes(path)
+                                ? "Inventory"
+                                : undefined);
   useEffect(() => {
     api<Identity>("me")
       .then((result) => {

@@ -18,6 +18,8 @@ import { PatientsWorkspace } from "@/components/patients-workspace";
 import { MedicinesWorkspace } from "@/components/medicines-workspace";
 import { LiveConsultationWorkspace } from "@/components/live-consultation-workspace";
 import { ReviewWorkspace } from "@/components/review-workspace";
+import { FrontOfficeWorkspace } from "@/components/front-office-workspace";
+import { InventoryWorkspace } from "@/components/inventory-workspace";
 import { notFound } from "next/navigation";
 import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
@@ -124,6 +126,27 @@ export default async function ModulePage({
     slug === "manage-attendance"
   )
     return <AttendanceWorkspace key={slug} id={slug} />;
+  if (
+    [
+      "call-logs",
+      "visitors",
+      "postals",
+      "postal-receives",
+      "postal-dispatches",
+      "enquiries",
+      "complaints",
+    ].includes(slug)
+  )
+    return <FrontOfficeWorkspace key={slug} id={slug} />;
+  if (
+    [
+      "items",
+      "item-categories",
+      "item-stocks",
+      "issued-items",
+    ].includes(slug)
+  )
+    return <InventoryWorkspace key={slug} id={slug} />;
   const screen = screens.find((s) => s.id === slug);
   if (!screen) notFound();
   if (slug === "odontogram") return <OdontogramRegister />;

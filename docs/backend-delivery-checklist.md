@@ -117,6 +117,8 @@ Manual payment forms record completed money movements; they do not send bank tra
 | Services & Logistics | `/v1/services`, `/v1/ambulances`, `/v1/ambulance-calls`, `/v1/packages`, `/v1/insurances` | Services, Ambulances, Ambulance Calls, Packages, Insurances | Driver tracking, live GPS, external claim portal |
 | Diagnostics & Pathology | `/v1/diagnostic-categories`, `/v1/diagnostic-units`, `/v1/diagnostic-tests`, `/v1/diagnostic-orders` | Pathology Categories, Units, Parameters, Tests | Imaging DICOM viewer, laboratory equipment integration |
 | Attendance & HR | `/v1/attendance/shifts`, `/v1/attendance/assignments`, `/v1/attendance/summary`, `/v1/attendance/today`, `/v1/attendance/clock-in`, `/v1/attendance/clock-out` | Attendance Dashboard, Shifts, Assignments, Duties, Leaves, Requests, Reports | Biometric hardware integration, RFID readers |
+| Front Office & Enquiries | `/v1/call-logs`, `/v1/visitors`, `/v1/postals`, `/v1/enquiries`, `/v1/complaints` | Call Logs, Visitors, Postal Dispatch/Receive, Enquiries, Complaints | Public portal contact integration, gate scanner |
+| General Inventory | `/v1/inventory/items`, `/v1/inventory/categories`, `/v1/inventory/movements` | Items, Item Categories, Item Stocks, Issued Items | Barcode scanner, automated supplier reorder EDI |
 | Other original modules | No completed API yet | Marked frontend previews | See module coverage appendix |
 
 The browser uses `/api/hms/*`; Go's `/v1/*` endpoints remain private. The complete original-screen inventory is in [backend-module-coverage.md](backend-module-coverage.md).

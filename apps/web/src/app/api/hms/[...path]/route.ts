@@ -56,7 +56,13 @@ const allowedRoot = new Set([
   "visitors",
   "postal-receives",
   "postal-dispatches",
+  "postals",
   "complaints",
+  "enquiries",
+  "notices",
+  "notice-boards",
+  "inventory",
+  "front-settings",
   "settings",
   "hospital-schedules",
   "reviews",
@@ -171,6 +177,15 @@ function isAllowedPath(path: string[]): boolean {
       if (path[1] === "shifts") return true;
     }
     if (path[0] === "doctor-departments" && ["archive", "revisions"].includes(path[2])) {
+      return true;
+    }
+    if (path[0] === "complaints" && path[2] === "resolve") {
+      return true;
+    }
+    if (path[0] === "enquiries" && path[2] === "read") {
+      return true;
+    }
+    if (path[0] === "inventory" && ["categories", "items"].includes(path[1])) {
       return true;
     }
   }
