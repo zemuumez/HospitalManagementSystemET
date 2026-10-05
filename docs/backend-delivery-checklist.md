@@ -535,7 +535,7 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 ### Operational review: queue concurrency (2026-10-05)
 - [x] Reproduced token allocation race: 11 of 16 simultaneous registrations failed on duplicate tokens before repair.
 - [x] Added transaction-scoped doctor/date allocation lock; all 16 simultaneous registrations now receive unique tokens. Uncached Go/PostgreSQL tests and go vet pass.
-- [ ] Remaining queue authorization, transitions, appointment linkage and browser integration require review.
+- [x] Queue authorization, transition and appointment linkage checks repaired in `c0975a4`; new module browser integration remains Section 4.
 
 ### Operational review: private attachments (2026-10-05)
 - [x] Replaced metadata-only HTTP upload with bounded multipart storage, server MIME/size/checksum calculation and authorized downloads.
