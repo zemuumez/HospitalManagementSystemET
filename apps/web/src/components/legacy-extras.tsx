@@ -725,6 +725,7 @@ type CardTemplate = {
   dob: boolean;
   blood: boolean;
   address: boolean;
+  uniqueId?: boolean;
 };
 const templateSeed: CardTemplate[] = [
   {
@@ -735,6 +736,7 @@ const templateSeed: CardTemplate[] = [
     dob: true,
     blood: true,
     address: true,
+    uniqueId: true,
   },
   {
     name: "VIP",
@@ -744,6 +746,7 @@ const templateSeed: CardTemplate[] = [
     dob: false,
     blood: true,
     address: false,
+    uniqueId: true,
   },
 ];
 type CardRow = { id: string; patient: number; template: string };
@@ -792,7 +795,12 @@ function SmartCards({ templates }: { templates: boolean }) {
     list[0] ||
     templateSeed[0];
   return (
-    <section>
+    <section className="smart-card-screen">
+      {templateError && !editing && (
+        <p role="alert" className="error">
+          {t(templateError)}
+        </p>
+      )}
       <div className="page-heading">
         <h1>
           {t(
@@ -812,7 +820,11 @@ function SmartCards({ templates }: { templates: boolean }) {
           }
         >
           <Plus size={16} />
-          {t(templates ? "New Template" : "New Patient Smart Card")}
+          {t(
+            templates
+              ? "New Patient Smart Card Template"
+              : "New Patient Smart Card",
+          )}
         </button>
       </div>
       <div className="table-toolbar">
@@ -830,9 +842,20 @@ function SmartCards({ templates }: { templates: boolean }) {
         <table className="legacy-table reference-striped">
           <thead>
             <tr>
-              <th>{t(templates ? "Template Name" : "Patient")}</th>
-              <th>{templates ? t("Color") : t("Patient ID")}</th>
-              <th>{t(templates ? "Preview" : "Template Name")}</th>
+              <th>{t(templates ? "Name" : "Patients")}</th>
+              <th>{templates ? t("Color") : t("Patient Unique ID")}</th>
+              {templates ? (
+                [
+                  "Email",
+                  "Phone",
+                  "Date of Birth",
+                  "Blood Group",
+                  "Address",
+                  "Patient Unique ID",
+                ].map((label) => <th key={label}>{t(label)}</th>)
+              ) : (
+                <th>{t("Template Name")}</th>
+              )}
               <th>{t("Action")}</th>
             </tr>
           </thead>
@@ -851,20 +874,35 @@ function SmartCards({ templates }: { templates: boolean }) {
                           style={{ background: template.color }}
                         />
                       </td>
-                      <td>
-                        <button
-                          className="text-brand"
-                          onClick={() =>
-                            setSelected({
-                              id: "preview",
-                              patient: 0,
-                              template: template.name,
-                            })
-                          }
-                        >
-                          {t("Preview")}
-                        </button>
-                      </td>
+                      {(
+                        [
+                          "email",
+                          "phone",
+                          "dob",
+                          "blood",
+                          "address",
+                          "uniqueId",
+                        ] as const
+                      ).map((key) => (
+                        <td key={key}>
+                          <input
+                            className="reference-switch"
+                            type="checkbox"
+                            role="switch"
+                            aria-label={`${template.name} ${key}`}
+                            checked={template[key] !== false}
+                            onChange={(e) =>
+                              setList(
+                                list.map((row) =>
+                                  row.name === template.name
+                                    ? { ...row, [key]: e.target.checked }
+                                    : row,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                      ))}
                       <td>
                         <button
                           className="text-brand"
@@ -876,6 +914,28 @@ function SmartCards({ templates }: { templates: boolean }) {
                           }}
                         >
                           <Pencil size={17} />
+                        </button>
+                        <button
+                          className="text-red-500 ml-3"
+                          aria-label={`Delete ${template.name}`}
+                          onClick={() => {
+                            if (
+                              cards.some((c) => c.template === template.name)
+                            ) {
+                              setTemplateError(
+                                "This template is used by patient cards. Remove those cards before deleting the template.",
+                              );
+                              return;
+                            }
+                            if (window.confirm(`Delete ${template.name}?`))
+                              setList(
+                                list.filter(
+                                  (row) => row.name !== template.name,
+                                ),
+                              );
+                          }}
+                        >
+                          <Trash2 size={17} />
                         </button>
                       </td>
                     </tr>

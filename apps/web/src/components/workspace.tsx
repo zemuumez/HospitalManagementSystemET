@@ -65,6 +65,15 @@ export function Workspace({ children }: { children: React.ReactNode }) {
   }, []);
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(false);
+  useEffect(() => {
+    setDark(localStorage.getItem("hms-theme") === "dark");
+  }, []);
+  function toggleTheme() {
+    setDark((value) => {
+      localStorage.setItem("hms-theme", value ? "light" : "dark");
+      return !value;
+    });
+  }
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [role, setRole] = useState("Admin");
   const [error, setError] = useState("");
@@ -264,7 +273,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                 <LanguageSwitcher />
                 <button
                   aria-label={dark ? "Use light theme" : "Use dark theme"}
-                  onClick={() => setDark(!dark)}
+                  onClick={toggleTheme}
                 >
                   {dark ? <Sun size={19} /> : <Moon size={19} />}
                 </button>
