@@ -255,6 +255,16 @@ func (s Store) UpdateAmbulanceCall(ctx context.Context, a domain.Actor, id strin
 		return out, domain.ErrStale
 	}
 
+	if currentStatus != "dispatched" {
+		return out, domain.ErrStale
+	}
+	var billed bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ambulance_call_invoice WHERE call_id=$1 UNION ALL SELECT 1 FROM service_invoice_link WHERE source_type='ambulance' AND source_id=$1::text)`, id).Scan(&billed); err != nil {
+		return out, err
+	}
+	if billed {
+		return out, domain.ErrStale
+	}
 	// If vehicle changed while dispatched
 	if in.AmbulanceID != currentAmbulanceID && currentStatus == "dispatched" {
 		// Free old ambulance

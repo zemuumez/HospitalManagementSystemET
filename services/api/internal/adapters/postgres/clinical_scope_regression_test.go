@@ -44,6 +44,26 @@ func testClinicalCareScope(t *testing.T, db *pgxpool.Pool, store Store, actors [
 	if _, e := app.AddDiagnosis(ctx, actors[1], encounterID, domain.AddDiagnosisInput{Description: "Synthetic diagnosis"}); e != nil {
 		t.Fatalf("assigned doctor denied: %v", e)
 	}
+	var active string
+	if e := db.QueryRow(ctx, `SELECT id FROM encounter WHERE patient_id=$1 AND status='active' LIMIT 1`, patients[1].ID).Scan(&active); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := app.AddCareTeamMember(ctx, actors[0], active, domain.AddCareTeamMemberInput{StaffID: actors[3].ID, RoleTitle: "Forged clinician"}); e == nil {
+		t.Fatal("patient assigned as clinician")
+	}
+	member, e := app.AddCareTeamMember(ctx, actors[0], active, domain.AddCareTeamMemberInput{StaffID: actors[2].ID, RoleTitle: "Covering doctor"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = app.Diagnoses(ctx, actors[2], active); e != nil {
+		t.Fatal("delegated clinician denied", e)
+	}
+	if e = app.RevokeCareTeamMember(ctx, actors[0], member.ID); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = app.Diagnoses(ctx, actors[2], active); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatal("revoked delegation retained access", e)
+	}
 	if e := store.AuthorizeClinicalRecord(ctx, actors[0], patients[0].ID, encounterID, "clinical"); !errors.Is(e, domain.ErrForbidden) {
 		t.Fatalf("mismatched patient and encounter accepted: %v", e)
 	}

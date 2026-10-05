@@ -20,6 +20,7 @@ func (s Store) AuthorizeAttachment(ctx context.Context, a domain.Actor, patientI
  AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM encounter e WHERE e.id=$4::uuid AND e.patient_id=p.id))
  AND ($1='admin' OR ($1='patient' AND patient_portal_owner(p.id)=$2)
  OR ($1='doctor' AND (p.clinician_user_id=$2 OR EXISTS(SELECT 1 FROM encounter e WHERE e.patient_id=p.id AND e.doctor_id=$2 AND ($4::uuid IS NULL OR e.id=$4::uuid))))
+ OR ($1 IN ('doctor','nurse') AND EXISTS(SELECT 1 FROM encounter e JOIN encounter_care_team c ON c.encounter_id=e.id WHERE e.patient_id=p.id AND c.staff_id=$2 AND c.revoked_at IS NULL AND ($4::uuid IS NULL OR e.id=$4::uuid)))
  OR ($1='lab_technician' AND $4::uuid IS NOT NULL AND EXISTS(SELECT 1 FROM diagnostic_order o WHERE o.encounter_id=$4::uuid))
  OR ($1='nurse' AND EXISTS(SELECT 1 FROM encounter e JOIN encounter_nurse n ON n.encounter_id=e.id WHERE e.patient_id=p.id AND n.nurse_id=$2 AND n.active AND ($4::uuid IS NULL OR e.id=$4::uuid)))))`, a.Role, a.ID, *patientID, encounterID).Scan(&allowed)
 	if err != nil {

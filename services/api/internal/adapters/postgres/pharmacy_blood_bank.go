@@ -652,17 +652,23 @@ func (s Store) Prescription(ctx context.Context, id string) (domain.Prescription
 		WHERE prescription_id = $1
 		ORDER BY created_at ASC
 	`, id)
-	if err == nil {
-		defer mRows.Close()
-		for mRows.Next() {
-			var m domain.PrescriptionMedicine
-			var medID *string
-			if err := mRows.Scan(&m.ID, &m.PrescriptionID, &medID, &m.MedicineName, &m.Dosage, &m.Day, &m.Time, &m.Comment); err == nil {
-				m.MedicineID = medID
-				pr.Medicines = append(pr.Medicines, m)
-			}
-		}
+	if err != nil {
+		return pr, err
 	}
+	defer mRows.Close()
+	for mRows.Next() {
+		var m domain.PrescriptionMedicine
+		var medID *string
+		if err = mRows.Scan(&m.ID, &m.PrescriptionID, &medID, &m.MedicineName, &m.Dosage, &m.Day, &m.Time, &m.Comment); err != nil {
+			return pr, err
+		}
+		m.MedicineID = medID
+		pr.Medicines = append(pr.Medicines, m)
+	}
+	if err = mRows.Err(); err != nil {
+		return pr, err
+	}
+
 	return pr, nil
 }
 

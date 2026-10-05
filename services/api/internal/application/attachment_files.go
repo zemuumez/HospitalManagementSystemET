@@ -44,6 +44,14 @@ func (s AttachmentsService) Upload(ctx context.Context, a domain.Actor, name str
 	if err := input.Validate(); err != nil {
 		return domain.SecureAttachment{}, err
 	}
+	if s.Scanner == nil && s.RequireScan {
+		return domain.SecureAttachment{}, domain.ErrUnavailable
+	}
+	if s.Scanner != nil {
+		if err := s.Scanner.Scan(ctx, data); err != nil {
+			return domain.SecureAttachment{}, err
+		}
+	}
 	key, err := s.Files.Put(ctx, data)
 	if err != nil {
 		return domain.SecureAttachment{}, err

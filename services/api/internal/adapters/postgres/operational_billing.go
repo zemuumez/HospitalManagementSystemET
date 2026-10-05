@@ -66,6 +66,13 @@ func linkOperationalInvoice(ctx context.Context, tx pgx.Tx, a domain.Actor, kind
 			return out, err
 		}
 	}
+	var reserved bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pharmacy_invoice WHERE invoice_id=$1 UNION ALL SELECT 1 FROM diagnostic_invoice WHERE invoice_id=$1 UNION ALL SELECT 1 FROM ambulance_call_invoice WHERE invoice_id=$1)`, invoiceID).Scan(&reserved); err != nil {
+		return out, err
+	}
+	if reserved {
+		return out, domain.ErrConflict
+	}
 	var matching bool
 	var subtotal, allocated int64
 	err = tx.QueryRow(ctx, `SELECT canonical_patient_id(patient_id)=canonical_patient_id($2::uuid),subtotal_minor FROM invoice WHERE id=$1 FOR UPDATE`, invoiceID, patientID).Scan(&matching, &subtotal)

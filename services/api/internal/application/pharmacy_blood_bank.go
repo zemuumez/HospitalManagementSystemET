@@ -172,6 +172,9 @@ func (s PharmacyBloodBankService) CreateBloodIssue(ctx context.Context, a domain
 	if err := in.Validate(); err != nil {
 		return domain.BloodIssue{}, err
 	}
+	if err := s.Store.ValidateClinicalAttribution(ctx, a, in.PatientID, in.DoctorID, nil); err != nil {
+		return domain.BloodIssue{}, err
+	}
 	return s.Store.CreateBloodIssue(ctx, a, in)
 }
 
@@ -226,7 +229,7 @@ func (s PharmacyBloodBankService) CreatePrescription(ctx context.Context, a doma
 }
 
 func (s PharmacyBloodBankService) UpdatePrescriptionStatus(ctx context.Context, a domain.Actor, id string, status int) (domain.Prescription, error) {
-	// Status can be marked dispensed by pharmacist, doctor or admin
+	// Legacy active/inactive flag; never represents dispensing or stock movement.
 	if !a.Can("pharmacy.manage") && !a.Can("prescriptions.manage") {
 		return domain.Prescription{}, domain.ErrForbidden
 	}

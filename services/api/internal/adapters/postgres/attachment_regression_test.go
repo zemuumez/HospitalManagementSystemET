@@ -82,6 +82,17 @@ func testAttachmentPrivacy(t *testing.T, db *pgxpool.Pool, store Store, actors [
 	defer files.Close()
 	app.Files = files
 	data := []byte("Synthetic confidential attachment")
+	app.RequireScan = true
+	if _, e = app.Upload(ctx, actors[0], "blocked.txt", &patients[0].ID, nil, data); !errors.Is(e, domain.ErrUnavailable) {
+		t.Fatal("missing production scanner accepted", e)
+	}
+	app.Scanner = rejectAttachmentScan{}
+	if _, e = app.Upload(ctx, actors[0], "blocked.txt", &patients[0].ID, nil, data); !errors.Is(e, domain.ErrValidation) {
+		t.Fatal("infected upload accepted", e)
+	}
+	app.RequireScan = false
+	app.Scanner = nil
+
 	upload, e := app.Upload(ctx, actors[0], "result.txt", &patients[0].ID, nil, data)
 	if e != nil {
 		t.Fatal(e)
@@ -169,3 +180,7 @@ func testAttachmentPrivacy(t *testing.T, db *pgxpool.Pool, store Store, actors [
 		}
 	}
 }
+
+type rejectAttachmentScan struct{}
+
+func (rejectAttachmentScan) Scan(context.Context, []byte) error { return domain.ErrValidation }

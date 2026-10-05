@@ -18,9 +18,15 @@ type AttachmentsRepository interface {
 	ListPatientAttachments(ctx context.Context, patientID string) ([]domain.SecureAttachment, error)
 }
 
+type AttachmentScanner interface {
+	Scan(context.Context, []byte) error
+}
+
 type AttachmentsService struct {
-	Store AttachmentsRepository
-	Files AttachmentFiles
+	Scanner     AttachmentScanner
+	RequireScan bool
+	Store       AttachmentsRepository
+	Files       AttachmentFiles
 }
 
 func (s AttachmentsService) CreateAttachment(ctx context.Context, a domain.Actor, input domain.CreateSecureAttachmentInput) (domain.SecureAttachment, error) {

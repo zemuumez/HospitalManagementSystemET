@@ -156,12 +156,12 @@ func (s Store) AddCareTeamMember(ctx context.Context, a domain.Actor, encounterI
 	err := s.DB.QueryRow(ctx, `
 		INSERT INTO encounter_care_team (
 			encounter_id, staff_id, role_title, assigned_by, notes
-		) VALUES ($1, $2, $3, $4, $5)
+		) SELECT $1,$2,$3,$4,$5 WHERE EXISTS(SELECT 1 FROM staff_access WHERE user_id=$2 AND active AND role IN ('doctor','nurse')) AND EXISTS(SELECT 1 FROM encounter WHERE id=$1 AND status='active')
 		RETURNING id, assigned_at
 	`, encounterID, input.StaffID, input.RoleTitle, a.ID, input.Notes,
 	).Scan(&m.ID, &m.AssignedAt)
 	if err != nil {
-		return domain.CareTeamMember{}, err
+		return domain.CareTeamMember{}, clinicalError(err)
 	}
 
 	_ = s.DB.QueryRow(ctx, `SELECT name FROM "user" WHERE id = $1`, input.StaffID).Scan(&m.StaffName)
@@ -333,12 +333,12 @@ func (s Store) AddAttachment(ctx context.Context, a domain.Actor, encounterID st
 	err := s.DB.QueryRow(ctx, `
 		INSERT INTO encounter_attachment (
 			encounter_id, title, file_url, file_type, file_size_bytes, uploaded_by
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, uploaded_at
-	`, encounterID, input.Title, input.FileURL, input.FileType, input.FileSizeBytes, a.ID,
-	).Scan(&att.ID, &att.UploadedAt)
+		) SELECT $1,$2,$3,sa.mime_type,sa.file_size_bytes,$4 FROM secure_attachment sa JOIN encounter e ON e.id=$1 WHERE sa.encounter_id=e.id AND sa.patient_id=e.patient_id AND '/v1/attachments/'||sa.token||'/content'=$3
+		RETURNING id, uploaded_at, file_type, file_size_bytes
+	`, encounterID, input.Title, input.FileURL, a.ID,
+	).Scan(&att.ID, &att.UploadedAt, &att.FileType, &att.FileSizeBytes)
 	if err != nil {
-		return domain.EncounterAttachment{}, err
+		return domain.EncounterAttachment{}, clinicalError(err)
 	}
 	return att, nil
 }

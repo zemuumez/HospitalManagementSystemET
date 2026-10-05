@@ -175,16 +175,16 @@ func (i *BloodIssueInput) Validate() error {
 	i.PatientID = strings.TrimSpace(i.PatientID)
 	i.BloodGroup = strings.ToUpper(strings.TrimSpace(i.BloodGroup))
 	i.Remarks = strings.TrimSpace(i.Remarks)
-	if i.DoctorID == "" || i.PatientID == "" {
+	if i.DoctorID == "" || !UUIDPattern.MatchString(i.PatientID) {
 		return ErrValidation
 	}
 	if !AllowedBloodGroups[i.BloodGroup] {
 		return ErrValidation
 	}
-	if i.Bags <= 0 {
-		i.Bags = 1
+	if i.Bags <= 0 || i.Bags > 10000 {
+		return ErrValidation
 	}
-	if i.AmountMinor < 0 {
+	if i.AmountMinor < 0 || i.AmountMinor > 100000000000 {
 		return ErrValidation
 	}
 	if i.IssueDate == nil || i.IssueDate.IsZero() {
@@ -196,14 +196,14 @@ func (i *BloodIssueInput) Validate() error {
 // --- Prescriptions ---
 
 type PrescriptionMedicine struct {
-	ID             string `json:"id"`
-	PrescriptionID string `json:"prescription_id"`
+	ID             string  `json:"id"`
+	PrescriptionID string  `json:"prescription_id"`
 	MedicineID     *string `json:"medicine_id,omitempty"`
-	MedicineName   string `json:"medicine_name"`
-	Dosage         string `json:"dosage"`
-	Day            string `json:"day"`
-	Time           string `json:"time"`
-	Comment        string `json:"comment"`
+	MedicineName   string  `json:"medicine_name"`
+	Dosage         string  `json:"dosage"`
+	Day            string  `json:"day"`
+	Time           string  `json:"time"`
+	Comment        string  `json:"comment"`
 }
 
 type PrescriptionMedicineInput struct {
@@ -245,7 +245,7 @@ type Prescription struct {
 	HealthInsurance    string                 `json:"health_insurance"`
 	LowIncome          string                 `json:"low_income"`
 	Reference          string                 `json:"reference"`
-	Status             int                    `json:"status"` // 0: pending, 1: dispensed
+	Status             int                    `json:"status"` // Legacy prescription status: 0 inactive, 1 active; dispensing uses the stock ledger.
 	PlusRate           string                 `json:"plus_rate"`
 	Temperature        string                 `json:"temperature"`
 	ProblemDescription string                 `json:"problem_description"`

@@ -24,3 +24,10 @@ Allowed detected types are PDF, JPEG, PNG, WebP and plain text. HTML, SVG, archi
 Isolated PostgreSQL plus real temporary-directory tests cover scoped metadata, cross-patient and cross-doctor denial, server-computed checksum/size, byte-for-byte downloads, multipart HTTP upload/download, unsafe filenames, oversized files, HTML content and storage-key traversal. Uncached Go tests and go vet pass. Retention approval, malware scanning, restore rehearsal, upload throttling, and browser integration remain separate acceptance work.
 
 Patient visibility requires explicit release (`POST /v1/attachments/{token}/release`) by an assigned doctor or administrator. Lab technicians may upload only for an encounter with a diagnostic order. To attach a diagnostic file, supply its private `/v1/attachments/{token}/content` URL to the report-file endpoint; arbitrary URLs and another encounter's files are rejected. Diagnostic file release requires the latest result's clinical release. Generic release cannot bypass this requirement. Repeated release retains one release event.
+
+
+## Production malware scanning
+
+Uploads call the ClamAV INSTREAM adapter before saving bytes or metadata. Set `HMS_CLAMAV_ADDRESS` to an installed loopback endpoint such as `127.0.0.1:3310`. With `APP_ENV=production`, an empty scanner configuration, timeout, unknown/error response, or unavailable scanner rejects uploads. Detected malware is rejected and is never promoted to storage. Development can leave the scanner blank for synthetic fixtures; this is not a production scanner test.
+
+Install ClamAV, update its signature database with `freshclam`, configure a loopback TCP listener, and ensure `StreamMaxLength` covers the 25 MiB application limit. Keep signatures refreshed and monitor the service. Follow the official [ClamAV scanning setup](https://docs.clamav.net/manual/Usage/Scanning.html) and [INSTREAM protocol](https://docs.clamav.net/manual/Usage/ClamdProtocol.html). The adapter has local protocol-fixture tests for clean/infected/error/malformed responses; a real engine/signature acceptance test remains deployment work.
