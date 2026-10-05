@@ -425,5 +425,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testFinancePayroll(t, db, store, actors, patients, cases)
 	testAttendanceRetry(t, db, store, actors)
 	testAttendanceLifecycle(t, db, store, actors)
+	testQueueConcurrency(t, db, store, actors)
 
 }

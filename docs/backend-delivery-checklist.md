@@ -531,3 +531,8 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 - [x] Reproduced and repaired approval of unfinished records; approved totals survive subsequent clock-out attempts.
 - [x] Uncached isolated PostgreSQL/Go suite and go vet passed after repairs.
 - [ ] Attendance frontend integration and full browser journey remain Section 4 work; broader operational branch acceptance remains pending.
+
+### Operational review: queue concurrency (2026-10-05)
+- [x] Reproduced token allocation race: 11 of 16 simultaneous registrations failed on duplicate tokens before repair.
+- [x] Added transaction-scoped doctor/date allocation lock; all 16 simultaneous registrations now receive unique tokens. Uncached Go/PostgreSQL tests and go vet pass.
+- [ ] Remaining queue authorization, transitions, appointment linkage and browser integration require review.

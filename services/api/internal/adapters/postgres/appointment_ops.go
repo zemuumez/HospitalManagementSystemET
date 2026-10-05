@@ -55,6 +55,12 @@ func (s Store) EnqueuePatient(ctx context.Context, a domain.Actor, input domain.
 	}
 	defer tx.Rollback(ctx)
 
+	// The transaction lock covers the empty queue as well as existing rows.
+	// Row-locking only existing queue entries cannot serialize the first token.
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(json_build_array('patient-queue', $1::text, $2::text)::text, 0))`, input.DoctorID, input.QueueDate); err != nil {
+		return domain.PatientQueueItem{}, err
+	}
+
 	// Check if already in queue today
 	var existingID string
 	err = tx.QueryRow(ctx, `
