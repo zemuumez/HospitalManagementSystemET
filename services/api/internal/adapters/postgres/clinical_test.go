@@ -428,5 +428,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testQueueConcurrency(t, db, store, actors)
 	testAttachmentPrivacy(t, db, store, actors, patients)
 	testMergePreservesHistory(t, db, store, actors, patients)
+	testClinicalCareScope(t, db, store, actors, patients)
 
 }

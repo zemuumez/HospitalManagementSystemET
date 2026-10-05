@@ -178,8 +178,8 @@ func (s Store) RevokeCareTeamMember(ctx context.Context, a domain.Actor, memberI
 	tag, err := s.DB.Exec(ctx, `
 		UPDATE encounter_care_team
 		SET revoked_at = clock_timestamp()
-		WHERE id = $1 AND revoked_at IS NULL
-	`, memberID)
+		WHERE id = $1 AND revoked_at IS NULL AND ($2='admin' OR EXISTS(SELECT 1 FROM encounter e WHERE e.id=encounter_care_team.encounter_id AND e.doctor_id=$3))
+	`, memberID, a.Role, a.ID)
 	if err != nil {
 		return err
 	}

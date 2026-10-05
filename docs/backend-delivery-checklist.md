@@ -547,3 +547,8 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 - [x] Reproduced transaction abort when merging a patient with encounters; the submitted code violated composite case/patient/doctor references and ignored write errors.
 - [x] Removed unsafe partial reassignment. Valid administrator merge requests return unavailable and leave clinical rows and merge events unchanged; negative regression test passes.
 - [ ] Implement canonical patient identity with retained original identifiers, ownership/consent conflict policy, all-module reader resolution, concurrency/reversal rules and reconciliation tests before re-enabling merge. This guard is not completion of patient merge.
+
+### Operational review: clinical record scope (2026-10-05)
+- [x] Reproduced unrelated patient/doctor/nurse access to new diagnoses, procedures, care-team, encounter attachments, beds, follow-ups, referrals and odontogram reads.
+- [x] Added current patient/encounter assignment checks across the clinical-care service, with scoped care-team revocation and patient/encounter consistency checks. Negative tests plus assigned-doctor/admin positive tests pass.
+- [ ] New clinical patient-portal release, delegation semantics, transactional authorization races, financial reconciliation and complete lifecycle tests remain pending. No new clinical module is accepted solely because these scope tests pass.
