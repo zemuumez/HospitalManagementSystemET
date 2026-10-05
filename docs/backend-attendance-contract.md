@@ -170,3 +170,6 @@ Role policy:
 - Frontend integration for Attendance and Manage Attendance screens is deferred to Section 4.
 - Biometric hardware / RFID clock-in integration is not included in this increment.
 - Payroll calculation and overtime monetary compensation rules are deliberately excluded (must be derived from documented labor regulations and financial policies in Section 3.H).
+
+### Verified retry repair (2026-10-05)
+Clock-in, clock-out, break start/end and manual creation now persist keyed responses atomically with mutations. Identical actor/operation/key/input replays return the original result; changed input conflicts. Keys are optional for compatibility, with a maximum of 200 bytes; clients should always send a stable key for retries. Migration 041 reserves 029-040 for the separate operational branch. Regression tests reproduced the original clock-in retry failure, then passed for all five operations. Full uncached Go/PostgreSQL tests and go vet passed.
