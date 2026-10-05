@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"errors"
+	"github.com/jackc/pgx/v5"
 
 	"hms.local/api/internal/domain"
 )
@@ -123,40 +125,65 @@ func (s Store) DiagnosticReportFiles(ctx context.Context, orderID string, patien
 }
 
 func (s Store) UploadDiagnosticReportFile(ctx context.Context, a domain.Actor, orderID string, input domain.UploadDiagnosticReportFileInput) (domain.DiagnosticReportFile, error) {
-	var f domain.DiagnosticReportFile
-	f.OrderID = orderID
-	f.FileName = input.FileName
-	f.FileURL = input.FileURL
-	f.FileSizeBytes = input.FileSizeBytes
-	f.MimeType = input.MimeType
-	f.UploadedBy = a.ID
-
-	err := s.DB.QueryRow(ctx, `
-		INSERT INTO diagnostic_report_file (
-			order_id, file_name, file_url, file_size_bytes, mime_type, uploaded_by
-		) VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, patient_released, uploaded_at
-	`, orderID, input.FileName, input.FileURL, input.FileSizeBytes, input.MimeType, a.ID,
-	).Scan(&f.ID, &f.PatientReleased, &f.UploadedAt)
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return domain.DiagnosticReportFile{}, err
 	}
-	return f, nil
+	defer tx.Rollback(ctx)
+	var f domain.DiagnosticReportFile
+	// Link only a server-stored, unreleased attachment for this exact encounter.
+	err = tx.QueryRow(ctx, `SELECT sa.file_name,sa.file_size_bytes,sa.mime_type FROM secure_attachment sa JOIN diagnostic_order o ON o.id=$1 JOIN encounter e ON e.id=o.encounter_id WHERE '/v1/attachments/'||sa.token||'/content'=$2 AND sa.patient_id=e.patient_id AND sa.encounter_id=e.id AND NOT sa.patient_released FOR UPDATE OF sa`, orderID, input.FileURL).Scan(&f.FileName, &f.FileSizeBytes, &f.MimeType)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return f, domain.ErrValidation
+	}
+	if err != nil {
+		return f, err
+	}
+	f.OrderID = orderID
+	f.FileURL = input.FileURL
+	f.UploadedBy = a.ID
+	err = tx.QueryRow(ctx, `INSERT INTO diagnostic_report_file(order_id,file_name,file_url,file_size_bytes,mime_type,uploaded_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,patient_released,uploaded_at`, orderID, f.FileName, f.FileURL, f.FileSizeBytes, f.MimeType, a.ID).Scan(&f.ID, &f.PatientReleased, &f.UploadedAt)
+	if err != nil {
+		return f, err
+	}
+	if err = pharmacyAudit(ctx, tx, a, "diagnostic.file_attached", f.ID); err != nil {
+		return f, err
+	}
+	return f, tx.Commit(ctx)
 }
 
 func (s Store) ReleaseReportFileToPortal(ctx context.Context, a domain.Actor, fileID string) error {
-	tag, err := s.DB.Exec(ctx, `
-		UPDATE diagnostic_report_file
-		SET patient_released = true, released_at = clock_timestamp(), released_by = $1
-		WHERE id = $2
-	`, a.ID, fileID)
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return domain.ErrNotFound
+	defer tx.Rollback(ctx)
+	var url string
+	var released bool
+	err = tx.QueryRow(ctx, `SELECT f.file_url,f.patient_released FROM diagnostic_report_file f JOIN diagnostic_order o ON o.id=f.order_id JOIN encounter e ON e.id=o.encounter_id WHERE f.id=$1 AND ($2='admin' OR ($2='doctor' AND e.doctor_id=$3)) AND EXISTS(SELECT 1 FROM diagnostic_result r JOIN diagnostic_review v ON v.result_id=r.id WHERE r.order_id=o.id AND v.action='release' AND r.revision=(SELECT max(latest.revision) FROM diagnostic_result latest WHERE latest.order_id=o.id)) FOR UPDATE OF f`, fileID, a.Role, a.ID).Scan(&url, &released)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrStale
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if released {
+		return nil
+	}
+	if _, err = tx.Exec(ctx, `UPDATE diagnostic_report_file SET patient_released=true,released_at=clock_timestamp(),released_by=$2 WHERE id=$1`, fileID, a.ID); err != nil {
+		return err
+	}
+	var attachmentID string
+	if err = tx.QueryRow(ctx, `UPDATE secure_attachment SET patient_released=true WHERE '/v1/attachments/'||token||'/content'=$1 RETURNING id`, url).Scan(&attachmentID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO attachment_release_event(attachment_id,actor_id) VALUES($1,$2)`, attachmentID, a.ID); err != nil {
+		return err
+	}
+	if err = pharmacyAudit(ctx, tx, a, "diagnostic.file_released", fileID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ─── Diagnosis Templates ──────────────────────────────────────────────────────
@@ -314,7 +341,7 @@ func (s Store) AdministerVaccine(ctx context.Context, a domain.Actor, input doma
 
 // ─── Vital Reports ────────────────────────────────────────────────────────────
 
-func (s Store) BirthReports(ctx context.Context, page int) ([]domain.BirthReport, error) {
+func (s Store) BirthReports(ctx context.Context, a domain.Actor, page int) ([]domain.BirthReport, error) {
 	offset := (page - 1) * 25
 	rows, err := s.DB.Query(ctx, `
 		SELECT br.id, br.report_number, br.child_name, br.gender, br.birth_date,
@@ -323,9 +350,10 @@ func (s Store) BirthReports(ctx context.Context, page int) ([]domain.BirthReport
 		       br.created_at, br.updated_at
 		FROM birth_report br
 		JOIN "user" u ON u.id = br.delivered_by
+ WHERE ($2='admin' OR br.delivered_by=$3 OR br.created_by=$3)
 		ORDER BY br.birth_date DESC
 		LIMIT 25 OFFSET $1
-	`, offset)
+	`, offset, a.Role, a.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +410,7 @@ func (s Store) CreateBirthReport(ctx context.Context, a domain.Actor, reportNumb
 	return br, nil
 }
 
-func (s Store) DeathReports(ctx context.Context, page int) ([]domain.DeathReport, error) {
+func (s Store) DeathReports(ctx context.Context, a domain.Actor, page int) ([]domain.DeathReport, error) {
 	offset := (page - 1) * 25
 	rows, err := s.DB.Query(ctx, `
 		SELECT dr.id, dr.report_number, dr.patient_id, (p.given_name || ' ' || p.family_name) AS patient_name,
@@ -391,9 +419,10 @@ func (s Store) DeathReports(ctx context.Context, page int) ([]domain.DeathReport
 		FROM death_report dr
 		JOIN patient p ON p.id = dr.patient_id
 		JOIN "user" u ON u.id = dr.certified_by
+ WHERE ($2='admin' OR dr.certified_by=$3 OR dr.created_by=$3)
 		ORDER BY dr.death_date DESC
 		LIMIT 25 OFFSET $1
-	`, offset)
+	`, offset, a.Role, a.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +475,7 @@ func (s Store) CreateDeathReport(ctx context.Context, a domain.Actor, reportNumb
 	return dr, nil
 }
 
-func (s Store) OperationReports(ctx context.Context, page int) ([]domain.OperationReport, error) {
+func (s Store) OperationReports(ctx context.Context, a domain.Actor, page int) ([]domain.OperationReport, error) {
 	offset := (page - 1) * 25
 	rows, err := s.DB.Query(ctx, `
 		SELECT opr.id, opr.report_number, opr.encounter_id, opr.patient_id, (p.given_name || ' ' || p.family_name) AS patient_name,
@@ -457,9 +486,10 @@ func (s Store) OperationReports(ctx context.Context, page int) ([]domain.Operati
 		FROM operation_report opr
 		JOIN patient p ON p.id = opr.patient_id
 		JOIN "user" u ON u.id = opr.surgeon_id
+ WHERE ($2='admin' OR opr.surgeon_id=$3 OR opr.created_by=$3)
 		ORDER BY opr.operation_date DESC
 		LIMIT 25 OFFSET $1
-	`, offset)
+	`, offset, a.Role, a.ID)
 	if err != nil {
 		return nil, err
 	}

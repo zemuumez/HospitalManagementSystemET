@@ -22,7 +22,7 @@ func (s AttachmentsService) Upload(ctx context.Context, a domain.Actor, name str
 	if s.Files == nil {
 		return domain.SecureAttachment{}, domain.ErrUnavailable
 	}
-	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" {
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" && a.Role != "lab_technician" {
 		return domain.SecureAttachment{}, domain.ErrForbidden
 	}
 	if err := s.Store.AuthorizeAttachment(ctx, a, patientID, encounterID); err != nil {

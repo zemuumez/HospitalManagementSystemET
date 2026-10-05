@@ -9,6 +9,7 @@ import (
 )
 
 type AppointmentOpsRepository interface {
+	AuthorizeAppointment(context.Context, domain.Actor, string) error
 	// Patient Queue
 	DoctorQueue(ctx context.Context, doctorID string, queueDate string) ([]domain.PatientQueueItem, error)
 	EnqueuePatient(ctx context.Context, a domain.Actor, input domain.EnqueuePatientInput) (domain.PatientQueueItem, error)
@@ -32,7 +33,7 @@ type AppointmentOpsService struct {
 // ─── Patient Queue ────────────────────────────────────────────────────────────
 
 func (s AppointmentOpsService) DoctorQueue(ctx context.Context, a domain.Actor, doctorID string, queueDate string) ([]domain.PatientQueueItem, error) {
-	if !a.Can("appointments.read") {
+	if a.Role != "admin" && a.Role != "receptionist" && !(a.Role == "doctor" && a.ID == doctorID) {
 		return nil, domain.ErrForbidden
 	}
 	doctorID = strings.TrimSpace(doctorID)
@@ -47,7 +48,7 @@ func (s AppointmentOpsService) DoctorQueue(ctx context.Context, a domain.Actor, 
 }
 
 func (s AppointmentOpsService) EnqueuePatient(ctx context.Context, a domain.Actor, input domain.EnqueuePatientInput) (domain.PatientQueueItem, error) {
-	if !a.Can("appointments.book") {
+	if a.Role != "admin" && a.Role != "receptionist" {
 		return domain.PatientQueueItem{}, domain.ErrForbidden
 	}
 	if err := input.Validate(); err != nil {
@@ -57,7 +58,7 @@ func (s AppointmentOpsService) EnqueuePatient(ctx context.Context, a domain.Acto
 }
 
 func (s AppointmentOpsService) UpdateQueueStatus(ctx context.Context, a domain.Actor, queueID string, input domain.UpdateQueueStatusInput) (domain.PatientQueueItem, error) {
-	if a.Role != "admin" && a.Role != "doctor" && a.Role != "receptionist" && a.Role != "nurse" {
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "receptionist" {
 		return domain.PatientQueueItem{}, domain.ErrForbidden
 	}
 	if !domain.UUIDPattern.MatchString(queueID) {
@@ -79,7 +80,7 @@ func (s AppointmentOpsService) CreatePublicRequest(ctx context.Context, input do
 }
 
 func (s AppointmentOpsService) ListPublicRequests(ctx context.Context, a domain.Actor, status string, page int) ([]domain.PublicAppointmentRequest, error) {
-	if !a.Can("appointments.read") {
+	if a.Role != "admin" && a.Role != "receptionist" {
 		return nil, domain.ErrForbidden
 	}
 	if page < 1 {
@@ -89,7 +90,7 @@ func (s AppointmentOpsService) ListPublicRequests(ctx context.Context, a domain.
 }
 
 func (s AppointmentOpsService) ReviewPublicRequest(ctx context.Context, a domain.Actor, id string, input domain.ReviewPublicAppointmentRequestInput) (domain.PublicAppointmentRequest, error) {
-	if !a.Can("appointments.book") {
+	if a.Role != "admin" && a.Role != "receptionist" {
 		return domain.PublicAppointmentRequest{}, domain.ErrForbidden
 	}
 	if !domain.UUIDPattern.MatchString(id) {
@@ -109,6 +110,9 @@ func (s AppointmentOpsService) GetAppointmentBilling(ctx context.Context, a doma
 	}
 	if !domain.UUIDPattern.MatchString(appointmentID) {
 		return domain.AppointmentBillingRecord{}, domain.ErrValidation
+	}
+	if err := s.Store.AuthorizeAppointment(ctx, a, appointmentID); err != nil {
+		return domain.AppointmentBillingRecord{}, err
 	}
 	return s.Store.AppointmentBilling(ctx, appointmentID)
 }

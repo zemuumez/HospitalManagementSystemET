@@ -22,3 +22,5 @@ Allowed detected types are PDF, JPEG, PNG, WebP and plain text. HTML, SVG, archi
 ## Verification
 
 Isolated PostgreSQL plus real temporary-directory tests cover scoped metadata, cross-patient and cross-doctor denial, server-computed checksum/size, byte-for-byte downloads, multipart HTTP upload/download, unsafe filenames, oversized files, HTML content and storage-key traversal. Uncached Go tests and go vet pass. Retention approval, malware scanning, restore rehearsal, upload throttling, and browser integration remain separate acceptance work.
+
+Patient visibility requires explicit release (`POST /v1/attachments/{token}/release`) by an assigned doctor or administrator. Lab technicians may upload only for an encounter with a diagnostic order. To attach a diagnostic file, supply its private `/v1/attachments/{token}/content` URL to the report-file endpoint; arbitrary URLs and another encounter's files are rejected. Diagnostic file release requires the latest result's clinical release. Generic release cannot bypass this requirement. Repeated release retains one release event.

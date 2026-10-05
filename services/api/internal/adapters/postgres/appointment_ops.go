@@ -61,6 +61,14 @@ func (s Store) EnqueuePatient(ctx context.Context, a domain.Actor, input domain.
 		return domain.PatientQueueItem{}, err
 	}
 
+	var valid bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM patient p JOIN staff_access d ON d.user_id=$2 AND d.role='doctor' AND d.active WHERE p.id=$1 AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM appointment ap WHERE ap.id=$3 AND ap.patient_id=p.id AND ap.doctor_id=$2 AND (ap.starts_at AT TIME ZONE 'Africa/Addis_Ababa')::date=$4::date AND ap.status IN ('booked','arrived'))))`, input.PatientID, input.DoctorID, input.AppointmentID, input.QueueDate).Scan(&valid)
+	if err != nil {
+		return domain.PatientQueueItem{}, err
+	}
+	if !valid {
+		return domain.PatientQueueItem{}, domain.ErrValidation
+	}
 	// Check if already in queue today
 	var existingID string
 	err = tx.QueryRow(ctx, `
@@ -131,10 +139,11 @@ func (s Store) UpdateQueueStatus(ctx context.Context, a domain.Actor, queueID st
 		    notes = CASE WHEN $2 <> '' THEN $2 ELSE notes END,
 		    called_at = COALESCE($3, called_at),
 		    completed_at = COALESCE($4, completed_at)
-		WHERE id = $5
+		WHERE id = $5 AND ($6 IN ('admin','receptionist') OR doctor_id=$7)
+ AND (status=$1 OR (status='waiting' AND $1 IN ('in_consultation','skipped')) OR (status='in_consultation' AND $1 IN ('completed','skipped')))
 		RETURNING id, doctor_id, patient_id, appointment_id::text, queue_date::text, token_number,
 		          status, notes, created_at, called_at, completed_at
-	`, input.Status, input.Notes, calledAt, completedAt, queueID).Scan(
+	`, input.Status, input.Notes, calledAt, completedAt, queueID, a.Role, a.ID).Scan(
 		&item.ID, &item.DoctorID, &item.PatientID, &apptID, &item.QueueDate, &item.TokenNumber,
 		&item.Status, &item.Notes, &item.CreatedAt, &item.CalledAt, &item.CompletedAt,
 	)
@@ -244,7 +253,7 @@ func (s Store) ReviewPublicAppointmentRequest(ctx context.Context, a domain.Acto
 		    appointment_id = $3,
 		    reviewed_by = $4,
 		    reviewed_at = $5
-		WHERE id = $6 AND status = 'pending'
+		WHERE id = $6 AND status = 'pending' AND ($1='rejected' OR EXISTS(SELECT 1 FROM appointment a WHERE a.id=$3 AND a.doctor_id=public_appointment_request.doctor_id AND (a.starts_at AT TIME ZONE 'Africa/Addis_Ababa')::date=public_appointment_request.preferred_date AND a.status IN ('booked','arrived')))
 		RETURNING id, patient_name, patient_email, patient_phone, doctor_id, department_id::text,
 		          preferred_date::text, problem, status, rejection_reason, appointment_id::text,
 		          reviewed_by, reviewed_at, created_at

@@ -542,7 +542,7 @@ func (s Store) CreateBloodIssue(ctx context.Context, a domain.Actor, in domain.B
 
 // --- Prescriptions ---
 
-func (s Store) Prescriptions(ctx context.Context, patientFilter string, page int) ([]domain.Prescription, int, error) {
+func (s Store) Prescriptions(ctx context.Context, patientFilter string, doctorFilter string, page int) ([]domain.Prescription, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -554,6 +554,16 @@ func (s Store) Prescriptions(ctx context.Context, patientFilter string, page int
 	if patientFilter != "" {
 		whereClause = " WHERE (pr.patient_id = $1 OR pr.patient_id IN (SELECT id::text FROM patient WHERE patient_portal_owner(id) = $1))"
 		args = append(args, patientFilter)
+	}
+
+	if doctorFilter != "" {
+		if whereClause == "" {
+			whereClause = " WHERE "
+		} else {
+			whereClause += " AND "
+		}
+		args = append(args, doctorFilter)
+		whereClause += fmt.Sprintf("pr.doctor_id = $%d", len(args))
 	}
 
 	var total int

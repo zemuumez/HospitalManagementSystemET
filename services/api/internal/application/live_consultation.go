@@ -7,6 +7,7 @@ import (
 )
 
 type LiveConsultationStore interface {
+	ValidateClinicalAttribution(context.Context, domain.Actor, string, string, *string) error
 	LiveConsultations(context.Context, string, string, *int, int) ([]domain.LiveConsultation, int, error)
 	LiveConsultation(context.Context, string) (domain.LiveConsultation, error)
 	CreateLiveConsultation(context.Context, domain.Actor, domain.LiveConsultationInput) (domain.LiveConsultation, error)
@@ -72,6 +73,9 @@ func (s LiveConsultationService) CreateLiveConsultation(ctx context.Context, a d
 	if err := in.Validate(); err != nil {
 		return domain.LiveConsultation{}, err
 	}
+	if err := s.Store.ValidateClinicalAttribution(ctx, a, in.PatientID, in.DoctorID, in.EncounterID); err != nil {
+		return domain.LiveConsultation{}, err
+	}
 	return s.Store.CreateLiveConsultation(ctx, a, in)
 }
 
@@ -81,6 +85,9 @@ func (s LiveConsultationService) UpdateLiveConsultationStatus(ctx context.Contex
 	}
 	if status < 0 || status > 2 {
 		return domain.LiveConsultation{}, domain.ErrValidation
+	}
+	if _, err := s.LiveConsultation(ctx, a, id); err != nil {
+		return domain.LiveConsultation{}, err
 	}
 	return s.Store.UpdateLiveConsultationStatus(ctx, a, id, status)
 }

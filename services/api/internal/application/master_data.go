@@ -8,6 +8,7 @@ import (
 
 // MasterDataRepository is implemented by the postgres store.
 type MasterDataRepository interface {
+	AuthorizePatientRecord(context.Context, domain.Actor, string) error
 	// Doctor departments
 	DoctorDepartments(ctx context.Context, includeArchived bool) ([]domain.DoctorDepartment, error)
 	DoctorDepartment(ctx context.Context, id string) (domain.DoctorDepartment, error)
@@ -184,6 +185,9 @@ func (s MasterDataService) PatientProfileExt(ctx context.Context, a domain.Actor
 	if !domain.UUIDPattern.MatchString(patientID) {
 		return domain.PatientProfileExt{}, domain.ErrValidation
 	}
+	if err := s.Store.AuthorizePatientRecord(ctx, a, patientID); err != nil {
+		return domain.PatientProfileExt{}, err
+	}
 	return s.Store.PatientProfileExt(ctx, patientID)
 }
 
@@ -195,6 +199,9 @@ func (s MasterDataService) SavePatientProfileExt(ctx context.Context, a domain.A
 		return domain.ErrValidation
 	}
 	if err := i.Validate(); err != nil {
+		return err
+	}
+	if err := s.Store.AuthorizePatientRecord(ctx, a, patientID); err != nil {
 		return err
 	}
 	return s.Store.SavePatientProfileExt(ctx, a, patientID, i)

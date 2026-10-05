@@ -7,6 +7,7 @@ import (
 )
 
 type PharmacyBloodBankStore interface {
+	ValidateClinicalAttribution(context.Context, domain.Actor, string, string, *string) error
 	// Categories & Brands
 	MedicineCategories(context.Context, int, string) ([]domain.MedicineCategory, int, error)
 	CreateMedicineCategory(context.Context, domain.Actor, domain.MedicineCategoryInput) (domain.MedicineCategory, error)
@@ -29,7 +30,7 @@ type PharmacyBloodBankStore interface {
 	CreateBloodIssue(context.Context, domain.Actor, domain.BloodIssueInput) (domain.BloodIssue, error)
 
 	// Prescriptions
-	Prescriptions(context.Context, string, int) ([]domain.Prescription, int, error)
+	Prescriptions(context.Context, string, string, int) ([]domain.Prescription, int, error)
 	Prescription(context.Context, string) (domain.Prescription, error)
 	CreatePrescription(context.Context, domain.Actor, domain.PrescriptionInput) (domain.Prescription, error)
 	UpdatePrescriptionStatus(context.Context, domain.Actor, string, int) (domain.Prescription, error)
@@ -184,7 +185,11 @@ func (s PharmacyBloodBankService) Prescriptions(ctx context.Context, a domain.Ac
 	if a.Role == "patient" {
 		patientFilter = a.ID
 	}
-	return s.Store.Prescriptions(ctx, patientFilter, page)
+	doctorFilter := ""
+	if a.Role == "doctor" {
+		doctorFilter = a.ID
+	}
+	return s.Store.Prescriptions(ctx, patientFilter, doctorFilter, page)
 }
 
 func (s PharmacyBloodBankService) Prescription(ctx context.Context, a domain.Actor, id string) (domain.Prescription, error) {
@@ -196,6 +201,9 @@ func (s PharmacyBloodBankService) Prescription(ctx context.Context, a domain.Act
 		return domain.Prescription{}, err
 	}
 	if a.Role == "patient" && p.PatientID != a.ID && (p.PatientUserID == nil || *p.PatientUserID != a.ID) {
+		return domain.Prescription{}, domain.ErrForbidden
+	}
+	if a.Role == "doctor" && p.DoctorID != a.ID {
 		return domain.Prescription{}, domain.ErrForbidden
 	}
 	return p, nil
@@ -211,6 +219,9 @@ func (s PharmacyBloodBankService) CreatePrescription(ctx context.Context, a doma
 	if err := in.Validate(); err != nil {
 		return domain.Prescription{}, err
 	}
+	if err := s.Store.ValidateClinicalAttribution(ctx, a, in.PatientID, in.DoctorID, in.EncounterID); err != nil {
+		return domain.Prescription{}, err
+	}
 	return s.Store.CreatePrescription(ctx, a, in)
 }
 
@@ -221,6 +232,11 @@ func (s PharmacyBloodBankService) UpdatePrescriptionStatus(ctx context.Context, 
 	}
 	if status != 0 && status != 1 {
 		return domain.Prescription{}, domain.ErrValidation
+	}
+	if a.Role == "doctor" {
+		if _, err := s.Prescription(ctx, a, id); err != nil {
+			return domain.Prescription{}, err
+		}
 	}
 	return s.Store.UpdatePrescriptionStatus(ctx, a, id, status)
 }

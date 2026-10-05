@@ -24,6 +24,25 @@ import (
 
 func testAttachmentPrivacy(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Actor, patients []domain.Patient) {
 	ctx := context.Background()
+	ops := application.AppointmentOpsService{Store: store}
+	for _, actor := range []domain.Actor{actors[3], actors[2]} {
+		if _, err := ops.DoctorQueue(ctx, actor, actors[1].ID, "2026-10-06"); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatal("queue scope", err)
+		}
+		if _, err := ops.ListPublicRequests(ctx, actor, "", 1); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatal("public request scope", err)
+		}
+	}
+	if err := store.ValidateClinicalAttribution(ctx, actors[1], patients[0].ID, actors[2].ID, nil); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatal("doctor attribution spoof", err)
+	}
+	if err := store.ValidateClinicalAttribution(ctx, actors[2], patients[0].ID, actors[2].ID, nil); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatal("unassigned attribution", err)
+	}
+	if err := store.ValidateClinicalAttribution(ctx, actors[1], patients[0].ID, actors[1].ID, nil); err != nil {
+		t.Fatal("assigned attribution rejected", err)
+	}
+
 	app := application.AttachmentsService{Store: store}
 	input := domain.CreateSecureAttachmentInput{FileName: "private.txt", MimeType: "text/plain", FileSizeBytes: 5, StoragePath: "test/private", Sha256Hash: strings.Repeat("a", 64), PatientID: &patients[1].ID}
 	att, err := app.CreateAttachment(ctx, actors[0], input)
@@ -44,6 +63,9 @@ func testAttachmentPrivacy(t *testing.T, db *pgxpool.Pool, store Store, actors [
 	own.StoragePath = "test/own"
 	ownAtt, err := app.CreateAttachment(ctx, actors[0], own)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err = app.Release(ctx, actors[0], ownAtt.Token); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = app.GetAttachmentByToken(ctx, actors[3], ownAtt.Token); err != nil {
@@ -67,6 +89,12 @@ func testAttachmentPrivacy(t *testing.T, db *pgxpool.Pool, store Store, actors [
 	hash := sha256.Sum256(data)
 	if upload.Sha256Hash != hex.EncodeToString(hash[:]) || upload.FileSizeBytes != int64(len(data)) {
 		t.Fatal("server did not calculate metadata")
+	}
+	if _, _, e = app.Download(ctx, actors[3], upload.Token); !errors.Is(e, domain.ErrForbidden) {
+		t.Fatalf("unreleased download allowed: %v", e)
+	}
+	if e = app.Release(ctx, actors[0], upload.Token); e != nil {
+		t.Fatal(e)
 	}
 	_, reader, e := app.Download(ctx, actors[3], upload.Token)
 	if e != nil {
@@ -120,6 +148,9 @@ func testAttachmentPrivacy(t *testing.T, db *pgxpool.Pool, store Store, actors [
 	}
 	var saved domain.SecureAttachment
 	if e = json.Unmarshal(rec.Body.Bytes(), &saved); e != nil {
+		t.Fatal(e)
+	}
+	if e = app.Release(ctx, actors[0], saved.Token); e != nil {
 		t.Fatal(e)
 	}
 	for _, tc := range []struct {

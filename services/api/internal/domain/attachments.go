@@ -6,18 +6,19 @@ import (
 )
 
 type SecureAttachment struct {
-	ID            string    `json:"id"`
-	Token         string    `json:"token"`
-	FileName      string    `json:"fileName"`
-	MimeType      string    `json:"mimeType"`
-	FileSizeBytes int64     `json:"fileSizeBytes"`
-	StoragePath   string    `json:"-"`
-	Sha256Hash    string    `json:"sha256Hash"`
-	UploaderID    string    `json:"uploaderId"`
-	PatientID     *string   `json:"patientId,omitempty"`
-	EncounterID   *string   `json:"encounterId,omitempty"`
-	IsPublic      bool      `json:"isPublic"`
-	CreatedAt     time.Time `json:"createdAt"`
+	PatientReleased bool      `json:"patientReleased"`
+	ID              string    `json:"id"`
+	Token           string    `json:"token"`
+	FileName        string    `json:"fileName"`
+	MimeType        string    `json:"mimeType"`
+	FileSizeBytes   int64     `json:"fileSizeBytes"`
+	StoragePath     string    `json:"-"`
+	Sha256Hash      string    `json:"sha256Hash"`
+	UploaderID      string    `json:"uploaderId"`
+	PatientID       *string   `json:"patientId,omitempty"`
+	EncounterID     *string   `json:"encounterId,omitempty"`
+	IsPublic        bool      `json:"isPublic"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 
 type CreateSecureAttachmentInput struct {

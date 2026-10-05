@@ -2,13 +2,14 @@ package application
 
 import (
 	"context"
-	"fmt"
-	"time"
+	"crypto/rand"
 
 	"hms.local/api/internal/domain"
 )
 
 type DiagnosticReportsRepository interface {
+	AuthorizeClinicalRecord(context.Context, domain.Actor, string, string, string) error
+	AuthorizeDiagnosticOrder(context.Context, domain.Actor, string) error
 	// Categories & Units
 	DiagnosticCategories(ctx context.Context, kind string) ([]domain.DiagnosticCategory, error)
 	CreateDiagnosticCategory(ctx context.Context, a domain.Actor, input domain.DiagnosticCategoryInput) (domain.DiagnosticCategory, error)
@@ -31,11 +32,11 @@ type DiagnosticReportsRepository interface {
 	AdministerVaccine(ctx context.Context, a domain.Actor, input domain.AdministerVaccineInput) (domain.PatientVaccination, error)
 
 	// Vital Reports
-	BirthReports(ctx context.Context, page int) ([]domain.BirthReport, error)
+	BirthReports(ctx context.Context, a domain.Actor, page int) ([]domain.BirthReport, error)
 	CreateBirthReport(ctx context.Context, a domain.Actor, reportNumber string, input domain.CreateBirthReportInput) (domain.BirthReport, error)
-	DeathReports(ctx context.Context, page int) ([]domain.DeathReport, error)
+	DeathReports(ctx context.Context, a domain.Actor, page int) ([]domain.DeathReport, error)
 	CreateDeathReport(ctx context.Context, a domain.Actor, reportNumber string, input domain.CreateDeathReportInput) (domain.DeathReport, error)
-	OperationReports(ctx context.Context, page int) ([]domain.OperationReport, error)
+	OperationReports(ctx context.Context, a domain.Actor, page int) ([]domain.OperationReport, error)
 	CreateOperationReport(ctx context.Context, a domain.Actor, reportNumber string, input domain.CreateOperationReportInput) (domain.OperationReport, error)
 	InvestigationReports(ctx context.Context, patientID string) ([]domain.InvestigationReport, error)
 	CreateInvestigationReport(ctx context.Context, a domain.Actor, reportNumber string, input domain.CreateInvestigationReportInput) (domain.InvestigationReport, error)
@@ -82,6 +83,9 @@ func (s DiagnosticReportsService) DiagnosticReportFiles(ctx context.Context, a d
 		return nil, domain.ErrValidation
 	}
 	patientOnly := a.Role == "patient"
+	if err := s.Store.AuthorizeDiagnosticOrder(ctx, a, orderID); err != nil {
+		return nil, err
+	}
 	return s.Store.DiagnosticReportFiles(ctx, orderID, patientOnly)
 }
 
@@ -95,11 +99,14 @@ func (s DiagnosticReportsService) UploadDiagnosticReportFile(ctx context.Context
 	if err := input.Validate(); err != nil {
 		return domain.DiagnosticReportFile{}, err
 	}
+	if err := s.Store.AuthorizeDiagnosticOrder(ctx, a, orderID); err != nil {
+		return domain.DiagnosticReportFile{}, err
+	}
 	return s.Store.UploadDiagnosticReportFile(ctx, a, orderID, input)
 }
 
 func (s DiagnosticReportsService) ReleaseReportFileToPortal(ctx context.Context, a domain.Actor, fileID string) error {
-	if a.Role != "admin" && a.Role != "doctor" && a.Role != "lab_technician" {
+	if a.Role != "admin" && a.Role != "doctor" {
 		return domain.ErrForbidden
 	}
 	if !domain.UUIDPattern.MatchString(fileID) {
@@ -144,6 +151,9 @@ func (s DiagnosticReportsService) PatientVaccinations(ctx context.Context, a dom
 	if !domain.UUIDPattern.MatchString(patientID) {
 		return nil, domain.ErrValidation
 	}
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, patientID, "", "vaccination_read"); err != nil {
+		return nil, err
+	}
 	return s.Store.PatientVaccinations(ctx, patientID)
 }
 
@@ -152,6 +162,9 @@ func (s DiagnosticReportsService) AdministerVaccine(ctx context.Context, a domai
 		return domain.PatientVaccination{}, domain.ErrForbidden
 	}
 	if err := input.Validate(); err != nil {
+		return domain.PatientVaccination{}, err
+	}
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, input.PatientID, "", "clinical"); err != nil {
 		return domain.PatientVaccination{}, err
 	}
 	return s.Store.AdministerVaccine(ctx, a, input)
@@ -163,7 +176,10 @@ func (s DiagnosticReportsService) BirthReports(ctx context.Context, a domain.Act
 	if page < 1 {
 		page = 1
 	}
-	return s.Store.BirthReports(ctx, page)
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" {
+		return nil, domain.ErrForbidden
+	}
+	return s.Store.BirthReports(ctx, a, page)
 }
 
 func (s DiagnosticReportsService) CreateBirthReport(ctx context.Context, a domain.Actor, input domain.CreateBirthReportInput) (domain.BirthReport, error) {
@@ -173,7 +189,15 @@ func (s DiagnosticReportsService) CreateBirthReport(ctx context.Context, a domai
 	if err := input.Validate(); err != nil {
 		return domain.BirthReport{}, err
 	}
-	reportNumber := fmt.Sprintf("BR-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+	reportNumber := "BR-" + rand.Text()
+	if input.MotherPatientID == nil && a.Role != "admin" {
+		return domain.BirthReport{}, domain.ErrValidation
+	}
+	if input.MotherPatientID != nil {
+		if err := s.Store.AuthorizeClinicalRecord(ctx, a, *input.MotherPatientID, "", "clinical"); err != nil {
+			return domain.BirthReport{}, err
+		}
+	}
 	return s.Store.CreateBirthReport(ctx, a, reportNumber, input)
 }
 
@@ -181,7 +205,10 @@ func (s DiagnosticReportsService) DeathReports(ctx context.Context, a domain.Act
 	if page < 1 {
 		page = 1
 	}
-	return s.Store.DeathReports(ctx, page)
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" {
+		return nil, domain.ErrForbidden
+	}
+	return s.Store.DeathReports(ctx, a, page)
 }
 
 func (s DiagnosticReportsService) CreateDeathReport(ctx context.Context, a domain.Actor, input domain.CreateDeathReportInput) (domain.DeathReport, error) {
@@ -191,7 +218,10 @@ func (s DiagnosticReportsService) CreateDeathReport(ctx context.Context, a domai
 	if err := input.Validate(); err != nil {
 		return domain.DeathReport{}, err
 	}
-	reportNumber := fmt.Sprintf("DR-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+	reportNumber := "DR-" + rand.Text()
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, input.PatientID, "", "clinical"); err != nil {
+		return domain.DeathReport{}, err
+	}
 	return s.Store.CreateDeathReport(ctx, a, reportNumber, input)
 }
 
@@ -199,7 +229,10 @@ func (s DiagnosticReportsService) OperationReports(ctx context.Context, a domain
 	if page < 1 {
 		page = 1
 	}
-	return s.Store.OperationReports(ctx, page)
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" {
+		return nil, domain.ErrForbidden
+	}
+	return s.Store.OperationReports(ctx, a, page)
 }
 
 func (s DiagnosticReportsService) CreateOperationReport(ctx context.Context, a domain.Actor, input domain.CreateOperationReportInput) (domain.OperationReport, error) {
@@ -209,13 +242,19 @@ func (s DiagnosticReportsService) CreateOperationReport(ctx context.Context, a d
 	if err := input.Validate(); err != nil {
 		return domain.OperationReport{}, err
 	}
-	reportNumber := fmt.Sprintf("OR-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+	reportNumber := "OR-" + rand.Text()
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, input.PatientID, input.EncounterID, "clinical"); err != nil {
+		return domain.OperationReport{}, err
+	}
 	return s.Store.CreateOperationReport(ctx, a, reportNumber, input)
 }
 
 func (s DiagnosticReportsService) InvestigationReports(ctx context.Context, a domain.Actor, patientID string) ([]domain.InvestigationReport, error) {
 	if !domain.UUIDPattern.MatchString(patientID) {
 		return nil, domain.ErrValidation
+	}
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, patientID, "", "diagnostic"); err != nil {
+		return nil, err
 	}
 	return s.Store.InvestigationReports(ctx, patientID)
 }
@@ -227,6 +266,9 @@ func (s DiagnosticReportsService) CreateInvestigationReport(ctx context.Context,
 	if err := input.Validate(); err != nil {
 		return domain.InvestigationReport{}, err
 	}
-	reportNumber := fmt.Sprintf("IR-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+	reportNumber := "IR-" + rand.Text()
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, input.PatientID, pointerValue(input.EncounterID), "diagnostic"); err != nil {
+		return domain.InvestigationReport{}, err
+	}
 	return s.Store.CreateInvestigationReport(ctx, a, reportNumber, input)
 }

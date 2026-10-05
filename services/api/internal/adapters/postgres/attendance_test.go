@@ -47,7 +47,7 @@ func testAttendance(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 		}
 	}
 
-	admin := actors[0] // role: admin
+	admin := actors[0]   // role: admin
 	patient := actors[3] // role: patient
 	doc := domain.Actor{ID: "att-doctor", Role: "doctor", Name: "att-doctor"}
 	nurse := domain.Actor{ID: "att-nurse", Role: "nurse", Name: "att-nurse"}

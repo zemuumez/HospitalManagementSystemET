@@ -557,3 +557,11 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 - [x] Re-enabled patient merge using retained identity aliases, immutable original snapshots, conservative consent and portal-owner/active-care conflict checks (migration 043).
 - [x] Updated portal ownership checks and patient history readers; added authenticated retained-identity lookup and blocked new work on retired UUIDs.
 - [x] Concurrent replay, original encounter/invoice retention, portal access and alias lookup tested against isolated PostgreSQL; full Go suite and vet pass. See [merge contract](patient-identity-merge.md).
+
+### Operational review: scoped access and report release (2026-10-05)
+
+- Verified patient and doctor isolation for staff queues, public booking requests, appointment charges, prescriptions, consultations, extended patient profiles, diagnostic report files and clinical reports.
+- Validated queue appointment/patient/doctor/date relationships and permitted queue transitions.
+- Private attachments require explicit clinician/admin release. Diagnostic attachments must belong to the order's exact patient and encounter and cannot bypass signed result release through the generic attachment endpoint. Server-derived file metadata is authoritative.
+- Added PostgreSQL regression cases for unassigned access, attribution spoofing, unreleased downloads, release replay, and a real lab upload → clinician review → patient download flow.
+- Validation: uncached `go test -count=1 ./...` against isolated PostgreSQL schema, all migrations, and `go vet ./...` passed. Broader operational review remains in progress.

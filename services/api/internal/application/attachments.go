@@ -11,6 +11,7 @@ import (
 )
 
 type AttachmentsRepository interface {
+	ReleaseAttachment(context.Context, domain.Actor, string) error
 	AuthorizeAttachment(context.Context, domain.Actor, *string, *string) error
 	SaveAttachment(ctx context.Context, a domain.Actor, token string, input domain.CreateSecureAttachmentInput) (domain.SecureAttachment, error)
 	GetAttachmentByToken(ctx context.Context, token string) (domain.SecureAttachment, error)
@@ -55,6 +56,9 @@ func (s AttachmentsService) GetAttachmentByToken(ctx context.Context, a domain.A
 	if err != nil {
 		return domain.SecureAttachment{}, err
 	}
+	if a.Role == "patient" && !att.PatientReleased {
+		return domain.SecureAttachment{}, domain.ErrForbidden
+	}
 
 	if err := s.Store.AuthorizeAttachment(ctx, a, att.PatientID, att.EncounterID); err != nil {
 		return domain.SecureAttachment{}, err
@@ -75,6 +79,9 @@ func (s AttachmentsService) ListPatientAttachments(ctx context.Context, a domain
 	}
 	visible := []domain.SecureAttachment{}
 	for _, att := range items {
+		if a.Role == "patient" && !att.PatientReleased {
+			continue
+		}
 		if err := s.Store.AuthorizeAttachment(ctx, a, att.PatientID, att.EncounterID); err == nil {
 			visible = append(visible, att)
 		} else if !errors.Is(err, domain.ErrForbidden) {
@@ -82,4 +89,14 @@ func (s AttachmentsService) ListPatientAttachments(ctx context.Context, a domain
 		}
 	}
 	return visible, nil
+}
+
+func (s AttachmentsService) Release(ctx context.Context, a domain.Actor, token string) error {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.ErrForbidden
+	}
+	if _, err := s.GetAttachmentByToken(ctx, a, token); err != nil {
+		return err
+	}
+	return s.Store.ReleaseAttachment(ctx, a, token)
 }

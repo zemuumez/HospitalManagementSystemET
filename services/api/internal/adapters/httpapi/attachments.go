@@ -13,6 +13,15 @@ import (
 
 func (s Server) attachments(w http.ResponseWriter, r *http.Request, a domain.Actor) bool {
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/v1/attachments/") && strings.HasSuffix(r.URL.Path, "/release") && r.Method == "POST":
+		token := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/attachments/"), "/release")
+		if err := s.Attachments.Release(r.Context(), a, token); err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, map[string]bool{"released": true})
+		return true
+
 	case r.URL.Path == "/v1/attachments" && r.Method == "POST":
 
 		r.Body = http.MaxBytesReader(w, r.Body, application.MaxAttachmentBytes+(1<<20))

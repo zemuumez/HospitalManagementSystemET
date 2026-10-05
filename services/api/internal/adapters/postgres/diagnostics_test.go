@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"hms.local/api/internal/adapters/httpapi"
+	"hms.local/api/internal/adapters/privatefiles"
 	"hms.local/api/internal/application"
 	"hms.local/api/internal/domain"
 	"net/http"
@@ -41,6 +42,41 @@ func testDiagnostics(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 	order, e := d.Order(ctx, doctor, input, "diagnostic-order-001")
 	if e != nil {
 		t.Fatal(e)
+	}
+
+	files, err := privatefiles.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer files.Close()
+	attachments := application.AttachmentsService{Store: store, Files: files}
+	reports := application.DiagnosticReportsService{Store: store}
+	att, err := attachments.Upload(ctx, lab, "synthetic.txt", &enc.PatientID, &enc.ID, []byte("Synthetic report"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileInput := domain.UploadDiagnosticReportFileInput{FileName: "untrusted.pdf", FileURL: "/v1/attachments/" + att.Token + "/content", FileSizeBytes: 999, MimeType: "application/pdf"}
+	if _, err = reports.UploadDiagnosticReportFile(ctx, other, order.ID, fileInput); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatal("unassigned doctor attached report", err)
+	}
+	report, err := reports.UploadDiagnosticReportFile(ctx, lab, order.ID, fileInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.FileName != att.FileName || report.FileSizeBytes != att.FileSizeBytes || report.MimeType != att.MimeType {
+		t.Fatal("trusted caller file metadata")
+	}
+	if err = reports.ReleaseReportFileToPortal(ctx, doctor, report.ID); !errors.Is(err, domain.ErrStale) {
+		t.Fatal("unreviewed file released", err)
+	}
+	if err = attachments.Release(ctx, admin, att.Token); !errors.Is(err, domain.ErrStale) {
+		t.Fatal("generic release bypassed clinical review", err)
+	}
+	if _, err = reports.DiagnosticReportFiles(ctx, other, order.ID); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatal("unassigned report list", err)
+	}
+	if rows, err := reports.DiagnosticReportFiles(ctx, patient, order.ID); err != nil || len(rows) != 0 {
+		t.Fatal("unreleased file listed", err)
 	}
 	billing := application.Billing{Store: store, Now: time.Now}
 	account, e := billing.CreateAccount(ctx, admin, "Diagnostics")
@@ -122,6 +158,28 @@ func testDiagnostics(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 	published, e := d.Results(ctx, patient, order.ID, 1)
 	if e != nil || len(published) != 1 || !published[0].Released || len(published[0].Parameters) != 1 || published[0].Parameters[0].Unit != "test-unit" {
 		t.Fatal("released report", e, published)
+	}
+
+	if err = reports.ReleaseReportFileToPortal(ctx, lab, report.ID); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatal("lab released report", err)
+	}
+	if err = reports.ReleaseReportFileToPortal(ctx, other, report.ID); !errors.Is(err, domain.ErrStale) {
+		t.Fatal("wrong doctor released report", err)
+	}
+	if err = reports.ReleaseReportFileToPortal(ctx, doctor, report.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = reports.ReleaseReportFileToPortal(ctx, doctor, report.ID); err != nil {
+		t.Fatal("release replay", err)
+	}
+	if _, reader, err := attachments.Download(ctx, patient, att.Token); err != nil {
+		t.Fatal(err)
+	} else {
+		reader.Close()
+	}
+	var releaseCount int
+	if err = db.QueryRow(ctx, `SELECT count(*) FROM attachment_release_event WHERE attachment_id=$1`, att.ID).Scan(&releaseCount); err != nil || releaseCount != 1 {
+		t.Fatal("release audit duplicated", releaseCount, err)
 	}
 	amendment := domain.DiagnosticResultInput{Version: 6, Summary: "Corrected synthetic result", Values: []domain.DiagnosticValue{{Position: 1, Value: "13.2"}}}
 	if _, e = d.Submit(ctx, lab, order.ID, amendment); !errors.Is(e, domain.ErrValidation) {
