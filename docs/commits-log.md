@@ -285,7 +285,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
     - Added dedicated CSS classes and light-mode overrides in `apps/web/src/app/globals.css`.
     - Extended Amharic translations dictionary in `apps/web/src/lib/am.json`.
 
-### 18. Commit `pending` — Odontogram Legends Creation & Edit Feature
+### 18. Commit `14da6c2` — Odontogram Legends Creation & Edit Feature
 - **Message**: `feat(odontogram): add custom legends creation, editing, and palette customization to odontogram`
 - **Branch**: `main`
 - **Scope & Features**:
