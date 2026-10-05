@@ -29,7 +29,22 @@ type Case = {
   doctorName: string;
   description: string;
 };
-type Encounter = {
+export type Encounter = {
+  patientEmail?: string;
+  doctorEmail?: string;
+  billStatus?: string;
+  totalVisits?: number;
+  intake?: {
+    height: number;
+    weight: number;
+    bloodPressure: string;
+    notes: string;
+    identificationNumber: string;
+    reference: string;
+    oldPatient: boolean;
+    standardChargeMinor: number;
+    paymentMode: string;
+  };
   id: string;
   number: number;
   kind: string;
@@ -471,7 +486,7 @@ function CreateClinical({
     </Editor>
   );
 }
-function EncounterDetails({
+export function EncounterDetails({
   encounter,
   onClose,
   onSaved,
@@ -552,6 +567,20 @@ function EncounterDetails({
           {t(encounter.status)} · {date(encounter.admittedAt)} EAT
         </p>
         <p className="whitespace-pre-wrap">{encounter.symptoms}</p>
+        {encounter.intake && (
+          <dl className="legacy-form">
+            {Object.entries(encounter.intake).map(([key, value]) => (
+              <div key={key}>
+                <dt className="label">{t(key.replace(/([A-Z])/g, " $1"))}</dt>
+                <dd>
+                  {typeof value === "boolean"
+                    ? t(value ? "Yes" : "No")
+                    : String(value || "N/A")}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
         {error && (
           <p className="error" role="alert">
             {t(error)}
