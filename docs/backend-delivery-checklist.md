@@ -134,11 +134,11 @@ Backend-first progress:
 
 ### A. Source parity and domain contracts
 
-- [x] Complete authored Laravel controllers, requests, repositories, policies, models, migrations, jobs, routes and views review for every module ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), [docs/discovery/README.md](discovery/README.md)).
+- [ ] Complete authored Laravel controllers, requests, repositories, policies, models, migrations, jobs, routes and views review for every module ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), [docs/discovery/README.md](discovery/README.md)).
 - [x] Reconcile PDF role descriptions with implemented permissions and source behavior; document contradictions ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), [docs/role-permission-matrix.md](role-permission-matrix.md)).
 - [ ] Revisit the live reference and exercise every role when it is accessible. Earlier attempts timed out; authoritative offline analysis conducted directly against original codebase and PDF specification.
-- [x] Record field types, nullability, required rules, relationships, lifecycle states, side effects, exports and error behavior per workflow ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), domain contracts).
-- [x] Define API contracts and stable error codes; publish OpenAPI and generate/check frontend types ([docs/openapi.yaml](openapi.yaml), [docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md)).
+- [ ] Record field types, nullability, required rules, relationships, lifecycle states, side effects, exports and error behavior per workflow ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), domain contracts).
+- [ ] Define API contracts and stable error codes; publish OpenAPI and generate/check frontend types ([docs/openapi.yaml](openapi.yaml), [docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md)).
 - [x] Document intentional changes for a single hospital; exclude SaaS tenant/subscription mechanics unless explicitly requested ([docs/single-hospital-architecture-decisions.md](single-hospital-architecture-decisions.md)).
 - [x] Identify inactive/commented legacy routes separately from active product features ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md)).
 
@@ -204,36 +204,36 @@ Backend-first progress:
 - [ ] Broader care-team delegation, clinical range policies/alerts and patient-visible observation release (migration 038; `encounter_care_team`, `patient_visible` on notes and vitals, `/v1/encounters/{id}/care-team`).
 - [x] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments (migration 038; `encounter_diagnosis`, `encounter_procedure`, `encounter_attachment`, `/v1/encounters/{id}/*`).
 - [x] Signed encounter medication orders with medicine references, dose, route, frequency, duration, instructions and explicit quantity; assigned-doctor signing and retained cancellation.
-- [x] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF (migration 034; `prescription`, `prescription_item`, `/v1/prescriptions`).
+- [ ] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF (migration 034; `prescription`, `prescription_item`, `/v1/prescriptions`).
 - [x] Encounter charges/payments and invoice linkage; discharge financial policy must be explicit (migration 038; `encounter_billing`, financial clearance, anti-double-billing `service_invoice_link`, `/v1/encounters/{id}/billing`).
-- [x] Admission packages/insurance/guardians and full original admission fields (migration 038; `ipd_admission_details`, `/v1/encounters/{id}/admission-details`).
+- [ ] Admission packages/insurance/guardians and full original admission fields (migration 038; `ipd_admission_details`, `/v1/encounters/{id}/admission-details`).
 - [x] Signed note/discharge addenda with linked original records, required correction reasons, scoped reads, idempotent signing and database-retained discharge text/time/status (migration 021).
-- [x] Discharge summary templates, original print/PDF parity and complete structured discharge document fields (migration 038; `discharge_summary`, `/v1/encounters/{id}/discharge-summary`).
-- [x] OPD repeat visits, follow-ups, referral handling and patient-visible summaries (migration 038; `opd_follow_up`, `patient_referral`, `/v1/patients/{id}/follow-ups`, `/v1/patients/{id}/referrals`).
-- [x] Odontogram patient/tooth/procedure history and image/print/export persistence (migration 038; `patient_odontogram_entry`, `/v1/patients/{id}/odontogram`).
+- [ ] Discharge summary templates, original print/PDF parity and complete structured discharge document fields (migration 038; `discharge_summary`, `/v1/encounters/{id}/discharge-summary`).
+- [ ] OPD repeat visits, follow-ups, referral handling and patient-visible summaries (migration 038; `opd_follow_up`, `patient_referral`, `/v1/patients/{id}/follow-ups`, `/v1/patients/{id}/referrals`).
+- [ ] Odontogram patient/tooth/procedure history and image/print/export persistence (migration 038; `patient_odontogram_entry`, `/v1/patients/{id}/odontogram`).
 
 ### F. Diagnostics and treatment records
 
 - [x] Pathology/radiology test definitions and typed parameters with retained unit/reference-range labels (migration 009).
 - [x] Diagnostic catalog revision/archive with retained parameters/tariffs, linked revision series, active-only ordering and concurrent revision protection (migration 024).
-- [x] Full category/unit master CRUD, remaining original fields and charge categories (migration 039; `diagnostic_category`, `diagnostic_unit`, `/v1/diagnostic-categories`, `/v1/diagnostic-units`).
+- [ ] Full category/unit master CRUD, remaining original fields and charge categories (migration 039; `diagnostic_category`, `diagnostic_unit`, `/v1/diagnostic-categories`, `/v1/diagnostic-units`).
 - [x] Encounter-linked orders, unique sample/accession references, collection/processing, doctor sign-off/release and retained result amendments; concurrency/privacy tests.
 - [x] Lab sample rejection/recollection with required rejection reasons, immutable collection/rejection history, globally retained sample references and no replacement after results exist (migration 026).
-- [x] Complete original report parity and reviewer specialty/team policy (migration 039; doctor/lab-technician attribution and released report tracking).
+- [ ] Complete original report parity and reviewer specialty/team policy (migration 039; doctor/lab-technician attribution and released report tracking).
 - [x] Authorized report files and patient portal report release (migration 039; `diagnostic_report_file`, `/v1/diagnostic-orders/{id}/files`, `/v1/diagnostic-report-files/{id}/release`).
 - [x] Diagnosis templates/tests/results and linkage to cases/encounters (migration 039; `diagnosis_template`, `/v1/diagnosis-templates`).
-- [x] Vaccination catalog, administered doses, lot/expiry records and schedules (migration 039; `vaccine_catalog`, `patient_vaccination`, `/v1/vaccines`, `/v1/patients/{id}/vaccinations`).
-- [x] Birth/death/operation/investigation reports with authorized edits and printable outputs (migration 039; `birth_report`, `death_report`, `operation_report`, `investigation_report`, `/v1/vital-reports/*`, `/v1/patients/{id}/investigations`).
+- [ ] Vaccination catalog, administered doses, lot/expiry records and schedules (migration 039; `vaccine_catalog`, `patient_vaccination`, `/v1/vaccines`, `/v1/patients/{id}/vaccinations`).
+- [ ] Birth/death/operation/investigation reports with authorized edits and printable outputs (migration 039; `birth_report`, `death_report`, `operation_report`, `investigation_report`, `/v1/vital-reports/*`, `/v1/patients/{id}/investigations`).
 
 ### G. Pharmacy, blood bank and inventory
 
 - [x] Medicines, categories, brands, units, suppliers, purchases and batches/expiry (migrations 006, 034; [contract](backend-pharmacy-blood-bank-contract.md)).
 - [x] Pharmacy append-only stock movements; transactional no-negative-stock checks, commit-time balance reconciliation and concurrent dispensing tests (migration 006). General inventory is tracked separately below.
 - [x] Signed medication-order-to-dispensation linkage, partial dispensing limits across batches, retained cancellation and bounded quarantined returns.
-- [x] Full prescription document linkage, return assessment, recalls and replacement/refill workflows (migration 034).
+- [ ] Full prescription document linkage, return assessment, recalls and replacement/refill workflows (migration 034).
 - [ ] Medicine bills, payments, discounts and reversals linked to the financial ledger.
-- [x] Blood groups, donors, donations, components, screening, inventory and issued units (migration 034).
-- [x] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels (migration 034).
+- [ ] Blood groups, donors, donations, components, screening, inventory and issued units (migration 034).
+- [ ] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels (migration 034).
 - [x] General inventory category/item APIs, exact-unit receipts, issues/returns/write-offs, low-stock query and ledger reconciliation (migration 010; concurrency/authorization tests).
 - [ ] Scheduled low-stock notifications, stock-count approval, department/date/attachment parity and inventory finance integration.
 
@@ -587,3 +587,12 @@ Verified this pass: retained patient identity merging (043), scoped record acces
 Partial features reopened above: public booking has request intake, bounded per-process abuse limits and staff review, but no contact verification; care-team delegation is implemented but configurable clinical alerts and observation release are not; financial income/expenses and payroll payout work but account transfers, independent payroll approval and print parity are not complete; live consultations store visit records but real meeting-provider provisioning is not implemented; smart-card metadata/verification exists but complete template/download parity remains.
 
 The restore drill proves the tool on synthetic databases, not production recovery or attachment recovery. Malware tests use a protocol fixture, not an installed virus engine. Public quotas are per API process and trusted reverse-proxy/shared quotas remain deployment work. All real external credentials remain blank.
+
+
+### Integrated checkpoint
+
+- [x] Reviewed operational branch merged and pushed as `d618b0e`.
+- [x] Hosted CI passed: https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37254122802.
+- [x] Encrypted development backup taken before applying remaining migrations 029–040 and 043–045.
+- [x] All migrations through 045 applied locally; rebuilt API readiness 200; post-migration reconciliation PASS.
+- [ ] Complete the remaining Section 3 items before treating the entire backend as finished. Reopened full-parity items have partial APIs, not proof of print/export, versioning, clinical unit traceability, or every original workflow.
