@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -17,10 +17,41 @@ import {
   Check,
   Eye,
   AlertCircle,
+  Loader2,
+  RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
 import { useLanguage } from "./language";
+import { api, type Patient } from "@/lib/api";
 
 export type BedTab = "bed-status" | "bed-assigns" | "beds" | "bed-types";
+
+export interface ApiBed {
+  id: string;
+  name: string;
+  type: string;
+  typeId?: string;
+  chargeMinor: number;
+  available: boolean;
+  state?: string;
+  version: number;
+}
+
+export interface ApiBedType {
+  id: string;
+  name: string;
+  description: string;
+  active: boolean;
+  version: number;
+}
+
+export interface ApiBedOccupancyReport {
+  totalBeds: number;
+  occupiedBeds: number;
+  availableBeds: number;
+  occupancyRate: number;
+  activeAdmissions: number;
+}
 
 interface BedStatusItem {
   id: string;
@@ -912,6 +943,101 @@ export function BedManagementWorkspace({ id }: { id: string }) {
   const [beds, setBeds] = useState<BedRow[]>(initialBeds);
   const [bedTypes, setBedTypes] = useState<BedTypeRow[]>(initialBedTypes);
 
+  // Persistent API states (Section 4 Integration)
+  const [apiConnected, setApiConnected] = useState(false);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [occupancyReport, setOccupancyReport] =
+    useState<ApiBedOccupancyReport | null>(null);
+  const [remotePatients, setRemotePatients] = useState<Patient[]>([]);
+  const [remoteEncounters, setRemoteEncounters] = useState<any[]>([]);
+  const [apiSuccessBanner, setApiSuccessBanner] = useState("");
+  const [apiErrorBanner, setApiErrorBanner] = useState("");
+
+  const loadBedManagementData = useCallback(async () => {
+    setIsLoadingApi(true);
+    setApiErrorBanner("");
+    try {
+      // 1. Fetch live beds
+      const bedsRes = await api<{ beds: ApiBed[] }>("beds?page=1");
+      if (
+        bedsRes?.beds &&
+        Array.isArray(bedsRes.beds) &&
+        bedsRes.beds.length > 0
+      ) {
+        const loadedBeds: BedRow[] = bedsRes.beds.map((b) => ({
+          id: b.id,
+          bedId: b.id.slice(0, 8).toUpperCase(),
+          bedName: b.name,
+          bedType: b.type,
+          charge: b.chargeMinor / 100,
+          available: b.available,
+          description: `Version ${b.version} · State: ${b.state || "active"}`,
+        }));
+        setBeds(loadedBeds);
+
+        // Update ward cards with live bed availability
+        setWards((prevWards) =>
+          prevWards.map((w) => ({
+            ...w,
+            beds: w.beds.map((wb) => {
+              const matched = bedsRes.beds.find(
+                (b) => b.name.toLowerCase() === wb.name.toLowerCase(),
+              );
+              return matched ? { ...wb, isAvailable: matched.available } : wb;
+            }),
+          })),
+        );
+      }
+
+      // 2. Fetch live bed types
+      const typesRes = await api<{ bedTypes: ApiBedType[] }>("bed-types?page=1");
+      if (
+        typesRes?.bedTypes &&
+        Array.isArray(typesRes.bedTypes) &&
+        typesRes.bedTypes.length > 0
+      ) {
+        const loadedTypes: BedTypeRow[] = typesRes.bedTypes.map((bt) => ({
+          id: bt.id,
+          title: bt.name,
+          description: bt.description,
+          bedsCount: 0,
+        }));
+        setBedTypes(loadedTypes);
+      }
+
+      // 3. Fetch occupancy report
+      try {
+        const rep = await api<ApiBedOccupancyReport>("bed-occupancy/report");
+        if (rep) setOccupancyReport(rep);
+      } catch {}
+
+      // 4. Fetch patients for assignment
+      try {
+        const patRes = await api<{ patients: Patient[] }>("patients?page=1");
+        if (patRes?.patients) setRemotePatients(patRes.patients);
+      } catch {}
+
+      // 5. Fetch encounters for assignment
+      try {
+        const encRes = await api<{ encounters: any[] }>(
+          "encounters?kind=ipd&page=1",
+        );
+        if (encRes?.encounters) setRemoteEncounters(encRes.encounters);
+      } catch {}
+
+      setApiConnected(true);
+    } catch {
+      setApiConnected(false);
+    } finally {
+      setIsLoadingApi(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBedManagementData();
+  }, [loadBedManagementData]);
+
   // UI & Search states
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
@@ -980,9 +1106,49 @@ export function BedManagementWorkspace({ id }: { id: string }) {
   }
 
   // Save Bed Type
-  function handleSaveBedType(e: React.FormEvent) {
+  async function handleSaveBedType(e: React.FormEvent) {
     e.preventDefault();
     if (!formBedTypeTitle.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+
+    let btId = editingItem ? editingItem.id : `bt-${Date.now()}`;
+    try {
+      if (editingItem) {
+        await api<ApiBedType>(`bed-types/${editingItem.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: formBedTypeTitle.trim(),
+            description: formBedTypeDescription.trim(),
+            active: true,
+            version: editingItem.version || 1,
+          }),
+        });
+        setApiSuccessBanner(
+          t("Bed Type updated and persisted successfully."),
+        );
+      } else {
+        const created = await api<ApiBedType>("bed-types", {
+          method: "POST",
+          body: JSON.stringify({
+            name: formBedTypeTitle.trim(),
+            description: formBedTypeDescription.trim(),
+            active: true,
+            version: 1,
+          }),
+        });
+        if (created?.id) btId = created.id;
+        setApiSuccessBanner(
+          t("Bed Type created and registered in Go database successfully."),
+        );
+      }
+    } catch (err: any) {
+      setApiErrorBanner(
+        err?.message || t("Could not sync with backend. Saved locally."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
 
     if (editingItem) {
       setBedTypes((prev) =>
@@ -998,7 +1164,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
       );
     } else {
       const newBt: BedTypeRow = {
-        id: `bt-${Date.now()}`,
+        id: btId,
         title: formBedTypeTitle.trim(),
         description: formBedTypeDescription.trim(),
       };
@@ -1027,9 +1193,38 @@ export function BedManagementWorkspace({ id }: { id: string }) {
   }
 
   // Save Bed
-  function handleSaveBed(e: React.FormEvent) {
+  async function handleSaveBed(e: React.FormEvent) {
     e.preventDefault();
     if (!formBedName.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+
+    const chargeNum = parseFloat(formBedCharge) || 0;
+    const chargeMinor = Math.round(chargeNum * 100);
+    let createdId = `b-${Date.now()}`;
+
+    try {
+      const created = await api<ApiBed>("beds", {
+        method: "POST",
+        body: JSON.stringify({
+          name: formBedName.trim(),
+          type: formBedTypeId,
+          chargeMinor,
+        }),
+      });
+      if (created?.id) {
+        createdId = created.id;
+        setApiSuccessBanner(
+          t("Bed created and registered in Go database successfully."),
+        );
+      }
+    } catch (err: any) {
+      setApiErrorBanner(
+        err?.message || t("Could not save to backend. Preserved locally."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
 
     if (editingItem) {
       setBeds((prev) =>
@@ -1039,7 +1234,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                 ...b,
                 bedName: formBedName.trim(),
                 bedType: formBedTypeId,
-                charge: parseFloat(formBedCharge) || 0,
+                charge: chargeNum,
                 description: formBedDescription.trim(),
               }
             : b,
@@ -1047,11 +1242,11 @@ export function BedManagementWorkspace({ id }: { id: string }) {
       );
     } else {
       const newBed: BedRow = {
-        id: `b-${Date.now()}`,
+        id: createdId,
         bedId: `BED${Math.floor(1000 + Math.random() * 9000)}`,
         bedName: formBedName.trim(),
         bedType: formBedTypeId,
-        charge: parseFloat(formBedCharge) || 0,
+        charge: chargeNum,
         available: true,
         description: formBedDescription.trim(),
       };
@@ -1096,9 +1291,50 @@ export function BedManagementWorkspace({ id }: { id: string }) {
   }
 
   // Save Bed Assign
-  function handleSaveBedAssign(e: React.FormEvent) {
+  async function handleSaveBedAssign(e: React.FormEvent) {
     e.preventDefault();
     if (!formAssignPatient.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+
+    const matchedBed = beds.find((b) => b.bedName === formAssignBed);
+    const matchedPatient = remotePatients.find(
+      (p) =>
+        `${p.givenName} ${p.familyName}`.toLowerCase() ===
+        formAssignPatient.toLowerCase(),
+    );
+    const matchedEncounter = remoteEncounters.find(
+      (enc) =>
+        enc.patientName?.toLowerCase() === formAssignPatient.toLowerCase() ||
+        enc.bedName === formAssignBed,
+    );
+
+    if (matchedBed && matchedPatient && matchedEncounter) {
+      try {
+        await api("bed-assignments", {
+          method: "POST",
+          body: JSON.stringify({
+            version: 1,
+            bedId: matchedBed.id,
+            encounterId: matchedEncounter.id,
+            patientId: matchedPatient.id,
+            notes: formAssignDescription.trim(),
+          }),
+        });
+        setApiSuccessBanner(
+          t("Bed assignment stored in persistent clinical records."),
+        );
+      } catch (err: any) {
+        setApiErrorBanner(
+          err?.message ||
+            t("Saved locally. Could not link to remote encounter."),
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      setIsSubmitting(false);
+    }
 
     if (editingItem) {
       setBedAssigns((prev) =>
@@ -1259,6 +1495,112 @@ export function BedManagementWorkspace({ id }: { id: string }) {
 
   return (
     <div className="bed-workspace-container" data-ready="true">
+      {/* Persistent Connection Status & Live Occupancy Report (Section 4 Integration) */}
+      <div className="mb-3 d-flex flex-column gap-2" style={{ padding: "0 4px" }}>
+        <div
+          className="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-2 rounded border"
+          style={{
+            backgroundColor: apiConnected
+              ? "rgba(16, 185, 129, 0.08)"
+              : "rgba(245, 158, 11, 0.08)",
+            borderColor: apiConnected ? "#10b981" : "#f59e0b",
+          }}
+        >
+          <div className="d-flex align-items-center flex-wrap gap-2">
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                backgroundColor: apiConnected ? "#10b981" : "#f59e0b",
+                display: "inline-block",
+              }}
+            />
+            <span className="fs-7 fw-semibold">
+              {apiConnected
+                ? t(
+                    "Connected to Go/PostgreSQL Bed Service (/v1/beds, /v1/bed-types, /v1/bed-occupancy)",
+                  )
+                : t("Local preview mode · Syncing locally")}
+            </span>
+            {occupancyReport && (
+              <span
+                className="badge-available-stock fs-8 py-0 px-2"
+                style={{
+                  backgroundColor: "#3b82f622",
+                  color: "#3b82f6",
+                  borderColor: "#3b82f6",
+                }}
+              >
+                {t("Total")}: {occupancyReport.totalBeds} | {t("Occupied")}:{" "}
+                {occupancyReport.occupiedBeds} | {t("Available")}:{" "}
+                {occupancyReport.availableBeds} (
+                {occupancyReport.occupancyRate.toFixed(1)}%)
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="btn-icon-link fs-7 d-flex align-items-center gap-1"
+            onClick={loadBedManagementData}
+            disabled={isLoadingApi}
+            title={t("Refresh bed records from Go API")}
+          >
+            <RefreshCw
+              size={13}
+              className={isLoadingApi ? "animate-spin" : ""}
+            />
+            <span>{isLoadingApi ? t("Syncing...") : t("Sync Backend")}</span>
+          </button>
+        </div>
+
+        {apiSuccessBanner && (
+          <div
+            className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded"
+            style={{
+              borderColor: "#10b981",
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              color: "#10b981",
+            }}
+          >
+            <div className="d-flex align-items-center gap-2">
+              <CheckCircle2 size={16} />
+              <span className="fs-7">{apiSuccessBanner}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setApiSuccessBanner("")}
+              className="btn-icon-link"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {apiErrorBanner && (
+          <div
+            className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded"
+            style={{
+              borderColor: "#ef4444",
+              backgroundColor: "rgba(239, 68, 68, 0.1)",
+              color: "#ef4444",
+            }}
+          >
+            <div className="d-flex align-items-center gap-2">
+              <AlertCircle size={16} />
+              <span className="fs-7">{apiErrorBanner}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setApiErrorBanner("")}
+              className="btn-icon-link"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Tab: Bed Status (Screenshots 1-6) */}
       {activeTab === "bed-status" && (
         <div className="bed-status-view">
@@ -2166,12 +2508,24 @@ export function BedManagementWorkspace({ id }: { id: string }) {
               </div>
 
               <div className="modal-footer-custom">
-                <button type="submit" className="btn-modal-save">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-modal-save"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn-modal-cancel"
+                  disabled={isSubmitting}
                   onClick={() => setBedTypeModalOpen(false)}
                 >
                   {t("Cancel")}
@@ -2266,12 +2620,24 @@ export function BedManagementWorkspace({ id }: { id: string }) {
               </div>
 
               <div className="modal-footer-custom">
-                <button type="submit" className="btn-modal-save">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-modal-save"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn-modal-cancel"
+                  disabled={isSubmitting}
                   onClick={() => setBedModalOpen(false)}
                 >
                   {t("Cancel")}
@@ -2325,14 +2691,33 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                   <label className="form-label-custom">
                     {t("Patient")}: <span className="text-danger">*</span>
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder={t("Patient Name")}
-                    className="form-input-custom"
-                    value={formAssignPatient}
-                    onChange={(e) => setFormAssignPatient(e.target.value)}
-                  />
+                  {remotePatients.length > 0 ? (
+                    <select
+                      required
+                      className="form-select-custom"
+                      value={formAssignPatient}
+                      onChange={(e) => setFormAssignPatient(e.target.value)}
+                    >
+                      <option value="">{t("Select Patient")}</option>
+                      {remotePatients.map((p) => (
+                        <option
+                          key={p.id}
+                          value={`${p.givenName} ${p.familyName}`.trim()}
+                        >
+                          {p.givenName} {p.familyName} ({p.mrn})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      required
+                      placeholder={t("Patient Name")}
+                      className="form-input-custom"
+                      value={formAssignPatient}
+                      onChange={(e) => setFormAssignPatient(e.target.value)}
+                    />
+                  )}
                 </div>
 
                 <div className="form-group-custom">
@@ -2411,12 +2796,24 @@ export function BedManagementWorkspace({ id }: { id: string }) {
               </div>
 
               <div className="modal-footer-custom">
-                <button type="submit" className="btn-modal-save">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-modal-save"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn-modal-cancel"
+                  disabled={isSubmitting}
                   onClick={() => setBedAssignModalOpen(false)}
                 >
                   {t("Cancel")}

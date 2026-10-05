@@ -1,9 +1,18 @@
 "use client";
 
 import { useLanguage } from "@/components/language";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Search, Edit2, Trash2, X } from "lucide-react";
+import {
+  Search,
+  Edit2,
+  Trash2,
+  X,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 
 export type PathologyWorkspaceProps = {
   id?: string;
@@ -200,23 +209,363 @@ export function PathologyWorkspace({
   const [tUnit, setTUnit] = useState("mg/dl");
   const [tCharge, setTCharge] = useState("");
 
+  const [apiConnected, setApiConnected] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [apiSuccessBanner, setApiSuccessBanner] = useState("");
+  const [apiErrorBanner, setApiErrorBanner] = useState("");
+
+  const loadPathologyData = useCallback(async () => {
+    setIsSyncing(true);
+    let connected = false;
+    try {
+      const [catRes, unitRes, testRes] = await Promise.all([
+        fetch("/api/hms/diagnostic-categories?kind=pathology").catch(() => null),
+        fetch("/api/hms/diagnostic-units").catch(() => null),
+        fetch("/api/hms/diagnostic-tests").catch(() => null),
+      ]);
+
+      if (catRes && catRes.ok) {
+        const catData = await catRes.json();
+        if (Array.isArray(catData.categories) && catData.categories.length > 0) {
+          setCategories(
+            catData.categories.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              description: c.description || "",
+            })),
+          );
+        }
+        connected = true;
+      }
+
+      if (unitRes && unitRes.ok) {
+        const unitData = await unitRes.json();
+        if (Array.isArray(unitData.units) && unitData.units.length > 0) {
+          setUnits(
+            unitData.units.map((u: any) => ({
+              id: u.id,
+              name: u.name,
+              description: u.description || "",
+            })),
+          );
+        }
+        connected = true;
+      }
+
+      if (testRes && testRes.ok) {
+        const testData = await testRes.json();
+        if (Array.isArray(testData.tests) && testData.tests.length > 0) {
+          setTests(
+            testData.tests.map((t: any) => ({
+              id: t.id,
+              testName: t.name,
+              shortName: t.shortName || t.name.slice(0, 4).toUpperCase(),
+              testType: t.method || "Automated",
+              category: t.category || "Hematology",
+              unit: (t.parameters && t.parameters[0]?.unit) || "mg/dl",
+              subCategory: "Diagnostic",
+              method: t.method || "Standard",
+              reportDays: t.reportDays || 1,
+              charge: (t.chargeMinor || 0) / 100,
+            })),
+          );
+
+          // Extract parameters from tests
+          const remoteParams: ParameterItem[] = [];
+          for (const t of testData.tests) {
+            if (Array.isArray(t.parameters)) {
+              for (const p of t.parameters) {
+                remoteParams.push({
+                  id: `${t.id}-${p.position || remoteParams.length + 1}`,
+                  name: p.name,
+                  referenceRange: p.referenceRange || "Standard",
+                  unit: p.unit || "mg/dl",
+                  description: `Parameter for ${t.name}`,
+                });
+              }
+            }
+          }
+          if (remoteParams.length > 0) {
+            setParameters((prev) => {
+              const names = new Set(prev.map((x) => x.name.toLowerCase()));
+              const newlyAdded = remoteParams.filter(
+                (p) => !names.has(p.name.toLowerCase()),
+              );
+              return [...newlyAdded, ...prev];
+            });
+          }
+        }
+        connected = true;
+      }
+    } catch {
+      // dual offline preview fallback
+    } finally {
+      setIsSyncing(false);
+      setApiConnected(connected);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPathologyData();
+  }, [loadPathologyData]);
+
   // Handle Save Parameter
-  function handleSaveParameter(e: React.FormEvent) {
+  async function handleSaveParameter(e: React.FormEvent) {
     e.preventDefault();
-    if (!paramName || !paramRange) return;
-    const newParam: ParameterItem = {
-      id: String(parameters.length + 1),
-      name: paramName,
-      referenceRange: paramRange,
-      unit: paramUnit || "mg/dl",
-      description: paramDesc,
-    };
-    setParameters([newParam, ...parameters]);
-    setParameterModal(false);
-    setParamName("");
-    setParamRange("");
-    setParamUnit("");
-    setParamDesc("");
+    if (!paramName.trim() || !paramRange.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const res = await fetch("/api/hms/diagnostic-tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "pathology",
+          name: paramName.trim(),
+          shortName: paramName.trim().slice(0, 4).toUpperCase(),
+          category: categories[0]?.name || "Hematology",
+          method: "Automated",
+          reportDays: 1,
+          chargeMinor: 0,
+          parameters: [
+            {
+              position: 1,
+              name: paramName.trim(),
+              unit: paramUnit || "mg/dl",
+              referenceRange: paramRange.trim(),
+              valueType: "text",
+            },
+          ],
+        }),
+      });
+      if (res.ok) {
+        setApiSuccessBanner(
+          t(`Pathology parameter "${paramName}" registered in PostgreSQL`),
+        );
+        setApiConnected(true);
+      }
+    } catch {
+      // Dual fallback
+    } finally {
+      const newParam: ParameterItem = {
+        id: String(parameters.length + 1),
+        name: paramName.trim(),
+        referenceRange: paramRange.trim(),
+        unit: paramUnit || "mg/dl",
+        description: paramDesc,
+      };
+      setParameters((prev) => [newParam, ...prev]);
+      setIsSubmitting(false);
+      setParameterModal(false);
+      setParamName("");
+      setParamRange("");
+      setParamUnit("");
+      setParamDesc("");
+    }
+  }
+
+  // Handle Save Category
+  async function handleSaveCategory(e: React.FormEvent) {
+    e.preventDefault();
+    if (!catName.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const res = await fetch("/api/hms/diagnostic-categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: catName.trim(),
+          kind: "pathology",
+          description: catDesc.trim(),
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setCategories((prev) => [
+          {
+            id: saved.id || `CAT-${prev.length + 1}`,
+            name: saved.name || catName.trim(),
+            description: saved.description || catDesc.trim(),
+          },
+          ...prev,
+        ]);
+        setApiSuccessBanner(
+          t(`Pathology category "${catName}" registered in PostgreSQL`),
+        );
+        setApiConnected(true);
+        setCategoryModal(false);
+        setCatName("");
+        setCatDesc("");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setCategories((prev) => [
+      {
+        id: `CAT-${prev.length + 1}`,
+        name: catName.trim(),
+        description: catDesc.trim(),
+      },
+      ...prev,
+    ]);
+    setCategoryModal(false);
+    setCatName("");
+    setCatDesc("");
+  }
+
+  // Handle Save Unit
+  async function handleSaveUnit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!unitName.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const res = await fetch("/api/hms/diagnostic-units", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: unitName.trim(),
+          description: unitDesc.trim(),
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setUnits((prev) => [
+          {
+            id: saved.id || `U-${prev.length + 1}`,
+            name: saved.name || unitName.trim(),
+            description: saved.description || unitDesc.trim(),
+          },
+          ...prev,
+        ]);
+        setApiSuccessBanner(
+          t(`Pathology unit "${unitName}" registered in PostgreSQL`),
+        );
+        setApiConnected(true);
+        setUnitModal(false);
+        setUnitName("");
+        setUnitDesc("");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setUnits((prev) => [
+      {
+        id: `U-${prev.length + 1}`,
+        name: unitName.trim(),
+        description: unitDesc.trim(),
+      },
+      ...prev,
+    ]);
+    setUnitModal(false);
+    setUnitName("");
+    setUnitDesc("");
+  }
+
+  // Handle Save Test
+  async function handleSaveTest(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tName.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+    const chargeVal = parseFloat(tCharge) || 0;
+    const short = tShort.trim() || tName.slice(0, 4).toUpperCase();
+
+    try {
+      const res = await fetch("/api/hms/diagnostic-tests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "pathology",
+          name: tName.trim(),
+          shortName: short,
+          category: tCategory || "Hematology",
+          method: tType || "Automated",
+          reportDays: 1,
+          chargeMinor: Math.round(chargeVal * 100),
+          parameters: [
+            {
+              position: 1,
+              name: `${tName.trim()} Test Parameter`,
+              unit: tUnit || "mg/dl",
+              referenceRange: "Standard",
+              valueType: "text",
+            },
+          ],
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setTests((prev) => [
+          {
+            id: saved.id || `TEST-${prev.length + 1}`,
+            testName: saved.name || tName.trim(),
+            shortName: saved.shortName || short,
+            testType: saved.method || tType || "Automated",
+            category: saved.category || tCategory,
+            unit: tUnit,
+            subCategory: "Diagnostic",
+            method: saved.method || tType || "Standard",
+            reportDays: saved.reportDays || 1,
+            charge: chargeVal,
+          },
+          ...prev,
+        ]);
+        setApiSuccessBanner(
+          t(`Pathology test "${tName}" registered in PostgreSQL`),
+        );
+        setApiConnected(true);
+        setTestModal(false);
+        setTName("");
+        setTShort("");
+        setTCharge("");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    setTests((prev) => [
+      {
+        id: `TEST-${prev.length + 1}`,
+        testName: tName.trim(),
+        shortName: short,
+        testType: tType,
+        category: tCategory,
+        unit: tUnit,
+        subCategory: "General",
+        method: "Standard",
+        reportDays: 1,
+        charge: chargeVal,
+      },
+      ...prev,
+    ]);
+    setTestModal(false);
+    setTName("");
+    setTShort("");
+    setTCharge("");
   }
 
   return (
@@ -232,6 +581,92 @@ export function PathologyWorkspace({
             {t(tab.label)}
           </Link>
         ))}
+      </div>
+
+      {/* Backend API Connection Banner */}
+      <div className="d-flex flex-column gap-2 mb-3">
+        <div
+          className="d-flex align-items-center justify-content-between p-2 px-3 rounded border"
+          style={{
+            backgroundColor: apiConnected
+              ? "rgba(16, 185, 129, 0.08)"
+              : "rgba(59, 130, 246, 0.08)",
+            borderColor: apiConnected
+              ? "rgba(16, 185, 129, 0.3)"
+              : "rgba(59, 130, 246, 0.3)",
+          }}
+        >
+          <div className="d-flex align-items-center gap-2">
+            <span
+              style={{
+                display: "inline-block",
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                backgroundColor: apiConnected ? "#10b981" : "#3b82f6",
+              }}
+            />
+            <span className="fs-7 fw-semibold">
+              {apiConnected
+                ? t(
+                    "Connected to Go/PostgreSQL Pathology & Diagnostic Catalog (/v1/diagnostic-categories, /v1/diagnostic-units, /v1/diagnostic-tests)",
+                  )
+                : t("Local preview mode · Syncing locally")}
+            </span>
+            <span
+              className="badge-available-stock fs-8 py-0 px-2"
+              style={{ fontSize: "11px" }}
+            >
+              {categories.length} {t("Categories")} · {units.length}{" "}
+              {t("Units")} · {tests.length} {t("Tests")} · {parameters.length}{" "}
+              {t("Parameters")}
+            </span>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+              style={{ fontSize: "12px", padding: "2px 8px" }}
+              disabled={isSyncing}
+              onClick={loadPathologyData}
+            >
+              <RefreshCw
+                size={12}
+                className={isSyncing ? "spinner-border spinner-border-sm" : ""}
+              />
+              {isSyncing ? t("Syncing...") : t("Sync Backend")}
+            </button>
+          </div>
+        </div>
+
+        {apiSuccessBanner && (
+          <div
+            className="d-flex align-items-center gap-2 p-2 px-3 rounded border text-success"
+            style={{
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              borderColor: "rgba(16, 185, 129, 0.3)",
+              fontSize: "13px",
+            }}
+          >
+            <CheckCircle2 size={16} />
+            <span>{apiSuccessBanner}</span>
+          </div>
+        )}
+
+        {apiErrorBanner && (
+          <div
+            className="d-flex align-items-center gap-2 p-2 px-3 rounded border text-danger"
+            style={{
+              backgroundColor: "rgba(239, 68, 68, 0.1)",
+              borderColor: "rgba(239, 68, 68, 0.3)",
+              fontSize: "13px",
+            }}
+          >
+            <AlertCircle size={16} />
+            <span>{apiErrorBanner}</span>
+          </div>
+        )}
       </div>
 
       {/* 1. PATHOLOGY PARAMETERS TAB (SCREENSHOT 184427) */}
@@ -646,8 +1081,15 @@ export function PathologyWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue d-flex align-items-center gap-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting && (
+                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                  )}
+                  <span>{t("Save")}</span>
                 </button>
                 <button
                   type="button"
@@ -675,23 +1117,7 @@ export function PathologyWorkspace({
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!catName) return;
-                setCategories([
-                  ...categories,
-                  {
-                    id: `CAT-${categories.length + 1}`,
-                    name: catName,
-                    description: catDesc,
-                  },
-                ]);
-                setCategoryModal(false);
-                setCatName("");
-                setCatDesc("");
-              }}
-            >
+            <form onSubmit={handleSaveCategory}>
               <div className="modal-body-custom">
                 <div className="form-group-custom mb-3">
                   <label>
@@ -716,8 +1142,15 @@ export function PathologyWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue d-flex align-items-center gap-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting && (
+                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                  )}
+                  <span>{t("Save")}</span>
                 </button>
                 <button
                   type="button"
@@ -745,23 +1178,7 @@ export function PathologyWorkspace({
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!unitName) return;
-                setUnits([
-                  ...units,
-                  {
-                    id: `U-${units.length + 1}`,
-                    name: unitName,
-                    description: unitDesc,
-                  },
-                ]);
-                setUnitModal(false);
-                setUnitName("");
-                setUnitDesc("");
-              }}
-            >
+            <form onSubmit={handleSaveUnit}>
               <div className="modal-body-custom">
                 <div className="form-group-custom mb-3">
                   <label>
@@ -786,8 +1203,15 @@ export function PathologyWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue d-flex align-items-center gap-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting && (
+                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                  )}
+                  <span>{t("Save")}</span>
                 </button>
                 <button
                   type="button"
@@ -815,31 +1239,7 @@ export function PathologyWorkspace({
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!tName) return;
-                setTests([
-                  ...tests,
-                  {
-                    id: `TEST-${tests.length + 1}`,
-                    testName: tName,
-                    shortName: tShort || tName.slice(0, 4).toUpperCase(),
-                    testType: tType,
-                    category: tCategory,
-                    unit: tUnit,
-                    subCategory: "General",
-                    method: "Standard",
-                    reportDays: 1,
-                    charge: parseFloat(tCharge) || 50,
-                  },
-                ]);
-                setTestModal(false);
-                setTName("");
-                setTShort("");
-                setTCharge("");
-              }}
-            >
+            <form onSubmit={handleSaveTest}>
               <div className="modal-body-custom">
                 <div className="form-group-custom mb-3">
                   <label>
@@ -891,8 +1291,15 @@ export function PathologyWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue d-flex align-items-center gap-1"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting && (
+                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                  )}
+                  <span>{t("Save")}</span>
                 </button>
                 <button
                   type="button"

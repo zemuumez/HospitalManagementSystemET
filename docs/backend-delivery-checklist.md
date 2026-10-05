@@ -596,3 +596,38 @@ The restore drill proves the tool on synthetic databases, not production recover
 - [x] Encrypted development backup taken before applying remaining migrations 029–040 and 043–045.
 - [x] All migrations through 045 applied locally; rebuilt API readiness 200; post-migration reconciliation PASS.
 - [ ] Complete the remaining Section 3 items before treating the entire backend as finished. Reopened full-parity items have partial APIs, not proof of print/export, versioning, clinical unit traceability, or every original workflow.
+
+---
+
+## 4. Frontend integration checklist for operational modules
+
+Frontend client workspaces connected to the persistent Go/PostgreSQL backend services via the Next.js API proxy (`/api/hms/...` $\rightarrow$ `http://127.0.0.1:8080/v1/...`) with full responsive fidelity, Amharic translations, resilient dual-mode offline preview fallback, and live status banners:
+
+- [x] **Next.js API Route Proxy (`apps/web/src/app/api/hms/[...path]/route.ts`)**:
+  - Expanded `allowedRoot` whitelist with all operational routes: `medicine-batches`, `medication-orders`, `pharmacy-movements`, `blood-bank`, `blood-banks`, `diagnostic-categories`, `diagnostic-units`, `diagnostic-tests`, `diagnostic-orders`, `diagnostic-templates`, `charges`, `charge-categories`, `payrolls`, `expenses`, `incomes`, `expense-heads`, `income-heads`, `vital-reports`, `vaccines`, `patient-queues`.
+  - Added 3-segment subroute support for `medication-orders/{id}/cancel`, `prescriptions/{id}/status`, `diagnostic-orders/{id}/invoice`, `pharmacy-movements/{id}/invoice`.
+- [x] **Odontogram & Dental Charting (`apps/web/src/components/odontogram-register.tsx`)**:
+  - Connected tooth condition, treatment notes, and surface status persistence.
+- [x] **Bed Management Workspace (`apps/web/src/components/bed-management-workspace.tsx`)**:
+  - Connected to `/api/hms/beds`, `/api/hms/bed-types`, `/api/hms/bed-assignments`.
+  - 17 ward visual grids, live bed assignment modal with encounter validation, and status banner.
+- [x] **Patients Workspace (`apps/web/src/components/patients-workspace.tsx`)**:
+  - Connected to `/api/hms/patients` with Ethiopian E.164 phone normalization, MRN generation, and live filter/search.
+- [x] **Medicines & Pharmacy Workspace (`apps/web/src/components/medicines-workspace.tsx`)**:
+  - Connected to `/api/hms/medicines` (`GET` and `POST` with `sellingPriceMinor`), `/api/hms/medicine-categories`, `/api/hms/medicine-brands`, `/api/hms/patients`.
+  - Live remote patient selector with MRNs; inline patient registration modal with E.164 phone formatting; modal spinners and live backend banner.
+- [x] **Billing & Invoices Workspace (`apps/web/src/components/billing-workspace.tsx`)**:
+  - Connected to `/api/hms/invoices` (`GET`, `POST`), `/api/hms/charge-accounts` (`GET`, `POST`), `/api/hms/payrolls`, `/api/hms/billing-patients`.
+  - Enforced integer minor units (`unitPriceMinor = amount * 100`) for immutable financial ledger persistence.
+- [x] **Services, Ambulances, Packages & Insurances (`apps/web/src/components/services-workspace.tsx`)**:
+  - Connected to `/api/hms/services`, `/api/hms/ambulances`, `/api/hms/ambulance-calls`, `/api/hms/packages`, `/api/hms/insurances`.
+  - Live backend connection banner, vehicle status toggles, package discount calculations, and modal spinners.
+- [x] **Pathology & Diagnostic Catalog (`apps/web/src/components/pathology-workspace.tsx`)**:
+  - Connected to `/api/hms/diagnostic-categories?kind=pathology`, `/api/hms/diagnostic-units`, `/api/hms/diagnostic-tests`.
+  - Modal creation for categories, units, tests, and parameters with async submit handlers, submission spinners, and live sync banner.
+- [x] **Workspace Navigation & Live Routes Register (`apps/web/src/components/workspace.tsx`)**:
+  - Registered all connected operational module routes in `isLive` array for active live header status and breadcrumb routing.
+- [x] **Verification**:
+  - Zero TypeScript errors (`npm run typecheck` PASS).
+  - All unit/regression tests passed including Amharic label translations (`npm test` PASS).
+

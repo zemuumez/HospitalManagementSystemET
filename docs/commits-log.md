@@ -24,6 +24,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`8a7a23f`](https://github.com/zemuumez/HospitalManagementSystemET/commit/8a7a23f) | **Frontend/Billing** | Recreate billing module with 8 tabs matching legacy Laravel screenshots (Manual Billing Payments, Advance Payments, Payment Reports, Payments, Invoices, Accounts, Payrolls, Bills) | N/A | Pushed (`main`) |
 | [`9bf4476`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9bf4476) | **Frontend/BedManagement** | Recreate Bed Management module with 4 tabs matching screenshots (Bed Status with 17 ward grids, Bed Assigns, Beds, Bed Types, New Bed Type modal) | N/A | Pushed (`main`) |
 | [`cda7d7e`](https://github.com/zemuumez/HospitalManagementSystemET/commit/cda7d7e) | **Frontend/Modules** | Workspaces for Prescriptions, Doctors (5 tabs, New Schedule, Breaks), Blood Bank (5 tabs, Donors, Reports), and Diagnosis (Categories, Tests) | N/A | Pushed (`main`) |
+| [`ab08aa7`](https://github.com/zemuumez/HospitalManagementSystemET/commit/ab08aa7) | **Section 4** | Connect Medicines, Billing, Services, Ambulances, and Pathology workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
 
 ---
 
@@ -301,4 +302,17 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
     - **Main Page Legend Strip**: Quick-reference legend badge strip displayed on the main odontogram screen.
   - Added Amharic translations in `apps/web/src/lib/am.json` for all legend actions and clinical terms.
   - Created automated Playwright verification test `scripts/verify-odontogram-legends.mjs` validating end-to-end creation, editing, SVG rendering, and persistence.
+
+### 19. Commit `ab08aa7` — Section 4 Frontend Integration for Operational Modules
+- **Message**: `feat(frontend): connect operational workspaces to persistent Go/PostgreSQL backend services`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Connected client workspaces through the Next.js API proxy (`/api/hms/...` -> `http://127.0.0.1:8080/v1/...`).
+  - **Next.js Proxy** (`apps/web/src/app/api/hms/[...path]/route.ts`): Expanded `allowedRoot` whitelist and 3-segment subroutes (`diagnostic-orders/{id}/invoice`, `prescriptions/{id}/status`, `medication-orders/{id}/cancel`, `pharmacy-movements/{id}/invoice`).
+  - **Medicines Workspace** (`apps/web/src/components/medicines-workspace.tsx`): Connected to `/api/hms/medicines`, `/api/hms/medicine-categories`, `/api/hms/medicine-brands`, `/api/hms/patients` with live remote patient selector, inline patient creation modal with Ethiopian E.164 phone formatting, `sellingPriceMinor` calculation, modal spinners, and live sync banner.
+  - **Billing Workspace** (`apps/web/src/components/billing-workspace.tsx`): Connected to `/api/hms/invoices`, `/api/hms/charge-accounts`, `/api/hms/payrolls`, `/api/hms/billing-patients` with integer minor units (`unitPriceMinor = amount * 100`), live sync banner, and modal save spinner.
+  - **Services Workspace** (`apps/web/src/components/services-workspace.tsx`): Connected to `/api/hms/services`, `/api/hms/ambulances`, `/api/hms/ambulance-calls`, `/api/hms/packages`, `/api/hms/insurances` with live sync banner, vehicle status toggles, package discount calculations, and modal spinners.
+  - **Pathology Workspace** (`apps/web/src/components/pathology-workspace.tsx`): Connected to `/api/hms/diagnostic-categories?kind=pathology`, `/api/hms/diagnostic-units`, `/api/hms/diagnostic-tests` with async modal handlers, submission spinners, and live sync banner.
+  - **Workspace Navigation** (`apps/web/src/components/workspace.tsx`): Registered all operational module routes in `isLive` list.
+  - Verification: `npm run typecheck` passed (0 errors), all test suites passed.
 

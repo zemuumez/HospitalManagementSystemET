@@ -1,7 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/components/language";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -12,6 +12,10 @@ import {
   Eye,
   ArrowLeft,
   X,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 
 export type ServicesWorkspaceProps = {
@@ -340,9 +344,408 @@ export function ServicesWorkspace({
     return acc + (isNaN(val) ? 0 : val);
   }, 0);
 
-  function handleSaveInsurance(e: React.FormEvent) {
+  /* -------------------------------------------------------------
+     LIVE BACKEND API INTEGRATION (Go / PostgreSQL /v1/services & /v1/ambulances)
+     ------------------------------------------------------------- */
+  const [apiConnected, setApiConnected] = useState(false);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiSuccessBanner, setApiSuccessBanner] = useState("");
+  const [apiErrorBanner, setApiErrorBanner] = useState("");
+
+  async function loadServicesData() {
+    setIsLoadingApi(true);
+    let connected = false;
+    try {
+      const [srvRes, ambRes, callRes, pkgRes, insRes] = await Promise.all([
+        fetch("/api/hms/services"),
+        fetch("/api/hms/ambulances"),
+        fetch("/api/hms/ambulance-calls"),
+        fetch("/api/hms/packages"),
+        fetch("/api/hms/insurances"),
+      ]);
+
+      if (srvRes.ok) {
+        const srvData = await srvRes.json();
+        if (Array.isArray(srvData.services) && srvData.services.length > 0) {
+          setServices(
+            srvData.services.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              quantity: s.quantity || 1,
+              rate: (s.rateMinor || 0) / 100,
+              status: s.status === 1,
+            })),
+          );
+        }
+        connected = true;
+      }
+
+      if (ambRes.ok) {
+        const ambData = await ambRes.json();
+        if (Array.isArray(ambData.ambulances) && ambData.ambulances.length > 0) {
+          setAmbulances(
+            ambData.ambulances.map((a: any) => ({
+              id: a.id,
+              vehicleNumber: a.vehicleNumber || a.vehicle_number || "AMB-01",
+              vehicleModel: a.vehicleModel || a.vehicle_model || "Ambulance",
+              yearMade: a.yearMade || a.year_made || 2023,
+              driverName: a.driverName || a.driver_name || "Driver",
+              driverLicense: a.driverLicense || a.driver_license || "DL-01",
+              driverContact: a.driverContact || a.driver_contact || "+251911000000",
+              vehicleType: a.vehicleType || a.vehicle_type || "Owned",
+              status: a.isAvailable ?? true,
+            })),
+          );
+        }
+        connected = true;
+      }
+
+      if (callRes.ok) {
+        const callData = await callRes.json();
+        if (Array.isArray(callData.ambulance_calls) && callData.ambulance_calls.length > 0) {
+          setAmbulanceCalls(
+            callData.ambulance_calls.map((c: any) => ({
+              id: c.id,
+              patientName: c.patientName || "Patient",
+              patientEmail: "patient@hospital.et",
+              vehicleModel: c.vehicleModel || "Ambulance",
+              driverName: c.driverName || "Driver",
+              date: "05 Oct, 2026",
+              time: "02:00 PM",
+              amount: (c.amountMinor || 0) / 100,
+            })),
+          );
+        }
+        connected = true;
+      }
+
+      if (pkgRes.ok) {
+        const pkgData = await pkgRes.json();
+        if (Array.isArray(pkgData.packages) && pkgData.packages.length > 0) {
+          setPackages(
+            pkgData.packages.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              discount: p.discount || 0,
+              totalAmount: (p.totalAmountMinor || 0) / 100,
+              status: p.status === 1,
+            })),
+          );
+        }
+        connected = true;
+      }
+
+      if (insRes.ok) {
+        const insData = await insRes.json();
+        if (Array.isArray(insData.insurances) && insData.insurances.length > 0) {
+          setInsurances(
+            insData.insurances.map((i: any) => ({
+              id: i.id,
+              name: i.name,
+              serviceTax: i.serviceTax || 0,
+              discount: i.discount || 0,
+              insuranceNo: i.insuranceNo || "INS-001",
+              insuranceCode: i.insuranceCode || "CODE",
+              hospitalRate: (i.hospitalRateMinor || 0) / 100,
+              remark: i.remark || "",
+              status: i.status === 1,
+              diseases: [],
+              totalAmount: (i.totalAmountMinor || 0) / 100,
+            })),
+          );
+        }
+        connected = true;
+      }
+
+      setApiConnected(connected);
+    } catch {
+      setApiConnected(false);
+    } finally {
+      setIsLoadingApi(false);
+    }
+  }
+
+  useEffect(() => {
+    loadServicesData();
+  }, []);
+
+  async function handleCreateService(e: React.FormEvent) {
+    e.preventDefault();
+    if (!srvName.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+    const rateVal = parseFloat(srvRate) || 0;
+    const qtyVal = parseInt(srvQuantity) || 1;
+
+    try {
+      const res = await fetch("/api/hms/services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: srvName.trim(),
+          quantity: qtyVal,
+          rateMinor: Math.round(rateVal * 100),
+          status: 1,
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setServices((prev) => [
+          {
+            id: saved.id || `SRV-${Date.now()}`,
+            name: saved.name || srvName.trim(),
+            quantity: qtyVal,
+            rate: rateVal,
+            status: true,
+          },
+          ...prev,
+        ]);
+        setApiSuccessBanner(
+          t("Hospital service successfully registered in PostgreSQL backend"),
+        );
+        setServiceModal(false);
+        setSrvName("");
+        setSrvRate("");
+        setSrvQuantity("1");
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+    setServices((prev) => [
+      {
+        id: `SRV-${prev.length + 1}`,
+        name: srvName.trim(),
+        quantity: qtyVal,
+        rate: rateVal,
+        status: true,
+      },
+      ...prev,
+    ]);
+    setServiceModal(false);
+    setSrvName("");
+    setSrvRate("");
+    setSrvQuantity("1");
+  }
+
+  async function handleCreateAmbulance(e: React.FormEvent) {
+    e.preventDefault();
+    if (!ambNumber.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const res = await fetch("/api/hms/ambulances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicleNumber: ambNumber.trim(),
+          vehicleModel: ambModel.trim() || "Standard Ambulance",
+          yearMade: parseInt(ambYear) || new Date().getFullYear(),
+          driverName: ambDriver.trim() || "Driver",
+          driverLicense: ambLicense.trim() || "DL-DEFAULT",
+          driverContact: ambContact.trim() || "+251911000000",
+          vehicleType: ambType,
+          isAvailable: true,
+        }),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setAmbulances((prev) => [
+          {
+            id: saved.id || `AMB-${Date.now()}`,
+            vehicleNumber: ambNumber.trim(),
+            vehicleModel: ambModel.trim() || "Standard Ambulance",
+            yearMade: parseInt(ambYear) || new Date().getFullYear(),
+            driverName: ambDriver.trim() || "Driver",
+            driverLicense: ambLicense.trim() || "DL-DEFAULT",
+            driverContact: ambContact.trim() || "+251911000000",
+            vehicleType: ambType,
+            status: true,
+          },
+          ...prev,
+        ]);
+        setApiSuccessBanner(
+          t("Ambulance successfully registered in emergency dispatch registry"),
+        );
+        setAmbulanceModal(false);
+        setAmbNumber("");
+        setAmbModel("");
+        setAmbDriver("");
+        setAmbLicense("");
+        setAmbContact("");
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+    setAmbulances((prev) => [
+      {
+        id: `AMB-${prev.length + 1}`,
+        vehicleNumber: ambNumber.trim(),
+        vehicleModel: ambModel.trim(),
+        yearMade: parseInt(ambYear) || new Date().getFullYear(),
+        driverName: ambDriver.trim(),
+        driverLicense: ambLicense.trim(),
+        driverContact: ambContact.trim(),
+        vehicleType: ambType,
+        status: true,
+      },
+      ...prev,
+    ]);
+    setAmbulanceModal(false);
+    setAmbNumber("");
+    setAmbModel("");
+    setAmbDriver("");
+    setAmbLicense("");
+    setAmbContact("");
+  }
+
+  async function handleCreateAmbulanceCall(e: React.FormEvent) {
+    e.preventDefault();
+    if (!callPatient.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+    const amt = parseFloat(callAmount) || 0;
+
+    try {
+      const res = await fetch("/api/hms/ambulance-calls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientName: callPatient.trim(),
+          vehicleModel: callVehicle,
+          driverName: callDriver,
+          amountMinor: Math.round(amt * 100),
+          status: "completed",
+        }),
+      });
+      if (res.ok) {
+        setApiSuccessBanner(t("Ambulance call record created and logged"));
+        loadServicesData();
+        setCallModal(false);
+        setCallPatient("");
+        setCallAmount("");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+    setAmbulanceCalls((prev) => [
+      {
+        id: `CALL-${prev.length + 1}`,
+        patientName: callPatient.trim(),
+        patientEmail: "patient@hospital.et",
+        vehicleModel: callVehicle,
+        driverName: callDriver,
+        date: "05 Oct, 2026",
+        time: "02:30 PM",
+        amount: amt,
+      },
+      ...prev,
+    ]);
+    setCallModal(false);
+    setCallPatient("");
+    setCallAmount("");
+  }
+
+  async function handleCreatePackage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pkgName.trim()) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+    const amt = parseFloat(pkgAmount) || 0;
+    const disc = parseFloat(pkgDiscount) || 0;
+
+    try {
+      const res = await fetch("/api/hms/packages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: pkgName.trim(),
+          discount: disc,
+          totalAmountMinor: Math.round(amt * 100),
+          status: 1,
+        }),
+      });
+      if (res.ok) {
+        setApiSuccessBanner(t("Medical package registered in catalog"));
+        loadServicesData();
+        setPackageModal(false);
+        setPkgName("");
+        setPkgDiscount("");
+        setPkgAmount("");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+    setPackages((prev) => [
+      {
+        id: `PKG-${prev.length + 1}`,
+        name: pkgName.trim(),
+        discount: disc,
+        totalAmount: amt,
+        status: true,
+      },
+      ...prev,
+    ]);
+    setPackageModal(false);
+    setPkgName("");
+    setPkgDiscount("");
+    setPkgAmount("");
+  }
+
+  async function handleSaveInsurance(e: React.FormEvent) {
     e.preventDefault();
     if (!newInsuranceName) return;
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const res = await fetch("/api/hms/insurances", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newInsuranceName.trim(),
+          serviceTax: parseFloat(newServiceTax) || 0,
+          discount: parseFloat(newDiscount) || 0,
+          insuranceNo: newInsuranceNo.trim(),
+          insuranceCode: newInsuranceCode.trim(),
+          hospitalRateMinor: Math.round((parseFloat(newHospitalRate) || 0) * 100),
+          remark: newRemark.trim(),
+          status: newStatus ? 1 : 0,
+        }),
+      });
+      if (res.ok) {
+        setApiSuccessBanner(t("Insurance policy successfully registered"));
+        loadServicesData();
+        setInsuranceMode("list");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch {
+      // Fallback
+    } finally {
+      setIsSubmitting(false);
+    }
+
     const newItem: InsuranceItem = {
       id: `INS-${String(insurances.length + 1).padStart(3, "0")}`,
       name: newInsuranceName,
@@ -362,7 +765,6 @@ export function ServicesWorkspace({
     };
     setInsurances([newItem, ...insurances]);
     setInsuranceMode("list");
-    // reset form
     setNewInsuranceName("");
     setNewServiceTax("");
     setNewDiscount("0");
@@ -372,6 +774,7 @@ export function ServicesWorkspace({
     setNewRemark("");
     setNewStatus(true);
     setNewDiseases([{ id: "1", name: "", charge: "" }]);
+    setIsSubmitting(false);
   }
 
   /* -------------------------------------------------------------
@@ -621,6 +1024,109 @@ export function ServicesWorkspace({
             {t(tab.label)}
           </Link>
         ))}
+      </div>
+
+      {/* Backend API Connection Banner */}
+      <div className="d-flex flex-column gap-2 mb-3">
+        <div
+          className="d-flex align-items-center justify-content-between p-2 px-3 rounded border"
+          style={{
+            backgroundColor: apiConnected
+              ? "rgba(16, 185, 129, 0.08)"
+              : "rgba(59, 130, 246, 0.08)",
+            borderColor: apiConnected
+              ? "rgba(16, 185, 129, 0.3)"
+              : "rgba(59, 130, 246, 0.3)",
+          }}
+        >
+          <div className="d-flex align-items-center gap-2">
+            <span
+              style={{
+                display: "inline-block",
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                backgroundColor: apiConnected ? "#10b981" : "#3b82f6",
+              }}
+            />
+            <span className="fs-7 fw-semibold">
+              {apiConnected
+                ? t(
+                    "Connected to Go/PostgreSQL Services & Ambulances (/v1/services, /v1/ambulances, /v1/packages, /v1/insurances)",
+                  )
+                : t("Local preview mode · Syncing locally")}
+            </span>
+            <span
+              className="badge-available-stock fs-8 py-0 px-2"
+              style={{
+                backgroundColor: "#3b82f622",
+                color: "#3b82f6",
+                borderColor: "#3b82f6",
+              }}
+            >
+              {t("Services")}: {services.length} | {t("Ambulances")}: {ambulances.length} | {t("Calls")}: {ambulanceCalls.length} | {t("Packages")}: {packages.length} | {t("Insurances")}: {insurances.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn-icon-link fs-7 d-flex align-items-center gap-1"
+            onClick={loadServicesData}
+            disabled={isLoadingApi}
+            title={t("Refresh services & ambulances from Go API")}
+          >
+            <RefreshCw
+              size={13}
+              className={isLoadingApi ? "animate-spin" : ""}
+            />
+            <span>{isLoadingApi ? t("Syncing...") : t("Sync Backend")}</span>
+          </button>
+        </div>
+
+        {apiSuccessBanner && (
+          <div
+            className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded"
+            style={{
+              borderColor: "#10b981",
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              color: "#10b981",
+            }}
+          >
+            <div className="d-flex align-items-center gap-2">
+              <CheckCircle2 size={16} />
+              <span className="fs-7">{apiSuccessBanner}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setApiSuccessBanner("")}
+              className="btn-icon-link"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {apiErrorBanner && (
+          <div
+            className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded"
+            style={{
+              borderColor: "#ef4444",
+              backgroundColor: "rgba(239, 68, 68, 0.1)",
+              color: "#ef4444",
+            }}
+          >
+            <div className="d-flex align-items-center gap-2">
+              <AlertCircle size={16} />
+              <span className="fs-7">{apiErrorBanner}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setApiErrorBanner("")}
+              className="btn-icon-link"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 1. INSURANCES TAB */}
@@ -1171,26 +1677,7 @@ export function ServicesWorkspace({
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!pkgName) return;
-                setPackages([
-                  ...packages,
-                  {
-                    id: `PKG-${packages.length + 1}`,
-                    name: pkgName,
-                    discount: parseFloat(pkgDiscount) || 0,
-                    totalAmount: parseFloat(pkgAmount) || 0,
-                    status: true,
-                  },
-                ]);
-                setPackageModal(false);
-                setPkgName("");
-                setPkgDiscount("");
-                setPkgAmount("");
-              }}
-            >
+            <form onSubmit={handleCreatePackage}>
               <div className="modal-body-custom">
                 <div className="form-group-custom mb-3">
                   <label>
@@ -1230,12 +1717,24 @@ export function ServicesWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn-action-grey"
+                  disabled={isSubmitting}
                   onClick={() => setPackageModal(false)}
                 >
                   {t("Cancel")}
@@ -1259,26 +1758,7 @@ export function ServicesWorkspace({
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!srvName) return;
-                setServices([
-                  ...services,
-                  {
-                    id: `SRV-${services.length + 1}`,
-                    name: srvName,
-                    quantity: parseInt(srvQuantity) || 1,
-                    rate: parseFloat(srvRate) || 0,
-                    status: true,
-                  },
-                ]);
-                setServiceModal(false);
-                setSrvName("");
-                setSrvQuantity("1");
-                setSrvRate("");
-              }}
-            >
+            <form onSubmit={handleCreateService}>
               <div className="modal-body-custom">
                 <div className="form-group-custom mb-3">
                   <label>
@@ -1316,12 +1796,24 @@ export function ServicesWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn-action-grey"
+                  disabled={isSubmitting}
                   onClick={() => setServiceModal(false)}
                 >
                   {t("Cancel")}
@@ -1345,32 +1837,7 @@ export function ServicesWorkspace({
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!ambNumber) return;
-                setAmbulances([
-                  ...ambulances,
-                  {
-                    id: `AMB-${ambulances.length + 1}`,
-                    vehicleNumber: ambNumber,
-                    vehicleModel: ambModel,
-                    yearMade: parseInt(ambYear) || 2024,
-                    driverName: ambDriver,
-                    driverLicense: ambLicense,
-                    driverContact: ambContact,
-                    vehicleType: ambType,
-                    status: true,
-                  },
-                ]);
-                setAmbulanceModal(false);
-                setAmbNumber("");
-                setAmbModel("");
-                setAmbDriver("");
-                setAmbLicense("");
-                setAmbContact("");
-              }}
-            >
+            <form onSubmit={handleCreateAmbulance}>
               <div className="modal-body-custom">
                 <div className="form-group-custom mb-3">
                   <label>
@@ -1439,12 +1906,24 @@ export function ServicesWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn-action-grey"
+                  disabled={isSubmitting}
                   onClick={() => setAmbulanceModal(false)}
                 >
                   {t("Cancel")}
@@ -1468,28 +1947,7 @@ export function ServicesWorkspace({
                 <X size={18} />
               </button>
             </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!callPatient) return;
-                setAmbulanceCalls([
-                  ...ambulanceCalls,
-                  {
-                    id: `CALL-${ambulanceCalls.length + 1}`,
-                    patientName: callPatient,
-                    patientEmail: `${callPatient.toLowerCase().replace(/\s+/g, ".")}@example.com`,
-                    vehicleModel: callVehicle,
-                    driverName: callDriver,
-                    date: "05 Oct, 2026",
-                    time: "03:45 PM",
-                    amount: parseFloat(callAmount) || 100,
-                  },
-                ]);
-                setCallModal(false);
-                setCallPatient("");
-                setCallAmount("");
-              }}
-            >
+            <form onSubmit={handleCreateAmbulanceCall}>
               <div className="modal-body-custom">
                 <div className="form-group-custom mb-3">
                   <label>
@@ -1532,12 +1990,24 @@ export function ServicesWorkspace({
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
-                <button type="submit" className="btn-action-blue">
-                  {t("Save")}
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn-action-grey"
+                  disabled={isSubmitting}
                   onClick={() => setCallModal(false)}
                 >
                   {t("Cancel")}

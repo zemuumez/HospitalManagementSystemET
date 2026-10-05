@@ -1,42 +1,167 @@
 import { NextRequest } from "next/server";
 export const runtime = "nodejs";
+const allowedRoot = new Set([
+  "me",
+  "overview",
+  "patients",
+  "messages",
+  "doctors",
+  "slots",
+  "appointments",
+  "beds",
+  "bed-types",
+  "bed-assignments",
+  "bed-transfers",
+  "cases",
+  "case-handlers",
+  "encounters",
+  "invoices",
+  "charge-accounts",
+  "billing-patients",
+  "medicines",
+  "medicine-batches",
+  "medication-orders",
+  "pharmacy-movements",
+  "medicine-categories",
+  "medicine-brands",
+  "medicine-bills",
+  "purchase-medicines",
+  "used-medicines",
+  "blood-bank",
+  "blood-banks",
+  "blood-donors",
+  "blood-donations",
+  "blood-issues",
+  "ambulances",
+  "ambulance-calls",
+  "services",
+  "packages",
+  "insurances",
+  "operations",
+  "operation-categories",
+  "pathology-categories",
+  "pathology-units",
+  "pathology-parameters",
+  "pathology-tests",
+  "radiology-categories",
+  "radiology-tests",
+  "live-consultations",
+  "live-meetings",
+  "zoom-credentials",
+  "attendance",
+  "attendance-shifts",
+  "attendance-leaves",
+  "attendance-duties",
+  "call-logs",
+  "visitors",
+  "postal-receives",
+  "postal-dispatches",
+  "complaints",
+  "settings",
+  "hospital-schedules",
+  "reviews",
+  "doctor-departments",
+  "doctor-holidays",
+  "doctor-breaks",
+  "employee-payrolls",
+  "payrolls",
+  "expenses",
+  "incomes",
+  "expense-heads",
+  "income-heads",
+  "prescriptions",
+  "diagnostics",
+  "diagnostic-categories",
+  "diagnostic-units",
+  "diagnostic-tests",
+  "diagnostic-orders",
+  "diagnostic-templates",
+  "charges",
+  "charge-categories",
+  "vaccines",
+  "vital-reports",
+  "patient-queues",
+]);
+
+function isAllowedPath(path: string[]): boolean {
+  if (path.length === 0) return false;
+  for (const seg of path) {
+    if (!seg || seg.includes("..") || !/^[a-zA-Z0-9_\-\.]+$/.test(seg)) {
+      return false;
+    }
+  }
+
+  if (path.length === 1) {
+    return allowedRoot.has(path[0]);
+  }
+
+  if (path.length === 2) {
+    if (path[0] === "bed-occupancy" && path[1] === "report") return true;
+    if (path[0] === "attendance" && ["check-in", "check-out"].includes(path[1]))
+      return true;
+    if (
+      path[0] === "finance" &&
+      ["expenses", "incomes", "expense-heads", "income-heads"].includes(path[1])
+    )
+      return true;
+    if (path[0] === "cms" && ["testimonials", "notice-boards"].includes(path[1]))
+      return true;
+    if (path[0] === "care-team") return true;
+    return allowedRoot.has(path[0]);
+  }
+
+  if (path.length === 3) {
+    if (path[0] === "finance" && path[1] === "reports" && path[2] === "summary")
+      return true;
+    if (path[0] === "patients") {
+      return [
+        "odontogram",
+        "follow-ups",
+        "referrals",
+        "vital-reports",
+        "vaccinations",
+      ].includes(path[2]);
+    }
+    if (path[0] === "encounters") {
+      return [
+        "notes",
+        "discharge",
+        "care-team",
+        "consultations",
+        "ipd-details",
+        "billing-summary",
+        "clearance",
+      ].includes(path[2]);
+    }
+    if (path[0] === "invoices") {
+      return ["payments", "refunds"].includes(path[2]);
+    }
+    if (path[0] === "medication-orders" && path[2] === "cancel") {
+      return true;
+    }
+    if (path[0] === "prescriptions" && path[2] === "status") {
+      return true;
+    }
+    if (
+      (path[0] === "diagnostic-orders" || path[0] === "pharmacy-movements") &&
+      path[2] === "invoice"
+    ) {
+      return true;
+    }
+    if (path[0] === "employee-payrolls") {
+      return path[2] === "slip";
+    }
+  }
+
+  return false;
+}
+
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params;
-  const allowed =
-    path.length === 1 &&
-    [
-      "me",
-      "overview",
-      "patients",
-      "messages",
-      "doctors",
-      "slots",
-      "appointments",
-      "beds",
-      "cases",
-      "encounters",
-      "invoices",
-      "charge-accounts",
-      "billing-patients",
-    ].includes(path[0]);
-  const appointment =
-    path.length === 2 &&
-    ["appointments", "patients", "invoices"].includes(path[0]) &&
-    /^[0-9a-f-]{36}$/i.test(path[1]);
-  const encounter =
-    path.length === 3 &&
-    path[0] === "encounters" &&
-    /^[0-9a-f-]{36}$/i.test(path[1]) &&
-    ["notes", "discharge"].includes(path[2]);
-  const payment =
-    path.length === 3 &&
-    path[0] === "invoices" &&
-    /^[0-9a-f-]{36}$/i.test(path[1]) &&
-    path[2] === "payments";
-  if (!allowed && !appointment && !encounter && !payment)
+  if (!isAllowedPath(path))
     return Response.json({ error: "Not found" }, { status: 404 });
   const origin = process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3000";
   if (request.method !== "GET" && request.headers.get("origin") !== origin)
@@ -93,4 +218,10 @@ async function proxy(
     );
   }
 }
-export { proxy as GET, proxy as POST, proxy as PATCH };
+export {
+  proxy as GET,
+  proxy as POST,
+  proxy as PATCH,
+  proxy as PUT,
+  proxy as DELETE,
+};
