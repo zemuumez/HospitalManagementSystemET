@@ -14,7 +14,13 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`14e3e41`](https://github.com/zemuumez/HospitalManagementSystemET/commit/14e3e41) | **3.E** | Clinical care, bed management, care teams, consultation registers, IPD admission details, encounter billing & clearance, discharge summaries, follow-ups, referrals, odontogram | `038` | Pushed |
 | [`793eab8`](https://github.com/zemuumez/HospitalManagementSystemET/commit/793eab8) | **3.F** | Diagnostic categories, diagnostic units, report attachments, diagnosis templates, vaccine catalog, patient vaccinations, birth/death/operation/investigation reports | `039` | Pushed |
 | [`9a0529d`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9a0529d) | **3.J** | Secure attachments, MIME/size limits, SHA-256 integrity, Prometheus `/metrics`, backup & restore scripts, restore drill runbook, Laravel import mapping & reconciliation tool, capacity plans, deployment runbook, cutover playbook | `040` | Pushed |
-| [`4c6ec33`](https://github.com/zemuumez/HospitalManagementSystemET/commit/4c6ec33) | **3.A** | Source parity review, inactive/commented route audit, PDF role contradiction reconciliation, single-hospital architecture decisions, and OpenAPI 3.1 specification | N/A | Pushed |
+| [`9f2edb4`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9f2edb4) | **Frontend/UI** | Restore original 12 dashboard cards, theme reload persistence, smart-card template visibility switches | N/A | Pushed (`main`) |
+| [`74d2eb6`](https://github.com/zemuumez/HospitalManagementSystemET/commit/74d2eb6) | **Clinical/Intake** | Migration 046: Retain validated IPD/OPD intake details atomically with admission and conflict checks | `046` | Pushed (`main`) |
+| [`687df40`](https://github.com/zemuumez/HospitalManagementSystemET/commit/687df40) | **Clinical/API** | Expose registration text references (Tel/TAX), patient/doctor emails, bill status, and visit counts | N/A | Pushed (`main`) |
+| [`1be09eb`](https://github.com/zemuumez/HospitalManagementSystemET/commit/1be09eb) | **Clinical/UI** | Dedicated full-page IPD and OPD registration forms with dependent selects and measurement inputs | N/A | Pushed (`main`) |
+| [`be4975b`](https://github.com/zemuumez/HospitalManagementSystemET/commit/be4975b) | **Frontend/Parity** | Attendance workspace (6 original tabs, shifts, duty assignments, leaves, requests), odontogram register, Amharic labels | N/A | Pushed (`main`) |
+| [`27d29dd`](https://github.com/zemuumez/HospitalManagementSystemET/commit/27d29dd) | **QA/Verification** | Expanded reference-page Playwright suite, isolated integration runner fixes, Prettier formatting | N/A | Pushed (`main`) |
+| [`4c6ec33`(https://github.com/zemuumez/HospitalManagementSystemET/commit/4c6ec33) | **3.A** | Source parity review, inactive/commented route audit, PDF role contradiction reconciliation, single-hospital architecture decisions, and OpenAPI 3.1 specification | N/A | Pushed |
 
 ---
 
@@ -129,3 +135,49 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - Reconciled PDF specification contradictions with implemented clinical security rules.
   - Documented single-hospital architectural decisions and ETB currency standard in [docs/single-hospital-architecture-decisions.md](file:///c:/Users/USER/Documents/GitHub/HospitalManagementSystemET/docs/single-hospital-architecture-decisions.md).
   - Published comprehensive OpenAPI 3.1 specification: [docs/openapi.yaml](file:///c:/Users/USER/Documents/GitHub/HospitalManagementSystemET/docs/openapi.yaml).
+
+### 8. Commit `9f2edb4` — Frontend UI (Original Dashboard, Theme, and Smart Card Controls)
+- **Message**: `fix(ui): restore original dashboard, theme and smart card controls`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Restored original 12-card dashboard layout, receptionists panel, income/expense chart, notices, enquiries, and appointments.
+  - Adjusted sidebar proportions, table styling, and dark theme persistence across reloads.
+  - Added individual smart-card template switches for email, phone, birth date, blood group, address, and unique ID with pagination and deletion protection.
+
+### 9. Commit `74d2eb6` — Clinical Backend (Encounter Intake Persistence)
+- **Message**: `feat(clinical): retain validated IPD and OPD registration details atomically`
+- **Migration**: `db/migrations/046_encounter_intake.sql`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Added validated clinical intake data stored atomically with inpatient/outpatient admission.
+  - Intake data included in idempotency conflict checking and verification suites.
+
+### 10. Commit `687df40` — Clinical API (Registration Text References & Summary Fields)
+- **Message**: `feat(clinical): expose registration text references, emails, bill status and visit counts`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Added original Tel and TAX reference text fields to `EncounterIntake`.
+  - Exposed `PatientEmail`, `DoctorEmail`, `BillStatus` (`Paid`, `Unpaid`, `Unbilled`), and `TotalVisits` count in encounter query scans.
+
+### 11. Commit `1be09eb` — Clinical UI (Dedicated Full-Page IPD/OPD Registration)
+- **Message**: `feat(clinical): add dedicated full-page IPD and OPD intake forms with dependent choices`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Created dedicated full-page registration forms (`apps/web/src/components/encounter-register.tsx`).
+  - Implemented dependent selections (patient → case → doctor, bed type → available bed choices).
+  - Added measurements (height, weight, BP), clinical notes, references, old-patient toggle, and OPD charge/payment mode.
+
+### 12. Commit `be4975b` — UI Workspaces (Attendance Tabs, Odontogram Register, Amharic Labels)
+- **Message**: `feat(ui): add attendance workspace tabs, odontogram register, and updated dashboard layout`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Created `apps/web/src/components/attendance-workspace.tsx` featuring all 6 original tabs: Dashboard, Daily Report, Shifts, Duty Assignments, Leave Requests, and Attendance Requests.
+  - Created `apps/web/src/components/odontogram-register.tsx` with searchable, paginated register, add/edit modal, and 32-tooth SVG markings.
+  - Updated `apps/web/src/lib/am.json` with 100% Amharic translation coverage for all new tabs, fields, and controls.
+
+### 13. Commit `27d29dd` — QA Verification (Reference Pages Suite & Integration Runners)
+- **Message**: `test(qa): expand reference page browser suites and format integration runners`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Authored `scripts/verify-reference-pages.mjs` testing dashboard, smart card toggle & download, odontogram modal & marking persistence, attendance leave approval, shift creation, 6 attendance tabs, IPD/OPD forms, and mobile layout without overflow.
+  - Resolved cold-compilation timeouts in `scripts/verify-connected.mjs` and formatted integration scripts with Prettier.
