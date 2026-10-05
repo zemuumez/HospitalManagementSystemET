@@ -489,7 +489,7 @@ func (s Store) CreatePayroll(ctx context.Context, a domain.Actor, in domain.Payr
 	err = tx.QueryRow(ctx, `
 		SELECT u.name, u.email, COALESCE(s.role, 'staff')
 		FROM "user" u
-		LEFT JOIN staff_access s ON s.user_id = u.id
+		JOIN staff_access s ON s.user_id = u.id AND s.active AND s.role<>'patient'
 		WHERE u.id = $1
 	`, in.UserID).Scan(&userName, &userEmail, &role)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -588,34 +588,8 @@ func (s Store) CreateServiceInvoiceLink(ctx context.Context, a domain.Actor, in 
 		return domain.ServiceInvoiceLink{}, err
 	}
 	defer tx.Rollback(ctx)
-
-	// Validate invoice exists
-	var invID string
-	err = tx.QueryRow(ctx, `SELECT id FROM invoice WHERE id = $1`, in.InvoiceID).Scan(&invID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.ServiceInvoiceLink{}, domain.ErrValidation
-	}
+	out, err := linkOperationalInvoice(ctx, tx, a, in.SourceType, in.SourceID, in.InvoiceID, &in.AmountMinor)
 	if err != nil {
-		return domain.ServiceInvoiceLink{}, err
-	}
-
-	var out domain.ServiceInvoiceLink
-	err = tx.QueryRow(ctx, `
-		INSERT INTO service_invoice_link (invoice_id, source_type, source_id, amount_minor)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, invoice_id, source_type, source_id, amount_minor, created_at
-	`, in.InvoiceID, in.SourceType, in.SourceID, in.AmountMinor).Scan(
-		&out.ID, &out.InvoiceID, &out.SourceType, &out.SourceID, &out.AmountMinor, &out.CreatedAt,
-	)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return out, domain.ErrConflict // Anti-double-billing triggered!
-		}
-		return out, err
-	}
-
-	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'service_invoice_link.created', $2)`, a.ID, out.ID); err != nil {
 		return out, err
 	}
 	return out, tx.Commit(ctx)

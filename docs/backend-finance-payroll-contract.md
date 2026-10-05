@@ -305,3 +305,11 @@ This module delivers backend capabilities for hospital operational accounting, n
 - `hospital_income`: Ledger of ancillary revenues.
 - `employee_payroll`: Staff payroll entries with status tracking and `UNIQUE(user_id, month, year)`.
 - `service_invoice_link`: Bridge table with `UNIQUE(source_type, source_id)` preventing duplicate charges on invoices.
+
+## Reviewed source billing contract
+
+Linking is not a payment. Appointment reads derive paid/unpaid from the immutable payment/refund ledger. Encounter clearance is an explicit action requiring a settled invoice, zero charges, or a meaningful waiver reason; linking alone leaves it uncleared.
+
+`POST /v1/patient-service-charges` accepts `{patientId,kind,catalogId,quantity,amountMinor}` and an `Idempotency-Key` (8–160 characters). `kind` is `service` or `operation`. A service uses its current server catalogue tariff times quantity and ignores caller pricing; an operation requires an approved positive total because the original operation catalogue has no tariff. The retained returned event ID is `sourceId` for `/v1/service-invoice-links`. Each delivered event can belong to one invoice; distinct deliveries can reuse a catalogue entry. Appointment/encounter links use their dedicated endpoints. Ambulance sources must be completed calls; blood sources must be actual issue records. Amount and canonical patient must match, and allocations cannot exceed invoice subtotal.
+
+Issued source links and signed discharge summaries cannot be overwritten. Financial changes use refunds/corrections, and discharge corrections use signed addenda. Full tax, claim processing, payment-provider settlement and print-template parity remain separate unfinished checklist items.

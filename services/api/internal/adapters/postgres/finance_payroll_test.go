@@ -292,11 +292,18 @@ func testFinancePayroll(t *testing.T, db *pgxpool.Pool, store Store, actors []do
 		t.Fatalf("failed to create invoice for linkage: %v", err)
 	}
 
+	var callID string
+	if err = db.QueryRow(ctx, `INSERT INTO ambulance_call(ambulance_id,patient_id,driver_name,call_date,amount_minor,status,created_by) VALUES('a1111111-1111-1111-1111-111111111111',$1,'Synthetic',clock_timestamp(),50000,'completed',$2) RETURNING id`, patients[0].ID, admin.ID).Scan(&callID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = srv.CreateServiceInvoiceLink(ctx, admin, domain.ServiceInvoiceLinkInput{InvoiceID: inv.ID, SourceType: "ambulance", SourceID: "00000000-0000-0000-0000-000000000000", AmountMinor: 50000}); !errors.Is(err, domain.ErrValidation) {
+		t.Fatal("invented source accepted", err)
+	}
 	// Create service invoice link for ambulance call
 	link1, err := srv.CreateServiceInvoiceLink(ctx, admin, domain.ServiceInvoiceLinkInput{
 		InvoiceID:   inv.ID,
 		SourceType:  "ambulance",
-		SourceID:    "amb-call-oct-01",
+		SourceID:    callID,
 		AmountMinor: 50000,
 	})
 	if err != nil || link1.ID == "" {
@@ -307,16 +314,16 @@ func testFinancePayroll(t *testing.T, db *pgxpool.Pool, store Store, actors []do
 	_, err = srv.CreateServiceInvoiceLink(ctx, admin, domain.ServiceInvoiceLinkInput{
 		InvoiceID:   inv.ID,
 		SourceType:  "ambulance",
-		SourceID:    "amb-call-oct-01",
+		SourceID:    callID,
 		AmountMinor: 50000,
 	})
-	if !errors.Is(err, domain.ErrConflict) {
-		t.Fatalf("expected ErrConflict for duplicate source charge billing, got %v", err)
+	if err != nil {
+		t.Fatalf("identical source link replay failed: %v", err)
 	}
 
 	// Query invoice links
 	links, err := srv.ServiceInvoiceLinks(ctx, admin, inv.ID)
-	if err != nil || len(links) != 1 || links[0].SourceID != "amb-call-oct-01" {
+	if err != nil || len(links) != 1 || links[0].SourceID != callID {
 		t.Fatalf("failed to get service invoice links: %v", err)
 	}
 

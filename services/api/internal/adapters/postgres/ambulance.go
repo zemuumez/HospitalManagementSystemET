@@ -461,6 +461,13 @@ func (s Store) BillAmbulanceCall(ctx context.Context, a domain.Actor, callID str
 		return out, clinicalError(err)
 	}
 
+	var alreadyLinked bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM service_invoice_link WHERE source_type='ambulance' AND source_id=$1)`, callID).Scan(&alreadyLinked); err != nil {
+		return out, err
+	}
+	if alreadyLinked {
+		return out, domain.ErrConflict
+	}
 	var existingInvoice, accountID string
 	var discount int64
 	err = tx.QueryRow(ctx, `

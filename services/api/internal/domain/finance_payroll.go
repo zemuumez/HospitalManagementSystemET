@@ -128,24 +128,24 @@ func (in *IncomeInput) Validate() (time.Time, error) {
 }
 
 type EmployeePayroll struct {
-	ID                string     `json:"id"`
-	PayrollNumber     string     `json:"payrollNumber"`
-	UserID            string     `json:"userId"`
-	UserName          string     `json:"userName,omitempty"`
-	UserEmail         string     `json:"userEmail,omitempty"`
-	Role              string     `json:"role"`
-	Month             string     `json:"month"`
-	Year              int        `json:"year"`
-	BasicSalaryMinor  int64      `json:"basicSalaryMinor"`
-	AllowanceMinor    int64      `json:"allowanceMinor"`
-	DeductionsMinor   int64      `json:"deductionsMinor"`
-	NetSalaryMinor    int64      `json:"netSalaryMinor"`
-	Status            int        `json:"status"` // 0=unpaid, 1=paid
-	PaymentDate       *time.Time `json:"paymentDate,omitempty"`
-	CreatedBy         string     `json:"createdBy"`
-	CreatedByName     string     `json:"createdByName,omitempty"`
-	CreatedAt         time.Time  `json:"createdAt"`
-	UpdatedAt         time.Time  `json:"updatedAt"`
+	ID               string     `json:"id"`
+	PayrollNumber    string     `json:"payrollNumber"`
+	UserID           string     `json:"userId"`
+	UserName         string     `json:"userName,omitempty"`
+	UserEmail        string     `json:"userEmail,omitempty"`
+	Role             string     `json:"role"`
+	Month            string     `json:"month"`
+	Year             int        `json:"year"`
+	BasicSalaryMinor int64      `json:"basicSalaryMinor"`
+	AllowanceMinor   int64      `json:"allowanceMinor"`
+	DeductionsMinor  int64      `json:"deductionsMinor"`
+	NetSalaryMinor   int64      `json:"netSalaryMinor"`
+	Status           int        `json:"status"` // 0=unpaid, 1=paid
+	PaymentDate      *time.Time `json:"paymentDate,omitempty"`
+	CreatedBy        string     `json:"createdBy"`
+	CreatedByName    string     `json:"createdByName,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
 }
 
 type PayrollInput struct {
@@ -166,7 +166,7 @@ func (in *PayrollInput) Validate() error {
 	if in.Year < 2000 || in.Year > 2100 {
 		return ErrValidation
 	}
-	if in.BasicSalaryMinor < 0 || in.AllowanceMinor < 0 || in.DeductionsMinor < 0 {
+	if in.BasicSalaryMinor > 100000000000 || in.AllowanceMinor > 100000000000 || in.DeductionsMinor > 100000000000 || in.BasicSalaryMinor < 0 || in.AllowanceMinor < 0 || in.DeductionsMinor < 0 {
 		return ErrValidation
 	}
 	net := in.BasicSalaryMinor + in.AllowanceMinor - in.DeductionsMinor
@@ -196,7 +196,7 @@ func (in *ServiceInvoiceLinkInput) Validate() error {
 	in.InvoiceID = strings.TrimSpace(in.InvoiceID)
 	in.SourceType = strings.TrimSpace(in.SourceType)
 	in.SourceID = strings.TrimSpace(in.SourceID)
-	if in.InvoiceID == "" || in.SourceID == "" || in.AmountMinor < 0 {
+	if !UUIDPattern.MatchString(in.InvoiceID) || !UUIDPattern.MatchString(in.SourceID) || in.AmountMinor < 0 {
 		return ErrValidation
 	}
 	switch in.SourceType {
@@ -236,4 +236,19 @@ func ParseDate(s string) (time.Time, error) {
 		return t.UTC(), nil
 	}
 	return time.Time{}, ErrValidation
+}
+
+// Operations use an explicitly approved amount because their catalogue has no price.
+type PatientServiceChargeInput struct {
+	PatientID   string `json:"patientId"`
+	Kind        string `json:"kind"`
+	CatalogID   string `json:"catalogId"`
+	Quantity    int    `json:"quantity"`
+	AmountMinor int64  `json:"amountMinor"`
+}
+type PatientServiceCharge struct {
+	ID string `json:"id"`
+	PatientServiceChargeInput
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"createdAt"`
 }

@@ -9,6 +9,19 @@ import (
 )
 
 func (s Server) financePayroll(w http.ResponseWriter, r *http.Request, a domain.Actor) bool {
+	if r.URL.Path == "/v1/patient-service-charges" && r.Method == "POST" {
+		var in domain.PatientServiceChargeInput
+		if !decode(w, r, &in) {
+			return true
+		}
+		out, err := s.FinancePayroll.CreatePatientServiceCharge(r.Context(), a, in, r.Header.Get("Idempotency-Key"))
+		if err != nil {
+			fail(w, err)
+		} else {
+			write(w, 201, out)
+		}
+		return true
+	}
 	// 1. Expense Heads
 	if strings.HasPrefix(r.URL.Path, "/v1/expense-heads") {
 		switch {

@@ -9,6 +9,7 @@ import (
 func TestAssignBedInput_Validate(t *testing.T) {
 	t.Run("valid input", func(t *testing.T) {
 		in := domain.AssignBedInput{
+			Version:     1,
 			BedID:       "d3b07384-d113-4a7b-a621-000000000001",
 			EncounterID: "d3b07384-d113-4a7b-a621-000000000002",
 			PatientID:   "d3b07384-d113-4a7b-a621-000000000003",
@@ -21,6 +22,7 @@ func TestAssignBedInput_Validate(t *testing.T) {
 
 	t.Run("invalid bed id", func(t *testing.T) {
 		in := domain.AssignBedInput{
+			Version:     1,
 			BedID:       "invalid",
 			EncounterID: "d3b07384-d113-4a7b-a621-000000000002",
 			PatientID:   "d3b07384-d113-4a7b-a621-000000000003",

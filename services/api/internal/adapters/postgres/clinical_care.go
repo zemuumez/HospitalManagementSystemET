@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -42,21 +43,14 @@ func (s Store) AssignBed(ctx context.Context, a domain.Actor, input domain.Assig
 	}
 	defer tx.Rollback(ctx)
 
-	// Close any prior active assignment for this encounter
-	now := time.Now().UTC()
-	_, _ = tx.Exec(ctx, `
-		UPDATE bed_assignment
-		SET assigned_to = $1
-		WHERE encounter_id = $2 AND assigned_to IS NULL
-	`, now, input.EncounterID)
-
-	// Update encounter bed_id
-	_, err = tx.Exec(ctx, `
-		UPDATE encounter
-		SET bed_id = $1
-		WHERE id = $2 AND status = 'active'
-	`, input.BedID, input.EncounterID)
+	out, err := transferBedTx(ctx, tx, a, input.EncounterID, domain.BedTransfer{BedID: input.BedID, Version: input.Version, Reason: input.Notes})
 	if err != nil {
+		return domain.BedAssignment{}, err
+	}
+	if out.PatientID != input.PatientID {
+		return domain.BedAssignment{}, domain.ErrValidation
+	}
+	if _, err = tx.Exec(ctx, `UPDATE bed_assignment SET assigned_to=clock_timestamp() WHERE encounter_id=$1 AND assigned_to IS NULL`, input.EncounterID); err != nil {
 		return domain.BedAssignment{}, err
 	}
 
@@ -450,6 +444,7 @@ func (s Store) UpdateEncounterBilling(ctx context.Context, a domain.Actor, encou
 			other_charges_minor = EXCLUDED.other_charges_minor,
 			total_minor = EXCLUDED.total_minor,
 			updated_at = clock_timestamp()
+ WHERE encounter_billing.invoice_id IS NULL AND NOT encounter_billing.financial_clearance
 		RETURNING encounter_id::text, bed_days, bed_total_minor, doctor_fee_minor, procedure_fee_minor,
 		          other_charges_minor, total_minor, invoice_id::text, financial_clearance,
 		          cleared_by, cleared_at, waiver_reason, created_at, updated_at
@@ -461,99 +456,65 @@ func (s Store) UpdateEncounterBilling(ctx context.Context, a domain.Actor, encou
 		&b.ClearedBy, &b.ClearedAt, &b.WaiverReason, &b.CreatedAt, &b.UpdatedAt,
 	)
 	if err != nil {
-		return domain.EncounterBilling{}, err
+		return domain.EncounterBilling{}, clinicalError(err)
 	}
 	b.InvoiceID = invoiceID
 	return b, nil
 }
 
-func (s Store) GrantFinancialClearance(ctx context.Context, a domain.Actor, encounterID string, waiverReason string) (domain.EncounterBilling, error) {
-	now := time.Now().UTC()
-	var b domain.EncounterBilling
-	var invoiceID *string
-	err := s.DB.QueryRow(ctx, `
-		INSERT INTO encounter_billing (
-			encounter_id, financial_clearance, cleared_by, cleared_at, waiver_reason, created_at, updated_at
-		) VALUES ($1, true, $2, $3, $4, clock_timestamp(), clock_timestamp())
-		ON CONFLICT (encounter_id) DO UPDATE SET
-			financial_clearance = true,
-			cleared_by = EXCLUDED.cleared_by,
-			cleared_at = EXCLUDED.cleared_at,
-			waiver_reason = EXCLUDED.waiver_reason,
-			updated_at = clock_timestamp()
-		RETURNING encounter_id::text, bed_days, bed_total_minor, doctor_fee_minor, procedure_fee_minor,
-		          other_charges_minor, total_minor, invoice_id::text, financial_clearance,
-		          cleared_by, cleared_at, waiver_reason, created_at, updated_at
-	`, encounterID, a.ID, now, waiverReason).Scan(
-		&b.EncounterID, &b.BedDays, &b.BedTotalMinor, &b.DoctorFeeMinor, &b.ProcedureFeeMinor,
-		&b.OtherChargesMinor, &b.TotalMinor, &invoiceID, &b.FinancialClearance,
-		&b.ClearedBy, &b.ClearedAt, &b.WaiverReason, &b.CreatedAt, &b.UpdatedAt,
-	)
-	if err != nil {
-		return domain.EncounterBilling{}, err
-	}
-	b.InvoiceID = invoiceID
-	return b, nil
-}
-
-func (s Store) LinkEncounterInvoice(ctx context.Context, a domain.Actor, encounterID string, invoiceID string) (domain.EncounterBilling, error) {
+func (s Store) GrantFinancialClearance(ctx context.Context, a domain.Actor, encounterID, reason string) (domain.EncounterBilling, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return domain.EncounterBilling{}, err
 	}
 	defer tx.Rollback(ctx)
-
-	var totalMinor int64
-	err = tx.QueryRow(ctx, `SELECT total_minor FROM encounter_billing WHERE encounter_id = $1`, encounterID).Scan(&totalMinor)
-	if errors.Is(err, pgx.ErrNoRows) {
-		totalMinor = 0
-	} else if err != nil {
-		return domain.EncounterBilling{}, err
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO service_invoice_link (invoice_id, source_type, source_id, amount_minor)
-		VALUES ($1, 'encounter', $2, $3)
-		ON CONFLICT (source_type, source_id) DO UPDATE SET
-			invoice_id = EXCLUDED.invoice_id,
-			amount_minor = EXCLUDED.amount_minor
-	`, invoiceID, encounterID, totalMinor)
+	var cleared bool
+	var invoiceID *string
+	var total int64
+	err = tx.QueryRow(ctx, `SELECT financial_clearance,invoice_id,total_minor FROM encounter_billing WHERE encounter_id=$1 FOR UPDATE`, encounterID).Scan(&cleared, &invoiceID, &total)
 	if err != nil {
+		return domain.EncounterBilling{}, clinicalError(err)
+	}
+	if !cleared {
+		paid := total == 0
+		if invoiceID != nil {
+			if err = tx.QueryRow(ctx, `SELECT paid_minor>=total_minor FROM invoice WHERE id=$1 FOR UPDATE`, *invoiceID).Scan(&paid); err != nil {
+				return domain.EncounterBilling{}, err
+			}
+		}
+		if !paid && len(strings.TrimSpace(reason)) < 10 {
+			return domain.EncounterBilling{}, domain.ErrStale
+		}
+		if _, err = tx.Exec(ctx, `UPDATE encounter_billing SET financial_clearance=true,cleared_by=$2,cleared_at=clock_timestamp(),waiver_reason=$3,updated_at=clock_timestamp() WHERE encounter_id=$1`, encounterID, a.ID, strings.TrimSpace(reason)); err != nil {
+			return domain.EncounterBilling{}, err
+		}
+		if err = pharmacyAudit(ctx, tx, a, "encounter.financial_clearance", encounterID); err != nil {
+			return domain.EncounterBilling{}, err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
 		return domain.EncounterBilling{}, err
 	}
-
-	var b domain.EncounterBilling
-	var invID *string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO encounter_billing (
-			encounter_id, invoice_id, financial_clearance, cleared_by, cleared_at, created_at, updated_at
-		) VALUES ($1, $2, true, $3, clock_timestamp(), clock_timestamp(), clock_timestamp())
-		ON CONFLICT (encounter_id) DO UPDATE SET
-			invoice_id = EXCLUDED.invoice_id,
-			financial_clearance = true,
-			cleared_by = EXCLUDED.cleared_by,
-			cleared_at = EXCLUDED.cleared_at,
-			updated_at = clock_timestamp()
-		RETURNING encounter_id::text, bed_days, bed_total_minor, doctor_fee_minor, procedure_fee_minor,
-		          other_charges_minor, total_minor, invoice_id::text, financial_clearance,
-		          cleared_by, cleared_at, waiver_reason, created_at, updated_at
-	`, encounterID, invoiceID, a.ID).Scan(
-		&b.EncounterID, &b.BedDays, &b.BedTotalMinor, &b.DoctorFeeMinor, &b.ProcedureFeeMinor,
-		&b.OtherChargesMinor, &b.TotalMinor, &invID, &b.FinancialClearance,
-		&b.ClearedBy, &b.ClearedAt, &b.WaiverReason, &b.CreatedAt, &b.UpdatedAt,
-	)
-	if err != nil {
-		return domain.EncounterBilling{}, err
-	}
-	b.InvoiceID = invID
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.EncounterBilling{}, err
-	}
-	return b, nil
+	return s.EncounterBilling(ctx, encounterID)
 }
 
-// ─── Discharge Summary ────────────────────────────────────────────────────────
+func (s Store) LinkEncounterInvoice(ctx context.Context, a domain.Actor, encounterID, invoiceID string) (domain.EncounterBilling, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.EncounterBilling{}, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = linkOperationalInvoice(ctx, tx, a, "encounter", encounterID, invoiceID, nil); err != nil {
+		return domain.EncounterBilling{}, err
+	}
+	if _, err = tx.Exec(ctx, `UPDATE encounter_billing SET invoice_id=$2,updated_at=clock_timestamp() WHERE encounter_id=$1`, encounterID, invoiceID); err != nil {
+		return domain.EncounterBilling{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return domain.EncounterBilling{}, err
+	}
+	return s.EncounterBilling(ctx, encounterID)
+}
 
 func (s Store) DischargeSummary(ctx context.Context, encounterID string) (domain.DischargeSummary, error) {
 	var d domain.DischargeSummary
@@ -594,22 +555,10 @@ func (s Store) SaveDischargeSummary(ctx context.Context, a domain.Actor, summary
 			hospital_course, surgical_procedures, discharge_medications, follow_up_advice,
 			follow_up_date, signed_by, signed_at, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10, clock_timestamp(), clock_timestamp(), clock_timestamp())
-		ON CONFLICT (encounter_id) DO UPDATE SET
-			admission_diagnosis = EXCLUDED.admission_diagnosis,
-			discharge_diagnosis = EXCLUDED.discharge_diagnosis,
-			condition_at_discharge = EXCLUDED.condition_at_discharge,
-			hospital_course = EXCLUDED.hospital_course,
-			surgical_procedures = EXCLUDED.surgical_procedures,
-			discharge_medications = EXCLUDED.discharge_medications,
-			follow_up_advice = EXCLUDED.follow_up_advice,
-			follow_up_date = EXCLUDED.follow_up_date,
-			signed_by = EXCLUDED.signed_by,
-			signed_at = clock_timestamp(),
-			updated_at = clock_timestamp()
 	`, summary.EncounterID, summary.AdmissionDiagnosis, summary.DischargeDiagnosis,
 		summary.ConditionAtDischarge, summary.HospitalCourse, summary.SurgicalProcedures,
 		summary.DischargeMedications, summary.FollowUpAdvice, followUpDate, a.ID)
-	return err
+	return clinicalError(err)
 }
 
 // ─── OPD Follow-ups & Referrals ───────────────────────────────────────────────

@@ -9,6 +9,8 @@ import (
 )
 
 type FinancePayrollStore interface {
+	Invoice(context.Context, domain.Actor, string) (domain.Invoice, error)
+	CreatePatientServiceCharge(context.Context, domain.Actor, domain.PatientServiceChargeInput, string) (domain.PatientServiceCharge, error)
 	// Expense Heads
 	ExpenseHeads(ctx context.Context) ([]domain.ExpenseHead, error)
 	CreateExpenseHead(ctx context.Context, a domain.Actor, in domain.ExpenseHeadInput) (domain.ExpenseHead, error)
@@ -205,6 +207,12 @@ func (s FinancePayrollService) ServiceInvoiceLinks(ctx context.Context, a domain
 	if !a.Can("billing.read") {
 		return nil, domain.ErrForbidden
 	}
+	if !domain.UUIDPattern.MatchString(invoiceID) {
+		return nil, domain.ErrValidation
+	}
+	if _, err := s.Store.Invoice(ctx, a, invoiceID); err != nil {
+		return nil, err
+	}
 	return s.Store.ServiceInvoiceLinks(ctx, invoiceID)
 }
 
@@ -216,14 +224,24 @@ func (s FinancePayrollService) FinanceSummary(ctx context.Context, a domain.Acto
 	}
 	from, err := domain.ParseDate(fromStr)
 	if err != nil {
-		from = s.now().AddDate(0, -1, 0) // Default to past 1 month
+		return domain.FinanceSummary{}, domain.ErrValidation
 	}
 	to, err := domain.ParseDate(toStr)
 	if err != nil {
-		to = s.now()
+		return domain.FinanceSummary{}, domain.ErrValidation
 	}
 	if to.Before(from) {
-		from, to = to, from
+		return domain.FinanceSummary{}, domain.ErrValidation
 	}
 	return s.Store.FinanceSummary(ctx, from, to)
+}
+
+func (s FinancePayrollService) CreatePatientServiceCharge(ctx context.Context, a domain.Actor, in domain.PatientServiceChargeInput, key string) (domain.PatientServiceCharge, error) {
+	if !a.Can("billing.manage") {
+		return domain.PatientServiceCharge{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(in.PatientID) || !domain.UUIDPattern.MatchString(in.CatalogID) || (in.Kind != "service" && in.Kind != "operation") || in.Quantity < 1 || in.Quantity > 10000 || in.AmountMinor < 0 || in.AmountMinor > 100000000000 || len(key) < 8 || len(key) > 160 {
+		return domain.PatientServiceCharge{}, domain.ErrValidation
+	}
+	return s.Store.CreatePatientServiceCharge(ctx, a, in, key)
 }

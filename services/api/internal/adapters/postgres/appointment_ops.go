@@ -279,7 +279,7 @@ func (s Store) AppointmentBilling(ctx context.Context, appointmentID string) (do
 	var rec domain.AppointmentBillingRecord
 	var invoiceID *string
 	err := s.DB.QueryRow(ctx, `
-		SELECT appointment_id::text, fee_minor, invoice_id::text, payment_status, created_at, updated_at
+		SELECT appointment_id::text, fee_minor, invoice_id::text, CASE WHEN invoice_id IS NULL THEN payment_status WHEN EXISTS(SELECT 1 FROM invoice i WHERE i.id=invoice_id AND i.paid_minor>=i.total_minor) THEN 'paid' ELSE 'unpaid' END, created_at, updated_at
 		FROM appointment_billing
 		WHERE appointment_id = $1
 	`, appointmentID).Scan(
@@ -303,7 +303,7 @@ func (s Store) AppointmentBilling(ctx context.Context, appointmentID string) (do
 		}, nil
 	}
 	if err != nil {
-		return domain.AppointmentBillingRecord{}, err
+		return domain.AppointmentBillingRecord{}, clinicalError(err)
 	}
 	rec.InvoiceID = invoiceID
 	return rec, nil
@@ -318,12 +318,13 @@ func (s Store) SetAppointmentFee(ctx context.Context, a domain.Actor, appointmen
 		ON CONFLICT (appointment_id) DO UPDATE SET
 			fee_minor = EXCLUDED.fee_minor,
 			updated_at = clock_timestamp()
+ WHERE appointment_billing.invoice_id IS NULL
 		RETURNING appointment_id::text, fee_minor, invoice_id::text, payment_status, created_at, updated_at
 	`, appointmentID, feeMinor).Scan(
 		&rec.AppointmentID, &rec.FeeMinor, &invoiceID, &rec.PaymentStatus, &rec.CreatedAt, &rec.UpdatedAt,
 	)
 	if err != nil {
-		return domain.AppointmentBillingRecord{}, err
+		return domain.AppointmentBillingRecord{}, clinicalError(err)
 	}
 	rec.InvoiceID = invoiceID
 	return rec, nil
@@ -335,49 +336,14 @@ func (s Store) LinkAppointmentInvoice(ctx context.Context, a domain.Actor, appoi
 		return domain.AppointmentBillingRecord{}, err
 	}
 	defer tx.Rollback(ctx)
-
-	var feeMinor int64
-	err = tx.QueryRow(ctx, `
-		SELECT fee_minor FROM appointment_billing WHERE appointment_id = $1
-	`, appointmentID).Scan(&feeMinor)
-	if errors.Is(err, pgx.ErrNoRows) {
-		feeMinor = 0
-	} else if err != nil {
+	if _, err = linkOperationalInvoice(ctx, tx, a, "appointment", appointmentID, invoiceID, nil); err != nil {
 		return domain.AppointmentBillingRecord{}, err
 	}
-
-	// Link in service_invoice_link for anti-double-billing
-	_, err = tx.Exec(ctx, `
-		INSERT INTO service_invoice_link (invoice_id, source_type, source_id, amount_minor)
-		VALUES ($1, 'appointment', $2, $3)
-		ON CONFLICT (source_type, source_id) DO UPDATE SET
-			invoice_id = EXCLUDED.invoice_id,
-			amount_minor = EXCLUDED.amount_minor
-	`, invoiceID, appointmentID, feeMinor)
-	if err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE appointment_billing SET invoice_id=$2,updated_at=clock_timestamp() WHERE appointment_id=$1`, appointmentID, invoiceID); err != nil {
 		return domain.AppointmentBillingRecord{}, err
 	}
-
-	var rec domain.AppointmentBillingRecord
-	var invID *string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO appointment_billing (appointment_id, fee_minor, invoice_id, payment_status, created_at, updated_at)
-		VALUES ($1, $2, $3, 'paid', clock_timestamp(), clock_timestamp())
-		ON CONFLICT (appointment_id) DO UPDATE SET
-			invoice_id = EXCLUDED.invoice_id,
-			payment_status = 'paid',
-			updated_at = clock_timestamp()
-		RETURNING appointment_id::text, fee_minor, invoice_id::text, payment_status, created_at, updated_at
-	`, appointmentID, feeMinor, invoiceID).Scan(
-		&rec.AppointmentID, &rec.FeeMinor, &invID, &rec.PaymentStatus, &rec.CreatedAt, &rec.UpdatedAt,
-	)
-	if err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return domain.AppointmentBillingRecord{}, err
 	}
-	rec.InvoiceID = invID
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.AppointmentBillingRecord{}, err
-	}
-	return rec, nil
+	return s.AppointmentBilling(ctx, appointmentID)
 }

@@ -23,14 +23,15 @@ type BedAssignment struct {
 }
 
 type BedOccupancyReport struct {
-	TotalBeds      int     `json:"totalBeds"`
-	OccupiedBeds   int     `json:"occupiedBeds"`
-	AvailableBeds  int     `json:"availableBeds"`
-	OccupancyRate  float64 `json:"occupancyRate"`
-	ActiveAdmissions int   `json:"activeAdmissions"`
+	TotalBeds        int     `json:"totalBeds"`
+	OccupiedBeds     int     `json:"occupiedBeds"`
+	AvailableBeds    int     `json:"availableBeds"`
+	OccupancyRate    float64 `json:"occupancyRate"`
+	ActiveAdmissions int     `json:"activeAdmissions"`
 }
 
 type AssignBedInput struct {
+	Version     int    `json:"version"`
 	BedID       string `json:"bedId"`
 	EncounterID string `json:"encounterId"`
 	PatientID   string `json:"patientId"`
@@ -39,7 +40,7 @@ type AssignBedInput struct {
 
 func (i *AssignBedInput) Validate() error {
 	i.Notes = strings.TrimSpace(i.Notes)
-	if !UUIDPattern.MatchString(i.BedID) || !UUIDPattern.MatchString(i.EncounterID) || !UUIDPattern.MatchString(i.PatientID) {
+	if i.Version < 1 || !UUIDPattern.MatchString(i.BedID) || !UUIDPattern.MatchString(i.EncounterID) || !UUIDPattern.MatchString(i.PatientID) {
 		return ErrValidation
 	}
 	if len(i.Notes) > 1000 {
@@ -81,15 +82,15 @@ func (i *AddCareTeamMemberInput) Validate() error {
 // ─── Consultation Registers: Diagnoses, Procedures, Attachments ──────────────
 
 type EncounterDiagnosis struct {
-	ID           string    `json:"id"`
-	EncounterID  string    `json:"encounterId"`
-	ICD10Code    string    `json:"icd10Code"`
-	Description  string    `json:"description"`
-	Category     string    `json:"category"` // provisional, final, differential
-	Status       string    `json:"status"`   // active, resolved, ruled_out
-	DiagnosedBy  string    `json:"diagnosedBy"`
-	DiagnosedAt  time.Time `json:"diagnosedAt"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID          string    `json:"id"`
+	EncounterID string    `json:"encounterId"`
+	ICD10Code   string    `json:"icd10Code"`
+	Description string    `json:"description"`
+	Category    string    `json:"category"` // provisional, final, differential
+	Status      string    `json:"status"`   // active, resolved, ruled_out
+	DiagnosedBy string    `json:"diagnosedBy"`
+	DiagnosedAt time.Time `json:"diagnosedAt"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type AddDiagnosisInput struct {
@@ -244,7 +245,7 @@ type UpdateEncounterBillingInput struct {
 }
 
 func (i *UpdateEncounterBillingInput) Validate() error {
-	if i.BedDays < 0 || i.BedTotalMinor < 0 || i.DoctorFeeMinor < 0 || i.ProcedureFeeMinor < 0 || i.OtherChargesMinor < 0 {
+	if i.BedDays > 36500 || i.BedTotalMinor > 100000000000 || i.DoctorFeeMinor > 100000000000 || i.ProcedureFeeMinor > 100000000000 || i.OtherChargesMinor > 100000000000 || i.BedDays < 0 || i.BedTotalMinor < 0 || i.DoctorFeeMinor < 0 || i.ProcedureFeeMinor < 0 || i.OtherChargesMinor < 0 {
 		return ErrValidation
 	}
 	return nil
@@ -253,20 +254,20 @@ func (i *UpdateEncounterBillingInput) Validate() error {
 // ─── Structured Discharge Summary ─────────────────────────────────────────────
 
 type DischargeSummary struct {
-	EncounterID          string     `json:"encounterId"`
-	AdmissionDiagnosis   string     `json:"admissionDiagnosis"`
-	DischargeDiagnosis   string     `json:"dischargeDiagnosis"`
-	ConditionAtDischarge string     `json:"conditionAtDischarge"` // recovered, improved, unchanged, referred, deceased
-	HospitalCourse       string     `json:"hospitalCourse"`
-	SurgicalProcedures   string     `json:"surgicalProcedures"`
-	DischargeMedications string     `json:"dischargeMedications"`
-	FollowUpAdvice       string     `json:"followUpAdvice"`
-	FollowUpDate         *string    `json:"followUpDate,omitempty"`
-	SignedBy             string     `json:"signedBy"`
-	SignedByName         string     `json:"signedByName,omitempty"`
-	SignedAt             time.Time  `json:"signedAt"`
-	CreatedAt            time.Time  `json:"createdAt"`
-	UpdatedAt            time.Time  `json:"updatedAt"`
+	EncounterID          string    `json:"encounterId"`
+	AdmissionDiagnosis   string    `json:"admissionDiagnosis"`
+	DischargeDiagnosis   string    `json:"dischargeDiagnosis"`
+	ConditionAtDischarge string    `json:"conditionAtDischarge"` // recovered, improved, unchanged, referred, deceased
+	HospitalCourse       string    `json:"hospitalCourse"`
+	SurgicalProcedures   string    `json:"surgicalProcedures"`
+	DischargeMedications string    `json:"dischargeMedications"`
+	FollowUpAdvice       string    `json:"followUpAdvice"`
+	FollowUpDate         *string   `json:"followUpDate,omitempty"`
+	SignedBy             string    `json:"signedBy"`
+	SignedByName         string    `json:"signedByName,omitempty"`
+	SignedAt             time.Time `json:"signedAt"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 func (s *DischargeSummary) Validate() error {

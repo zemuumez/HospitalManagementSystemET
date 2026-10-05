@@ -565,3 +565,14 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 - Private attachments require explicit clinician/admin release. Diagnostic attachments must belong to the order's exact patient and encounter and cannot bypass signed result release through the generic attachment endpoint. Server-derived file metadata is authoritative.
 - Added PostgreSQL regression cases for unassigned access, attribution spoofing, unreleased downloads, release replay, and a real lab upload → clinician review → patient download flow.
 - Validation: uncached `go test -count=1 ./...` against isolated PostgreSQL schema, all migrations, and `go vet ./...` passed. Broader operational review remains in progress.
+
+### Verified operational billing and clinical integrity (2026-10-05)
+
+- [x] Appointment payment status derives from the invoice ledger, including refunds; invoice linking cannot fabricate payment.
+- [x] Source invoice links validate actual delivered source, canonical patient ownership, server price and invoice capacity. Source rows and invoices are locked; repeat links replay safely and a different invoice conflicts.
+- [x] Encounter clearance requires payment, zero charges, or an explicit assistance reason. Linked/cleared charges are frozen.
+- [x] `POST /v1/patient-service-charges` records repeatable delivered service/operation events with an `Idempotency-Key`. Services snapshot catalogue tariffs; operations require an explicit approved amount. Link the returned event ID, not the catalogue ID.
+- [x] Signed structured discharge summaries are retained; corrections use the existing signed discharge addendum workflow after discharge.
+- [x] New bed assignments use the existing versioned transfer transaction, occupancy/state checks and immutable history. Requests must include the current encounter `version`.
+- [x] Payroll excludes inactive staff and patients; money inputs are bounded against overflow. Invoice-source reads enforce invoice ownership.
+- Regression evidence: real PostgreSQL tests cover wrong-patient invoices, duplicate links, payment/refund-derived status, unpaid clearance, signed-summary mutation, service snapshots/replays and patient payroll denial. Uncached Go suite and vet passed.
