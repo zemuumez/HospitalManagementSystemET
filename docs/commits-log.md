@@ -245,5 +245,42 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - Added Amharic localization in `apps/web/src/lib/am.json` for all four modules.
   - Created end-to-end verification script `scripts/verify-four-modules.mjs` verifying navigation, forms, modals, tabs, and UI elements across all 4 modules.
 
-
-
+### 17. Commit `pending` — Services, Pathology, Patients, Medicines, Live Consultations, Review & Sidebar Reorganization
+- **Message**: `feat(workspaces): add Services, Pathology, Patients, Medicines, Live Consultations, and Review with complete screenshot fidelity`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Recreated **Services** workspace (`apps/web/src/components/services-workspace.tsx`) covering 5 sub-tabs with screenshot fidelity:
+    - `insurances`: Insurances table with Name, Service Tax, Discount, Insurance No, Insurance Code, Hospital Rate, Total, and Status toggle. Dedicated full-page `New Insurance` form (Screenshot 185115) with dynamic Disease Details table row addition/removal and real-time total calculation.
+    - `packages`: Medical packages table with Name, Discount, Total, and Status.
+    - `services`: Hospital services list with Name, Quantity, Rate, and Status.
+    - `ambulances`: Ambulances fleet table with Vehicle Number, Vehicle Model, Year Made, Driver Name, Driver License, Driver Contact, Vehicle Type, and Status.
+    - `ambulance-calls`: Emergency ambulance dispatch records with Patient link, Ambulance vehicle, Driver name, Date, and Amount.
+  - Recreated **Pathology** workspace (`apps/web/src/components/pathology-workspace.tsx`) covering 4 sub-tabs:
+    - `pathology-parameters`: Parameters table with Parameter Name, Reference Range, Unit, and Actions (Edit, Delete) matching Screenshot 184427. Interactive `New Pathology Parameter` modal matching Screenshot 184453.
+    - `pathology-categories`: Category list and actions.
+    - `pathology-units`: Unit measurements table and actions.
+    - `pathology-tests`: Pathology tests list with test name, short name, test type, category, charge, and actions.
+  - Recreated **Patients** workspace (`apps/web/src/components/patients-workspace.tsx`) covering 4 sub-tabs:
+    - `patients`: Patient directory matching Screenshots 183748 & 183818 with Patient avatar + name + email, Phone, Blood Group badges (`B+`, `A+`, `O+`, `AB+`), interactive Status toggle, Yellow Key action button opening the Reset Password modal, Edit and Delete actions. Filter dropdown and Excel export. Dedicated full-page `New Patient` form with Address, Social Links, and Avatar upload.
+    - `patient-cases`: Cases table with Case ID, Patient, Date, Phone, Fee, and Status. Dedicated `New Case` form matching Screenshot 184021.
+    - `case-handlers`: Case handlers directory with Handler name, Email, Phone, and Status. Dedicated `New Case Handler` form matching Screenshot 184132.
+    - `patient-admissions`: Inpatient admissions table with Admission ID, Patient, Doctor, Admission Date, Discharge Date, Bed ID, Package, Insurance, and Status. Dedicated `New Patient Admission` form matching Screenshot 184244.
+  - Recreated **Medicines** workspace (`apps/web/src/components/medicines-workspace.tsx`) covering 6 sub-tabs:
+    - `medicines`: Medicines catalogue with Name, Category, Brand, Selling Price, Buying Price, Quantity, and Actions.
+    - `medicine-categories`: Category listing and actions.
+    - `brands`: Manufacturer brands directory.
+    - `purchase-medicines`: Purchase records table matching Screenshot 183418 with Purchase No `#HMS04` badges, Supplier, Total, Payment Method, Status, and Actions dropdown.
+    - `used-medicine`: Log of dispensed and utilized medicines.
+    - `medicine-bills`: Medicine Bills table matching Screenshot 183437 with Bill No, Patient link, Bill Date, Amount, Payment Status, and Actions. Dedicated `Add Medicine Bill` form (Screenshots 183556 & 183610) with dynamic medicine row insertion, tax calculation, discount percentage, bill summary card, and embedded `New Patient` modal (Screenshot 183645).
+  - Recreated **Live Consultation** workspace (`apps/web/src/components/live-consultation-workspace.tsx`) covering 2 sub-tabs:
+    - `live-consultations`: Live consultations table matching Screenshot 182630 with Title, Date (stacked time/date badge), Created By, Created For, Patient, Status (`Finished` green badge / `Awaited` amber badge), Password/Meeting ID, Video Start button, and Delete. Top buttons: `Actions` dropdown (New Live Consultation, Add Credential) and bright green `Connect With Zoom` button. Modals for New Consultation and Add Credential.
+    - `live-meetings`: Live staff/department meetings table matching Screenshot 183109 with Meeting Title, Meeting Date, Created By, Status, Password, and Start action. Modal for `New Live Meeting`.
+  - Recreated **Review** workspace (`apps/web/src/components/review-workspace.tsx`) matching Screenshots 180553 & 180643:
+    - Reviews table with 5-star ratings (gold stars), Patient Name link, Cons. Doctor link, Review text excerpt, Approved status badge, and Action buttons (View eye, Delete trash).
+    - `Review Details` modal matching Screenshot 180643 showing Patient Name, Doctor Name, 5-Star Rating, Created On timestamp, and full Review Comment card.
+  - **Sidebar & Legacy Catalog Reorganization**:
+    - Added `Review` with `Star` icon to sidebar navigation between `Enquiries` and `Finances`.
+    - Added `Finances`, `Inventories`, `Live Consultations`, `Pathology`, `Services`, and `SMS/Mail` icons and routes.
+    - Registered all subtab routes in `workspace.tsx` group resolution fallback so tabs switch smoothly.
+    - Added dedicated CSS classes and light-mode overrides in `apps/web/src/app/globals.css`.
+    - Extended Amharic translations dictionary in `apps/web/src/lib/am.json`.

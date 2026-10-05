@@ -12,6 +12,12 @@ import { BloodBankWorkspace } from "@/components/blood-bank-workspace";
 import { DoctorsWorkspace } from "@/components/doctors-workspace";
 import { PrescriptionsWorkspace } from "@/components/prescriptions-workspace";
 import { DiagnosisWorkspace } from "@/components/diagnosis-workspace";
+import { ServicesWorkspace } from "@/components/services-workspace";
+import { PathologyWorkspace } from "@/components/pathology-workspace";
+import { PatientsWorkspace } from "@/components/patients-workspace";
+import { MedicinesWorkspace } from "@/components/medicines-workspace";
+import { LiveConsultationWorkspace } from "@/components/live-consultation-workspace";
+import { ReviewWorkspace } from "@/components/review-workspace";
 import { notFound } from "next/navigation";
 import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
@@ -22,6 +28,55 @@ export default async function ModulePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  if (
+    [
+      "insurances",
+      "packages",
+      "services",
+      "ambulances",
+      "ambulance-calls",
+    ].includes(slug)
+  )
+    return <ServicesWorkspace key={slug} id={slug} />;
+  if (
+    [
+      "pathology-categories",
+      "pathology-units",
+      "pathology-parameters",
+      "pathology-tests",
+    ].includes(slug)
+  )
+    return <PathologyWorkspace key={slug} id={slug} />;
+  if (
+    [
+      "patients",
+      "patient-cases",
+      "case-handlers",
+      "patient-admissions",
+    ].includes(slug)
+  )
+    return <PatientsWorkspace key={slug} id={slug} />;
+  if (
+    [
+      "medicine-categories",
+      "brands",
+      "medicines",
+      "purchase-medicines",
+      "used-medicine",
+      "medicine-bills",
+    ].includes(slug)
+  )
+    return <MedicinesWorkspace key={slug} id={slug} />;
+  if (
+    [
+      "live-consultations",
+      "live-consultations-live-meetings",
+      "live-meetings",
+    ].includes(slug)
+  )
+    return <LiveConsultationWorkspace key={slug} id={slug} />;
+  if (["reviews", "review"].includes(slug))
+    return <ReviewWorkspace key={slug} id={slug} />;
   if (
     [
       "blood-banks",

@@ -23,6 +23,11 @@ import {
   Search,
   Settings,
   ShieldPlus,
+  ShieldCheck,
+  Star,
+  Video,
+  FlaskConical,
+  Package,
   Stethoscope,
   Users,
   X,
@@ -162,7 +167,48 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                     "/modules/patient-diagnosis-test",
                   ].includes(path)
                 ? "Diagnosis"
-                : undefined);
+                : [
+                      "/modules/patients",
+                      "/patients",
+                      "/modules/patient-cases",
+                      "/modules/case-handlers",
+                      "/modules/patient-admissions",
+                    ].includes(path)
+                  ? "Patients"
+                  : [
+                        "/modules/medicine-categories",
+                        "/modules/brands",
+                        "/modules/medicines",
+                        "/modules/purchase-medicines",
+                        "/modules/used-medicine",
+                        "/modules/medicine-bills",
+                      ].includes(path)
+                    ? "Medicines"
+                    : [
+                          "/modules/pathology-categories",
+                          "/modules/pathology-units",
+                          "/modules/pathology-parameters",
+                          "/modules/pathology-tests",
+                        ].includes(path)
+                      ? "Pathology"
+                      : [
+                            "/modules/insurances",
+                            "/modules/packages",
+                            "/modules/services",
+                            "/modules/ambulances",
+                            "/modules/ambulance-calls",
+                          ].includes(path)
+                        ? "Services"
+                        : [
+                              "/modules/live-consultations",
+                              "/modules/live-consultations-live-meetings",
+                            ].includes(path)
+                          ? "Live Consultations"
+                          : ["/modules/review", "/modules/reviews"].includes(
+                                path,
+                              )
+                            ? "Review"
+                            : undefined);
   useEffect(() => {
     api<Identity>("me")
       .then((result) => {
@@ -260,11 +306,18 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                             "IPD - Patient In": BedDouble,
                             "OPD - Patient Out": Stethoscope,
                             Billings: CreditCard,
+                            Finances: CreditCard,
                             "Bed Management": BedDouble,
                             "Blood Banks": Droplets,
                             Doctors: Stethoscope,
                             Medicines: Pill,
                             Patients: Users,
+                            Pathology: FlaskConical,
+                            Services: ShieldCheck,
+                            Inventories: Package,
+                            "Live Consultations": Video,
+                            Review: Star,
+                            "SMS/Mail": Mail,
                             Settings,
                             Prescriptions: FileText,
                             Odontogram: HeartPulse,
