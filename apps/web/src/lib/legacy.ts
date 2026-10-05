@@ -184,6 +184,11 @@ const groupNames: Record<string, string> = {
 export const screens: Screen[] = [
   ...source.map((s) => ({ ...s, ...overrides[s.id] })),
   extra("attendance", "Attendance", "Attendance"),
+  extra("attendance-report", "Daily Report", "Attendance"),
+  extra("attendance-shifts", "Shifts", "Attendance"),
+  extra("attendance-assignments", "Duty Assignments", "Attendance"),
+  extra("attendance-leaves", "Leave Requests", "Attendance"),
+  extra("attendance-requests", "Attendance Requests", "Attendance"),
   extra("manage-attendance", "Manage Attendance", "Manage Attendance"),
   extra("modules-setting", "Modules Setting", "Settings"),
   extra("patient-queue-theme", "Patient Queue Theme", "Settings"),

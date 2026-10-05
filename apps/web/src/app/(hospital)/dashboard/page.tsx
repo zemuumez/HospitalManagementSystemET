@@ -9,7 +9,6 @@ import {
   BedDouble,
   Users,
   Stethoscope,
-  CalendarDays,
   ShieldPlus,
   BriefcaseMedical,
   FlaskConical,
@@ -17,9 +16,7 @@ import {
   UserRound,
   LockKeyhole,
 } from "lucide-react";
-import { useState } from "react";
 import { usePreviewRole } from "@/components/workspace";
-import { visibleGroups, screens } from "@/lib/legacy";
 import { RoleDashboard } from "@/components/role-portal";
 const widgets = [
   ["Invoice Amount", "12,500", "invoices", CreditCard],
@@ -38,11 +35,10 @@ const widgets = [
 export default function Dashboard() {
   const { t } = useLanguage();
   const role = usePreviewRole();
-  const allowed = visibleGroups(role);
-  const [period, setPeriod] = useState("This Month");
   if (role !== "Admin") return <RoleDashboard />;
   return (
     <section>
+      <h1 className="sr-only">{t("Dashboard")}</h1>
       <div className="dashboard-widgets">
         {widgets.map(([title, value, slug, Icon], i) => (
           <Link

@@ -752,20 +752,36 @@ const templateSeed: CardTemplate[] = [
 type CardRow = { id: string; patient: number; template: string };
 function SmartCards({ templates }: { templates: boolean }) {
   const { t } = useLanguage();
-  const [list, setList] = useState(templateSeed);
-  const [cards, setCards] = useState<CardRow[]>(
-    people.map((_, i) => ({
+  const [list, setList] = useState<CardTemplate[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("hms-card-templates");
+        if (stored) return JSON.parse(stored);
+      } catch {}
+    }
+    return templateSeed;
+  });
+  const [cards, setCards] = useState<CardRow[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("hms-smart-cards");
+        if (stored) return JSON.parse(stored);
+      } catch {}
+    }
+    return people.map((_, i) => ({
       id: `CARD-${i + 1}`,
       patient: i,
       template: "Standard",
-    })),
-  );
+    }));
+  });
   const [editing, setEditing] = useState<CardTemplate | null>(null);
   const [originalName, setOriginalName] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState("");
   const [create, setCreate] = useState(false);
   const [selected, setSelected] = useState<CardRow | null>(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(10);
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try {
@@ -790,6 +806,15 @@ function SmartCards({ templates }: { templates: boolean }) {
       sessionStorage.setItem("hms-smart-cards", JSON.stringify(cards));
     }
   }, [list, cards, ready]);
+  const filteredTemplates = list.filter((row) =>
+    row.name.toLowerCase().includes(search.toLowerCase()),
+  );
+  const filteredCards = cards.filter((row) =>
+    people[row.patient].toLowerCase().includes(search.toLowerCase()),
+  );
+  const count = templates ? filteredTemplates.length : filteredCards.length;
+  const pages = Math.max(1, Math.ceil(count / pageSize));
+  const current = Math.min(page, pages);
   const selectedTemplate =
     list.find((x) => x.name === selected?.template) ||
     list[0] ||
@@ -834,7 +859,10 @@ function SmartCards({ templates }: { templates: boolean }) {
             aria-label={t("Search cards")}
             placeholder={t("Search")}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
       </div>
@@ -861,10 +889,8 @@ function SmartCards({ templates }: { templates: boolean }) {
           </thead>
           <tbody>
             {templates
-              ? list
-                  .filter((x) =>
-                    x.name.toLowerCase().includes(search.toLowerCase()),
-                  )
+              ? filteredTemplates
+                  .slice((current - 1) * pageSize, current * pageSize)
                   .map((template) => (
                     <tr key={template.name}>
                       <td>{template.name}</td>
@@ -891,15 +917,20 @@ function SmartCards({ templates }: { templates: boolean }) {
                             role="switch"
                             aria-label={`${template.name} ${key}`}
                             checked={template[key] !== false}
-                            onChange={(e) =>
-                              setList(
-                                list.map((row) =>
-                                  row.name === template.name
-                                    ? { ...row, [key]: e.target.checked }
-                                    : row,
-                                ),
-                              )
-                            }
+                            onChange={(e) => {
+                              const next = list.map((row) =>
+                                row.name === template.name
+                                  ? { ...row, [key]: e.target.checked }
+                                  : row,
+                              );
+                              setList(next);
+                              try {
+                                sessionStorage.setItem(
+                                  "hms-card-templates",
+                                  JSON.stringify(next),
+                                );
+                              } catch {}
+                            }}
                           />
                         </td>
                       ))}
@@ -940,12 +971,8 @@ function SmartCards({ templates }: { templates: boolean }) {
                       </td>
                     </tr>
                   ))
-              : cards
-                  .filter((c) =>
-                    people[c.patient]
-                      .toLowerCase()
-                      .includes(search.toLowerCase()),
-                  )
+              : filteredCards
+                  .slice((current - 1) * pageSize, current * pageSize)
                   .map((card) => (
                     <tr key={card.id}>
                       <td>
@@ -998,9 +1025,12 @@ function SmartCards({ templates }: { templates: boolean }) {
                           </button>
                           <button
                             aria-label={`Delete card ${people[card.patient]}`}
-                            onClick={() =>
-                              setCards(cards.filter((c) => c.id !== card.id))
-                            }
+                            onClick={() => {
+                              if (
+                                window.confirm(t("Delete this patient card?"))
+                              )
+                                setCards(cards.filter((c) => c.id !== card.id));
+                            }}
                           >
                             <Trash2 size={18} />
                           </button>
@@ -1010,6 +1040,39 @@ function SmartCards({ templates }: { templates: boolean }) {
                   ))}
           </tbody>
         </table>
+      </div>
+      <div className="reference-pagination">
+        <label>
+          {t("Show")}
+          <select
+            className="field"
+            aria-label="Rows per page"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            {[10, 25, 50].map((n) => (
+              <option key={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <span>
+          {t("Showing")} {count ? (current - 1) * pageSize + 1 : 0} -{" "}
+          {Math.min(current * pageSize, count)} {t("of")} {count} {t("Results")}
+        </span>
+        <div>
+          {Array.from({ length: pages }, (_, i) => (
+            <button
+              key={i}
+              className={current === i + 1 ? "primary" : "secondary"}
+              onClick={() => setPage(i + 1)}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
       </div>
       {editing && (
         <Modal titleId="template-title" onClose={() => setEditing(null)}>
@@ -1250,7 +1313,9 @@ function SmartCard({
             src={`/legacy/front/card-${patient + 1}.svg`}
             alt={`Demo QR identifier ${patient + 1}`}
           />
-          <strong>DEMO-{String(patient + 1).padStart(4, "0")}</strong>
+          {template.uniqueId !== false && (
+            <strong>DEMO-{String(patient + 1).padStart(4, "0")}</strong>
+          )}
         </div>
       </div>
     </article>
@@ -1291,7 +1356,8 @@ async function downloadCard(card: CardRow, template: CardTemplate) {
   await qr.decode();
   ctx.drawImage(qr, 790, 150, 170, 170);
   ctx.font = "20px Arial";
-  ctx.fillText(`DEMO-${String(card.patient + 1).padStart(4, "0")}`, 805, 350);
+  if (template.uniqueId !== false)
+    ctx.fillText(`DEMO-${String(card.patient + 1).padStart(4, "0")}`, 805, 350);
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");
   a.download = `preview-patient-card-${card.patient + 1}.png`;

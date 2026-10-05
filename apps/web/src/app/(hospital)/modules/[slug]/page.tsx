@@ -1,3 +1,6 @@
+import { EncounterRegister } from "@/components/encounter-register";
+import { AttendanceWorkspace } from "@/components/attendance-workspace";
+import { OdontogramRegister } from "@/components/odontogram-register";
 import {
   ConnectedUsers,
   ConnectedSchedules,
@@ -20,15 +23,22 @@ export default async function ModulePage({
   const { slug } = await params;
   const screen = screens.find((s) => s.id === slug);
   if (!screen) notFound();
+  if (
+    slug === "attendance" ||
+    slug.startsWith("attendance-") ||
+    slug === "manage-attendance"
+  )
+    return <AttendanceWorkspace key={slug} id={slug} />;
+  if (slug === "odontogram") return <OdontogramRegister />;
   if (slug === "accounts") return <ConnectedAccounts />;
   if (slug === "invoices") return <ConnectedInvoices />;
   if (slug === "beds" || slug === "bed-status")
     return <ConnectedClinical mode="beds" />;
   if (slug === "patient-cases") return <ConnectedClinical mode="cases" />;
   if (slug === "ipd-patient-departments")
-    return <ConnectedClinical mode="ipd" />;
+    return <EncounterRegister kind="ipd" />;
   if (slug === "opd-patient-departments")
-    return <ConnectedClinical mode="opd" />;
+    return <EncounterRegister kind="opd" />;
   if (slug === "users") return <ConnectedUsers />;
   if (slug === "schedules") return <ConnectedSchedules />;
   if (slug === "appointments") return <ConnectedAppointments />;
