@@ -245,7 +245,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - Added Amharic localization in `apps/web/src/lib/am.json` for all four modules.
   - Created end-to-end verification script `scripts/verify-four-modules.mjs` verifying navigation, forms, modals, tabs, and UI elements across all 4 modules.
 
-### 17. Commit `pending` — Services, Pathology, Patients, Medicines, Live Consultations, Review & Sidebar Reorganization
+### 17. Commit `27c9549` — Services, Pathology, Patients, Medicines, Live Consultations, Review & Sidebar Reorganization
 - **Message**: `feat(workspaces): add Services, Pathology, Patients, Medicines, Live Consultations, and Review with complete screenshot fidelity`
 - **Branch**: `main`
 - **Scope & Features**:
