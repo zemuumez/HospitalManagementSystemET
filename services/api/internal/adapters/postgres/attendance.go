@@ -182,7 +182,7 @@ func (s Store) resolveShift(ctx context.Context, q interface {
 }
 
 func (s Store) GetTodayRecord(ctx context.Context, actor domain.Actor, staffID string, workDate string) (*domain.AttendanceRecord, error) {
-	row := s.DB.QueryRow(ctx, `SELECT r.id, r.staff_id, u.name, r.work_date::text, r.shift_id, s.name, r.check_in_at, r.check_out_at, r.status, r.approval_status, r.total_break_minutes, r.worked_minutes, r.late_minutes, r.early_out_minutes, r.overtime_minutes, r.source, r.admin_notes, r.version, r.created_at, r.updated_at FROM attendance_record r JOIN "user" u ON u.id=r.staff_id JOIN attendance_shift s ON s.id=r.shift_id WHERE r.staff_id=$1 AND r.work_date=$2::date`, staffID, workDate)
+	row := s.DB.QueryRow(ctx, `SELECT r.id, r.staff_id, u.name, r.work_date::text, r.shift_id, s.name, r.check_in_at, r.check_out_at, r.status, r.approval_status, r.total_break_minutes, r.worked_minutes, r.late_minutes, r.early_out_minutes, r.overtime_minutes, r.source, r.admin_notes, r.version, r.created_at, r.updated_at FROM attendance_record r JOIN "user" u ON u.id=r.staff_id JOIN attendance_shift s ON s.id=r.shift_id WHERE r.staff_id=$1 AND (r.work_date=$2::date OR r.check_out_at IS NULL) ORDER BY (r.check_out_at IS NULL) DESC, r.check_in_at DESC LIMIT 1`, staffID, workDate)
 
 	var rec domain.AttendanceRecord
 	err := row.Scan(&rec.ID, &rec.StaffID, &rec.StaffName, &rec.WorkDate, &rec.ShiftID, &rec.ShiftName, &rec.CheckInAt, &rec.CheckOutAt, &rec.Status, &rec.ApprovalStatus, &rec.TotalBreakMinutes, &rec.WorkedMinutes, &rec.LateMinutes, &rec.EarlyOutMinutes, &rec.OvertimeMinutes, &rec.Source, &rec.AdminNotes, &rec.Version, &rec.CreatedAt, &rec.UpdatedAt)
@@ -230,6 +230,9 @@ func (s Store) ClockIn(ctx context.Context, actor domain.Actor, staffID string, 
 		return rec, err
 	}
 	defer tx.Rollback(ctx)
+	if replay, e := attendanceReplay(ctx, tx, actor.ID, "clock-in", key, []string{staffID, shiftID}, &rec); e != nil || replay {
+		return rec, e
+	}
 
 	// Lock on staff to prevent concurrent duplicate check-ins
 	var lockedID string
@@ -238,7 +241,7 @@ func (s Store) ClockIn(ctx context.Context, actor domain.Actor, staffID string, 
 	}
 
 	var existingID string
-	if err = tx.QueryRow(ctx, `SELECT id FROM attendance_record WHERE staff_id=$1 AND work_date=$2::date`, staffID, workDate).Scan(&existingID); err == nil {
+	if err = tx.QueryRow(ctx, `SELECT id FROM attendance_record WHERE staff_id=$1 AND (work_date=$2::date OR check_out_at IS NULL)`, staffID, workDate).Scan(&existingID); err == nil {
 		return rec, domain.ErrConflict
 	}
 
@@ -266,6 +269,9 @@ func (s Store) ClockIn(ctx context.Context, actor domain.Actor, staffID string, 
 		return rec, err
 	}
 
+	if err = attendanceRemember(ctx, tx, actor.ID, "clock-in", key, []string{staffID, shiftID}, rec); err != nil {
+		return rec, err
+	}
 	return rec, tx.Commit(ctx)
 }
 
@@ -276,6 +282,9 @@ func (s Store) ClockOut(ctx context.Context, actor domain.Actor, staffID string,
 		return rec, err
 	}
 	defer tx.Rollback(ctx)
+	if replay, e := attendanceReplay(ctx, tx, actor.ID, "clock-out", key, staffID, &rec); e != nil || replay {
+		return rec, e
+	}
 
 	// Find the latest open record for this staff member
 	var recordID string
@@ -342,6 +351,9 @@ func (s Store) ClockOut(ctx context.Context, actor domain.Actor, staffID string,
 		return rec, err
 	}
 
+	if err = attendanceRemember(ctx, tx, actor.ID, "clock-out", key, staffID, rec); err != nil {
+		return rec, err
+	}
 	return rec, tx.Commit(ctx)
 }
 
@@ -352,6 +364,9 @@ func (s Store) StartBreak(ctx context.Context, actor domain.Actor, staffID strin
 		return b, err
 	}
 	defer tx.Rollback(ctx)
+	if replay, e := attendanceReplay(ctx, tx, actor.ID, "break-start", key, []string{staffID, reason}, &b); e != nil || replay {
+		return b, e
+	}
 
 	var recordID string
 	err = tx.QueryRow(ctx, `SELECT id FROM attendance_record WHERE staff_id=$1 AND check_out_at IS NULL ORDER BY check_in_at DESC LIMIT 1 FOR UPDATE`, staffID).Scan(&recordID)
@@ -378,6 +393,9 @@ func (s Store) StartBreak(ctx context.Context, actor domain.Actor, staffID strin
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'attendance.break_started', $2)`, actor.ID, b.ID); err != nil {
 		return b, err
 	}
+	if err = attendanceRemember(ctx, tx, actor.ID, "break-start", key, []string{staffID, reason}, b); err != nil {
+		return b, err
+	}
 	return b, tx.Commit(ctx)
 }
 
@@ -388,6 +406,9 @@ func (s Store) EndBreak(ctx context.Context, actor domain.Actor, staffID string,
 		return b, err
 	}
 	defer tx.Rollback(ctx)
+	if replay, e := attendanceReplay(ctx, tx, actor.ID, "break-end", key, staffID, &b); e != nil || replay {
+		return b, e
+	}
 
 	var recordID string
 	err = tx.QueryRow(ctx, `SELECT id FROM attendance_record WHERE staff_id=$1 AND check_out_at IS NULL ORDER BY check_in_at DESC LIMIT 1 FOR UPDATE`, staffID).Scan(&recordID)
@@ -426,6 +447,9 @@ func (s Store) EndBreak(ctx context.Context, actor domain.Actor, staffID string,
 	}
 
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'attendance.break_ended', $2)`, actor.ID, b.ID); err != nil {
+		return b, err
+	}
+	if err = attendanceRemember(ctx, tx, actor.ID, "break-end", key, staffID, b); err != nil {
 		return b, err
 	}
 	return b, tx.Commit(ctx)
@@ -577,14 +601,17 @@ func (s Store) AdminCreateRecord(ctx context.Context, actor domain.Actor, input 
 		return rec, err
 	}
 	defer tx.Rollback(ctx)
+	if replay, e := attendanceReplay(ctx, tx, actor.ID, "admin-create", key, input, &rec); e != nil || replay {
+		return rec, e
+	}
 
 	var staffActive bool
-	if err = tx.QueryRow(ctx, `SELECT active FROM staff_access WHERE user_id=$1`, input.StaffID).Scan(&staffActive); err != nil || !staffActive {
+	if err = tx.QueryRow(ctx, `SELECT active FROM staff_access WHERE user_id=$1 FOR UPDATE`, input.StaffID).Scan(&staffActive); err != nil || !staffActive {
 		return rec, domain.ErrValidation
 	}
 
 	var existingID string
-	if err = tx.QueryRow(ctx, `SELECT id FROM attendance_record WHERE staff_id=$1 AND work_date=$2::date`, input.StaffID, input.WorkDate).Scan(&existingID); err == nil {
+	if err = tx.QueryRow(ctx, `SELECT id FROM attendance_record WHERE staff_id=$1 AND (work_date=$2::date OR ($3 AND check_out_at IS NULL))`, input.StaffID, input.WorkDate, input.CheckOutAt == nil).Scan(&existingID); err == nil {
 		return rec, domain.ErrConflict
 	}
 
@@ -614,6 +641,9 @@ func (s Store) AdminCreateRecord(ctx context.Context, actor domain.Actor, input 
 		return rec, err
 	}
 
+	if err = attendanceRemember(ctx, tx, actor.ID, "admin-create", key, input, rec); err != nil {
+		return rec, err
+	}
 	return rec, tx.Commit(ctx)
 }
 
@@ -637,6 +667,10 @@ func (s Store) AdminCorrectRecord(ctx context.Context, actor domain.Actor, id st
 
 	if before.Version != input.Version {
 		return rec, domain.ErrStale
+	}
+
+	if (before.ApprovalStatus == "approved" || before.ApprovalStatus == "submitted") && input.CheckOutAt == nil {
+		return rec, domain.ErrConflict
 	}
 
 	// Load shift
@@ -706,6 +740,17 @@ func (s Store) AdminUpdateApproval(ctx context.Context, actor domain.Actor, id s
 	}
 	if err != nil {
 		return rec, err
+	}
+
+	if (input.Status == "submitted" || input.Status == "approved") && before.CheckOutAt == nil {
+		return rec, domain.ErrConflict
+	}
+	var openBreak bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attendance_break WHERE attendance_record_id=$1 AND end_at IS NULL)`, id).Scan(&openBreak); err != nil {
+		return rec, err
+	}
+	if openBreak && (input.Status == "submitted" || input.Status == "approved") {
+		return rec, domain.ErrConflict
 	}
 
 	if before.ApprovalStatus == input.Status {

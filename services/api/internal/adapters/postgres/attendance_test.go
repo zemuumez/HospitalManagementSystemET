@@ -222,6 +222,9 @@ func testAttendance(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	}
 
 	// 6. Overnight Shift Workflow
+	if _, err = appTime.ClockOut(ctx, nurse, "nurse-day-out"); err != nil {
+		t.Fatalf("close nurse day shift before night shift: %v", err)
+	}
 	nightShift, err := store.resolveShift(ctx, nil, "any", "2026-10-06", "")
 	for _, s := range shifts {
 		if s.IsOvernight {

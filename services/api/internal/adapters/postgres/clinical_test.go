@@ -423,4 +423,7 @@ func TestClinicalTransactions(t *testing.T) {
 	testLiveConsultations(t, db, store, actors, patients)
 	testPharmacyBloodBank(t, db, store, actors, patients, cases)
 	testFinancePayroll(t, db, store, actors, patients, cases)
+	testAttendanceRetry(t, db, store, actors)
+	testAttendanceLifecycle(t, db, store, actors)
+
 }
