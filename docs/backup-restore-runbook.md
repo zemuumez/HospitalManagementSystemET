@@ -1,83 +1,26 @@
-# Automated Backup, Encryption, Retention, and Restore Drill Runbook
+# Database backup and restore
 
-## 1. Objectives & RPO/RTO Targets
+The repository contains tested manual database backup/restore tooling. Scheduling, off-host storage, production recovery targets and an approved retention policy still need deployment configuration. A database dump does not include private attachment bytes; take a coordinated encrypted filesystem snapshot of `HMS_ATTACHMENT_DIR` and retain its manifest with the database backup. Do not claim a complete hospital recovery drill until those files and the application are verified together.
 
-| Metric | Target | Verification Method |
-| :--- | :--- | :--- |
-| **Recovery Point Objective (RPO)** | $\le 1\text{ hour}$ | Hourly WAL archiving / daily full snapshots + continuous log shipping |
-| **Recovery Time Objective (RTO)** | $\le 15\text{ minutes}$ | Automated decryption and parallel pg_restore test drill |
-| **Data Confidentiality** | AES-256-CBC with PBKDF2 | Zero plaintext backups at rest; keys stored separately in KMS/Vault |
-| **Integrity Assurance** | SHA-256 pre/post hashing | Tamper-proof JSON manifests verified before decryption/restore |
+## Setup
 
----
+1. Install Node.js and PostgreSQL client tools matching the server major version. Set `PG_BIN` to their directory if they are not on PATH (Windows example: `C:/Program Files/PostgreSQL/18/bin`).
+2. Generate a random 32-byte key with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`. Store it in a password manager or secret store, separately from backups. Supply it through `BACKUP_ENCRYPTION_KEY`. The example environment deliberately leaves this blank.
+3. Supply `DATABASE_URL` privately. Set `BACKUP_DIR` and optionally `BACKUP_RETENTION_DAYS` (default 30; this is a configurable engineering default, not a legal retention recommendation).
+4. Run `node scripts/database-backup.mjs backup <directory>`, or `scripts/backup.ps1` / `scripts/backup.sh`. Both wrappers use the same implementation.
+5. Store the resulting `.enc` and `.enc.json` together. Version 2 uses AES-256-GCM, a fresh nonce, authentication tag and ciphertext/plaintext SHA-256 checks. The manifest is not independently signed; authenticated decryption detects ciphertext/tag modification. Plaintext staging uses a private temporary file and is removed after execution. Protect the OS temporary volume and backup-directory ACLs.
+6. Configure the scheduler/off-host copy separately, monitor failures, and test key recovery. Retention prunes only paired files created by this format after a new backup succeeds. Older CBC-format files are not accepted by this tool; restore those only through a separately reviewed legacy procedure.
 
-## 2. Automated Backup Execution
+## Restore
 
-### 2.1 Daily Scheduled Backup Job
-Backups run automatically via cron / systemd timer / Windows Scheduled Task.
+1. Create a new empty database on an isolated host. Set `RESTORE_DATABASE_URL` explicitly; there is no fallback to the normal database URL.
+2. Supply the matching backup key and run `node scripts/database-backup.mjs restore <backup.enc>`.
+3. The tool verifies the manifest, authenticates decryption, checks the plaintext digest, and rejects a nonempty target. It uses `pg_restore --exit-on-error --single-transaction`; it never uses `--clean` and never converts errors to success.
+4. Compare table counts, retained audit records, source identifiers and financial sums with the source export. Run the reconciliation tool and application QA, and restore/verify the separately backed-up private attachment directory.
+5. A restore does not switch application traffic. Cutover requires its own verified migration and rollback procedure.
 
-**Windows (PowerShell):**
-```powershell
-$env:DATABASE_URL = "postgres://hms_admin:secret@localhost:5432/hms_prod?sslmode=disable"
-$env:BACKUP_ENCRYPTION_KEY = "k3y_fr0m_s3cur3_v4ult"
-.\scripts\backup.ps1 -BackupDir "D:\HMS_Backups" -RetentionDays 30
-```
+## Executed evidence
 
-**Linux (Bash):**
-```bash
-export DATABASE_URL="postgres://hms_admin:secret@localhost:5432/hms_prod?sslmode=disable"
-export BACKUP_ENCRYPTION_KEY="k3y_fr0m_s3cur3_v4ult"
-./scripts/backup.sh
-```
+`node scripts/verify-backup-restore.mjs` uses two generated loopback-only databases and synthetic patient/audit records. On 2026-10-05 it passed encrypted backup, exact data restoration, wrong-key denial, tampering denial and nonempty-target denial, then removed only its generated databases. This is a tooling regression drill, not evidence of production RPO/RTO, live-data migration or off-host disaster recovery.
 
-### 2.2 Retention Policy
-- **Daily Backups**: Kept for 30 days locally and replicated to off-site cloud cold storage.
-- **Monthly Backups**: Kept for 7 years for medical compliance and tax audit requirements.
-- **Automatic Pruning**: Backups older than the retention threshold are automatically purged by the script after manifest generation.
-
----
-
-## 3. Demonstrated Restore Drill Procedure
-
-The disaster recovery team must execute this drill quarterly on an isolated staging instance.
-
-### Step 1: Isolate the Drill Environment
-Ensure `TARGET_DB_URL` points to the designated drill database (e.g. `hms_drill_restore`), never production:
-```bash
-createdb -U postgres hms_drill_restore
-```
-
-### Step 2: Run Restore Script with Checksum Verification
-```powershell
-.\scripts\restore.ps1 -BackupFile "backups\hms_backup_20261005_020000.enc" -TargetDbUrl "postgres://postgres:secret@localhost:5432/hms_drill_restore?sslmode=disable"
-```
-
-The script will:
-1. Parse `hms_backup_20261005_020000.manifest.json`.
-2. Compute the SHA-256 hash of the `.enc` file and abort immediately if any byte has changed.
-3. Decrypt the dump into a temporary memory/disk buffer.
-4. Run `pg_restore --clean --if-exists`.
-5. Execute smoke tests verifying core table integrity (`patient`, `"user"`, `encounter`).
-
-### Step 3: Run Post-Restore Reconciliation Drill
-Run the automated reconciliation tool against the restored database:
-```bash
-go run scripts/reconcile_import.go -db "postgres://postgres:secret@localhost:5432/hms_drill_restore?sslmode=disable" -out drill_report.json
-```
-Verify `drill_report.json` contains:
-```json
-{
-  "status": "PASS",
-  "integrityRules": {
-    "zero_orphan_appointments": { "passed": true, "violations": 0 },
-    "zero_orphan_encounters": { "passed": true, "violations": 0 },
-    "non_negative_invoices": { "passed": true, "violations": 0 }
-  }
-}
-```
-
-### Step 4: Cleanup & Drill Sign-off
-```bash
-dropdb -U postgres hms_drill_restore
-```
-Log the drill timestamp, operator ID, time taken (RTO achieved), and sign off in the compliance log.
+Run it with private `DATABASE_URL` and `PG_BIN` configured; it generates its own temporary encryption key. The normal development database is never restored or cleared.

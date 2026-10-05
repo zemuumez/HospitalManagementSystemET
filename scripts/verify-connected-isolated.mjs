@@ -1,4 +1,6 @@
 import { Pool } from "pg";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 import { randomBytes } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import {
@@ -149,7 +151,7 @@ try {
     const emulator = start(
       process.execPath,
       [
-        resolve(root, "node_modules/firebase-tools/lib/bin/firebase.js"),
+        require.resolve("firebase-tools/lib/bin/firebase.js"),
         "emulators:start",
         "--only",
         "auth",
@@ -183,6 +185,21 @@ try {
       TWILIO_FROM: "",
     });
   }
+  execFileSync(
+    "go",
+    [
+      "run",
+      resolve(root, "scripts/reconcile_import.go"),
+      "-out",
+      resolve(root, `.local/reconciliation-${token}.json`),
+    ],
+    {
+      cwd: resolve(root, "services/api"),
+      env,
+      stdio: "inherit",
+      windowsHide: true,
+    },
+  );
   const binary = resolve(
     root,
     `services/api/bin/qa-api${process.platform === "win32" ? ".exe" : ""}`,
@@ -210,7 +227,7 @@ try {
   const web = start(
     process.execPath,
     [
-      resolve(root, "node_modules/next/dist/bin/next"),
+      require.resolve("next/dist/bin/next"),
       "dev",
       "--hostname",
       "127.0.0.1",
