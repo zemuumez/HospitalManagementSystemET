@@ -467,3 +467,10 @@ Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi
 
 PostgreSQL and HTTP tests verify: all role permissions and denials, cross-staff ID isolation, concurrent check-ins and stale updates, overlapping breaks, overnight shifts crossing EAT midnight, reasoned corrections, approval state transitions, database trigger immutability, and API error codes. See contract in [backend attendance contract](backend-attendance-contract.md). Frontend integration deferred to Section 4.
 
+
+### Attendance review acceptance (2026-10-05)
+- [x] Reproduced and repaired keyed retry failures for clock-in/out, breaks and manual creation; concurrent identical retries return the original result.
+- [x] Reproduced and repaired overlapping overnight open records and midnight lookup; database guard added.
+- [x] Reproduced and repaired approval of unfinished records; approved totals survive subsequent clock-out attempts.
+- [x] Uncached isolated PostgreSQL/Go suite and go vet passed after repairs.
+- [ ] Attendance frontend integration and full browser journey remain Section 4 work; broader operational branch acceptance remains pending.

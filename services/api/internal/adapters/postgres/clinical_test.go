@@ -417,5 +417,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testAddenda(t, db, store, actors, cases)
 	testAttendance(t, db, store, actors)
 	testAttendanceRetry(t, db, store, actors)
+	testAttendanceLifecycle(t, db, store, actors)
 
 }
