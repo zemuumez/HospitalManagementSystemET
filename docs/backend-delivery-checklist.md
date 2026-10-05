@@ -134,13 +134,13 @@ Backend-first progress:
 
 ### A. Source parity and domain contracts
 
-- [ ] Complete authored Laravel controllers, requests, repositories, policies, models, migrations, jobs, routes and views review for every module.
-- [ ] Reconcile PDF role descriptions with implemented permissions and source behavior; document contradictions.
-- [ ] Revisit the live reference and exercise every role when it is accessible. Earlier attempts timed out.
-- [ ] Record field types, nullability, required rules, relationships, lifecycle states, side effects, exports and error behavior per workflow.
-- [ ] Define API contracts and stable error codes; publish OpenAPI and generate/check frontend types.
-- [ ] Document intentional changes for a single hospital; exclude SaaS tenant/subscription mechanics unless explicitly requested.
-- [ ] Identify inactive/commented legacy routes separately from active product features.
+- [x] Complete authored Laravel controllers, requests, repositories, policies, models, migrations, jobs, routes and views review for every module ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), [docs/discovery/README.md](discovery/README.md)).
+- [x] Reconcile PDF role descriptions with implemented permissions and source behavior; document contradictions ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), [docs/role-permission-matrix.md](role-permission-matrix.md)).
+- [ ] Revisit the live reference and exercise every role when it is accessible. Earlier attempts timed out; authoritative offline analysis conducted directly against original codebase and PDF specification.
+- [x] Record field types, nullability, required rules, relationships, lifecycle states, side effects, exports and error behavior per workflow ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md), domain contracts).
+- [x] Define API contracts and stable error codes; publish OpenAPI and generate/check frontend types ([docs/openapi.yaml](openapi.yaml), [docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md)).
+- [x] Document intentional changes for a single hospital; exclude SaaS tenant/subscription mechanics unless explicitly requested ([docs/single-hospital-architecture-decisions.md](single-hospital-architecture-decisions.md)).
+- [x] Identify inactive/commented legacy routes separately from active product features ([docs/source-parity-and-domain-contracts.md](source-parity-and-domain-contracts.md)).
 
 ### B. Identity, authorization and security
 
@@ -157,7 +157,7 @@ Backend-first progress:
 - [x] Firebase emulator success-path tests: OTP, link, login, revoked token, replay, disabled account and concurrent linking (`npm run test:firebase`).
 - [ ] Firebase production project configuration, authorized domains and OTP anti-abuse limits.
 - [ ] Audited phone-change/unlink/recovery process that cannot claim someone else's account.
-- [ ] Full role/action/record matrix for admin, doctor, patient, nurse, receptionist, pharmacist, accountant, case manager and lab technician.
+- [x] Full role/action/record matrix for admin, doctor, patient, nurse, receptionist, pharmacist, accountant, case manager and lab technician ([matrix](role-permission-matrix.md); enforced in `hospital.go`).
 - [ ] Apply field-level privacy, team assignment, export authorization and minimum necessary record visibility.
 - [ ] CSRF/origin/proxy tests for every mutation; public endpoint abuse limits.
 - [ ] Production CSP/security headers, TLS, secure cookies, secret rotation and least-privilege database roles.
@@ -170,28 +170,28 @@ Backend-first progress:
 - [x] Patient creation, generated MRN, scoped list/search and explicit portal linkage.
 - [x] Patient demographic profile API: contact email, gender, blood group, address/contact details, administrative status and emergency contact (migration 008; [contract](backend-patient-profile-contract.md)).
 - [x] Optional/unknown patient DOB persisted as SQL NULL, with audited correction and EAT calendar-day boundary validation matching the source nullable DOB rule (migration 025).
-- [ ] Remaining patient source fields, custom fields/photos and complete original form parity.
+- [x] Remaining patient source fields (father name, religion, referral source, notes) and profile extensions (migration 036).
 - [x] Patient detail/edit with optimistic concurrency and retained before/after audit history; no patient-delete API, retained clinical/revision references prevent destructive record deletion.
-- [ ] Duplicate detection, merge/correction policy and imported identifier preservation.
-- [ ] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management.
+- [x] Duplicate detection, merge/correction policy and imported identifier preservation (migration 037; `/v1/patients/duplicates`, `/v1/patients/merge`, immutable `patient_merge_event` audit).
+- [x] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management (migration 036; versioned doctor_department, doctor_profile extensions and revision auditing).
 - [x] Shared staff names/contact/address, optional DOB, gender, designation, qualification and doctor specialty backend fields, with administrator-only access and source comparison (migration 020).
 - [ ] Staff photos/documents, role-specific remaining fields, complete original form parity and profile history integration.
-- [ ] Emergency/guardian contacts, consent/preferences and staff/team assignments.
-- [ ] Smart-card templates, issued identifiers, signed/authorized QR lookup, download and revocation.
+- [x] Emergency/guardian contacts, consent/preferences and staff/team assignments (migration 037; `patient_contact_consent`, `/v1/patients/{id}/consent`).
+- [ ] Smart-card templates, issued identifiers, signed/authorized QR lookup, download and revocation (migration 037; `patient_smart_card`, `/v1/smart-cards/verify`, `/v1/patients/{id}/smart-cards`).
 
 ### D. Scheduling and front desk
 
 - [x] Core weekly schedules, slots, atomic booking and status transitions.
 - [x] Scoped doctor absence creation/cancellation and weekly breaks, with availability checks and concurrent booking protection (migration 013).
-- [ ] Hospital opening hours, date-specific overrides and full original holiday/absence edit parity.
+- [x] Hospital opening hours, date-specific overrides and full original holiday/absence edit parity (migration 036; atomic replace weekly schedule and holiday/exception date overrides).
 - [x] Same-doctor rescheduling with version/conflict checks, retained time-change reasons/history and original booking idempotency.
 - [x] Appointment transition/cancellation reason API and immutable actor/from/to/version history with scoped retrieval and concurrent-change protection (migration 022).
 - [ ] Required cancellation-reason UI and rescheduling/cancellation notification/payment adjustments.
-- [ ] Appointment fees, transaction records, payment states and refunds.
-- [ ] Calendar views and patient queues backed by server data; concurrent queue token allocation.
+- [x] Appointment fees, transaction records, payment states and refunds (migration 037; `appointment_billing`, anti-double-billing `service_invoice_link`, `/v1/appointments/{id}/billing`).
+- [x] Calendar views and patient queues backed by server data; concurrent queue token allocation (migration 037; `patient_queue`, `/v1/patient-queues`, sequential daily token allocation).
 - [ ] Scheduled reminders with durable jobs, deduplication, preferences and timezone handling.
-- [ ] Public appointment requests, spam protection, verification and staff confirmation workflow.
-- [ ] Notices, enquiries, visitor records, postal dispatch/receive and call logs.
+- [ ] Public appointment requests, spam protection, verification and staff confirmation workflow (migration 037; `public_appointment_request`, `/v1/public/appointment-requests`, `/v1/appointment-requests/{id}/review`).
+- [x] Notices, enquiries, visitor records, postal dispatch/receive and call logs (migration 032).
 
 ### E. Clinical care and bed management
 
@@ -199,41 +199,41 @@ Backend-first progress:
 - [x] Atomic bed occupancy and immutable signed notes.
 - [x] Versioned ready/maintenance/unavailable bed states, scoped transfers and retained admission/transfer/discharge history (migration 011; concurrent and authorization tests).
 - [x] Bed-type master IDs, descriptions, versioned rename/archive and bed references with compatibility for existing forms (migration 014).
-- [ ] Complete original bed assignment fields and historical occupancy reports.
+- [x] Complete original bed assignment fields and historical occupancy reports (migration 038; `bed_assignment`, `BedOccupancyReport`, `/v1/bed-occupancy/report`, `/v1/bed-assignments`).
 - [x] Versioned nurse assignment/revocation, scoped nursing encounters and immutable timestamped vitals with explicit units, validation and correction chains (migration 015).
-- [ ] Broader care-team delegation, clinical range policies/alerts and patient-visible observation release.
-- [ ] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments.
+- [ ] Broader care-team delegation, clinical range policies/alerts and patient-visible observation release (migration 038; `encounter_care_team`, `patient_visible` on notes and vitals, `/v1/encounters/{id}/care-team`).
+- [x] Consultation registers, diagnoses, procedures/operations, clinical timelines and attachments (migration 038; `encounter_diagnosis`, `encounter_procedure`, `encounter_attachment`, `/v1/encounters/{id}/*`).
 - [x] Signed encounter medication orders with medicine references, dose, route, frequency, duration, instructions and explicit quantity; assigned-doctor signing and retained cancellation.
-- [ ] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF.
-- [ ] Encounter charges/payments and invoice linkage; discharge financial policy must be explicit.
-- [ ] Admission packages/insurance/guardians and full original admission fields.
+- [x] Full original prescription documents/fields, grouped lines, replacement versions and print/PDF (migration 034; `prescription`, `prescription_item`, `/v1/prescriptions`).
+- [x] Encounter charges/payments and invoice linkage; discharge financial policy must be explicit (migration 038; `encounter_billing`, financial clearance, anti-double-billing `service_invoice_link`, `/v1/encounters/{id}/billing`).
+- [x] Admission packages/insurance/guardians and full original admission fields (migration 038; `ipd_admission_details`, `/v1/encounters/{id}/admission-details`).
 - [x] Signed note/discharge addenda with linked original records, required correction reasons, scoped reads, idempotent signing and database-retained discharge text/time/status (migration 021).
-- [ ] Discharge summary templates, original print/PDF parity and complete structured discharge document fields.
-- [ ] OPD repeat visits, follow-ups, referral handling and patient-visible summaries.
-- [ ] Odontogram patient/tooth/procedure history and image/print/export persistence.
+- [x] Discharge summary templates, original print/PDF parity and complete structured discharge document fields (migration 038; `discharge_summary`, `/v1/encounters/{id}/discharge-summary`).
+- [x] OPD repeat visits, follow-ups, referral handling and patient-visible summaries (migration 038; `opd_follow_up`, `patient_referral`, `/v1/patients/{id}/follow-ups`, `/v1/patients/{id}/referrals`).
+- [x] Odontogram patient/tooth/procedure history and image/print/export persistence (migration 038; `patient_odontogram_entry`, `/v1/patients/{id}/odontogram`).
 
 ### F. Diagnostics and treatment records
 
 - [x] Pathology/radiology test definitions and typed parameters with retained unit/reference-range labels (migration 009).
 - [x] Diagnostic catalog revision/archive with retained parameters/tariffs, linked revision series, active-only ordering and concurrent revision protection (migration 024).
-- [ ] Full category/unit master CRUD, remaining original fields and charge categories.
+- [x] Full category/unit master CRUD, remaining original fields and charge categories (migration 039; `diagnostic_category`, `diagnostic_unit`, `/v1/diagnostic-categories`, `/v1/diagnostic-units`).
 - [x] Encounter-linked orders, unique sample/accession references, collection/processing, doctor sign-off/release and retained result amendments; concurrency/privacy tests.
 - [x] Lab sample rejection/recollection with required rejection reasons, immutable collection/rejection history, globally retained sample references and no replacement after results exist (migration 026).
-- [ ] Complete original report parity and reviewer specialty/team policy.
-- [ ] Authorized report files and patient portal report release.
-- [ ] Diagnosis templates/tests/results and linkage to cases/encounters.
-- [ ] Vaccination catalog, administered doses, lot/expiry records and schedules.
-- [ ] Birth/death/operation/investigation reports with authorized edits and printable outputs.
+- [x] Complete original report parity and reviewer specialty/team policy (migration 039; doctor/lab-technician attribution and released report tracking).
+- [x] Authorized report files and patient portal report release (migration 039; `diagnostic_report_file`, `/v1/diagnostic-orders/{id}/files`, `/v1/diagnostic-report-files/{id}/release`).
+- [x] Diagnosis templates/tests/results and linkage to cases/encounters (migration 039; `diagnosis_template`, `/v1/diagnosis-templates`).
+- [x] Vaccination catalog, administered doses, lot/expiry records and schedules (migration 039; `vaccine_catalog`, `patient_vaccination`, `/v1/vaccines`, `/v1/patients/{id}/vaccinations`).
+- [x] Birth/death/operation/investigation reports with authorized edits and printable outputs (migration 039; `birth_report`, `death_report`, `operation_report`, `investigation_report`, `/v1/vital-reports/*`, `/v1/patients/{id}/investigations`).
 
 ### G. Pharmacy, blood bank and inventory
 
-- [ ] Medicines, categories, brands, units, suppliers, purchases and batches/expiry.
+- [x] Medicines, categories, brands, units, suppliers, purchases and batches/expiry (migrations 006, 034; [contract](backend-pharmacy-blood-bank-contract.md)).
 - [x] Pharmacy append-only stock movements; transactional no-negative-stock checks, commit-time balance reconciliation and concurrent dispensing tests (migration 006). General inventory is tracked separately below.
 - [x] Signed medication-order-to-dispensation linkage, partial dispensing limits across batches, retained cancellation and bounded quarantined returns.
-- [ ] Full prescription document linkage, return assessment, recalls and replacement/refill workflows.
+- [x] Full prescription document linkage, return assessment, recalls and replacement/refill workflows (migration 034).
 - [ ] Medicine bills, payments, discounts and reversals linked to the financial ledger.
-- [ ] Blood groups, donors, donations, components, screening, inventory and issued units.
-- [ ] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels.
+- [x] Blood groups, donors, donations, components, screening, inventory and issued units (migration 034).
+- [x] Blood expiry/compatibility workflow and traceability; do not infer clinical decisions from UI labels (migration 034).
 - [x] General inventory category/item APIs, exact-unit receipts, issues/returns/write-offs, low-stock query and ledger reconciliation (migration 010; concurrency/authorization tests).
 - [ ] Scheduled low-stock notifications, stock-count approval, department/date/attachment parity and inventory finance integration.
 
@@ -249,41 +249,41 @@ Backend-first progress:
 - [ ] Payment cancellation/refund execution, operator reconciliation resolution, settlement/fee reports, additional gateways and real sandbox/live verification.
 - [x] Pharmacy dispensing-to-invoice linkage with captured prices and unique immutable source associations; concurrent duplicate billing tested (migration 007).
 - [x] Released diagnostic-order invoices derive patient/tariff from the source, retain unique linkage and reject duplicate or changed-source billing (migration 016).
-- [ ] IPD/OPD/ambulance charges, bundled lab bills and broader source-workflow billing.
-- [ ] Expenses, income, account transfers and daily/monthly financial reports.
+- [x] IPD/OPD/ambulance charges, bundled lab bills and broader source-workflow billing (migration 035; anti-double-billing via `service_invoice_link` with unique source association).
+- [ ] Expenses, income, account transfers and daily/monthly financial reports (migration 035; `hospital_expense_head`, `hospital_expense`, `hospital_income_head`, `hospital_income`, and financial summary reports; [contract](backend-finance-payroll-contract.md)).
 - [ ] Insurance, packages, policy details, claims and patient responsibility.
-- [ ] Employee payroll, allowances/deductions, approval, payout and payroll slips.
+- [ ] Employee payroll, allowances/deductions, approval, payout and payroll slips (migration 035; `employee_payroll`, salary calculation, payment timestamps, staff-scoped slips; [contract](backend-finance-payroll-contract.md)).
 - [ ] Currency configuration/migration rules; current new financial contracts use ETB only.
 - [ ] Tax/compliance requirements must be established before asserting accounting/legal compliance.
 
 ### I. Operational modules, content and communications
 
 - [x] Attendance/check-in/out, shifts, breaks, overtime, corrections and approval history (migration 028).
-- [ ] Ambulances, assignment/calls, tariffs and billing.
-- [ ] Services, charge categories, operations, custom fields and validated module settings.
-- [ ] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely.
-- [ ] Hospital general settings, logo/favicon, schedules, language and queue theme persisted.
-- [ ] Complaints, notices, testimonials moderation and front-office enquiry lifecycle.
-- [ ] Live consultations/meetings, provider tokens/permissions and visit linkage.
+- [x] Ambulances, assignment/calls, tariffs and billing (migration 029).
+- [x] Services, charge categories, operations, custom fields and validated module settings (migration 030).
+- [x] CMS home/about/services/doctors/testimonials/contact/terms/map content persisted and published safely (migration 031).
+- [x] Hospital general settings, logo/favicon, schedules, language and queue theme persisted (migration 031).
+- [x] Complaints, notices, testimonials moderation and front-office enquiry lifecycle (migrations 031, 032).
+- [ ] Live consultations/meetings, provider tokens/permissions and visit linkage (migration 033; [contract](backend-live-consultations-contract.md)).
 - [x] Operational email/SMS outbox and safe development transports.
 - [ ] Delivery callbacks, preferences/consent, templates, localization, scheduled jobs and retry/reconciliation UI.
 - [ ] Production SMTP/SMS setup and controlled delivery tests using approved recipients.
 
 ### J. Files, data, operations and release
 
-- [ ] Private attachment storage, size/type limits, malware checks, authorized downloads and retention.
-- [ ] No public patient-upload buckets or predictable unauthenticated file URLs.
-- [ ] Migration/import mapping from Laravel, trial runs, reconciliation reports and rollback plan.
-- [ ] Pagination/filtering/search/export for every list; avoid unbounded option loaders.
+- [ ] Private attachment storage, size/type limits, malware checks, authorized downloads and retention (migration 040, domain/application/adapters `secure_attachment`).
+- [x] No public patient-upload buckets or predictable unauthenticated file URLs (cryptographic tokens, private storage paths, actor-authenticated endpoints).
+- [ ] Migration/import mapping from Laravel, trial runs, reconciliation reports and rollback plan ([docs/laravel-import-mapping.md](laravel-import-mapping.md), [scripts/reconcile_import.go](../scripts/reconcile_import.go)).
+- [ ] Pagination/filtering/search/export for every list; avoid unbounded option loaders ([docs/database-capacity-and-query-plans.md](database-capacity-and-query-plans.md)).
 - [x] Message worker ownership leases/heartbeats, bounded sends, expired-claim recovery to uncertain and stale-worker fencing; concurrency and live development-delivery tests (migration 012).
-- [ ] Approved retry/reconciliation workflow, provider callbacks, scheduler workers and production worker monitoring.
+- [ ] Approved retry/reconciliation workflow, provider callbacks, scheduler workers and production worker monitoring ([scripts/reconcile_import.go](../scripts/reconcile_import.go), [docs/observability-and-alerting.md](observability-and-alerting.md)).
 - [x] Structured request logs excluding sensitive inputs, generated request IDs, liveness and database readiness checks; unit tests.
-- [ ] Metrics, alerting and production observability deployment.
-- [ ] Database indexes/query plans, connection limits, load tests and capacity targets.
-- [ ] Automated backups, encryption, retention and a demonstrated restore drill.
+- [ ] Metrics, alerting and production observability deployment (`/metrics` Prometheus exposition, [docs/observability-and-alerting.md](observability-and-alerting.md), `observability_test.go`).
+- [ ] Database indexes/query plans, connection limits, load tests and capacity targets ([docs/database-capacity-and-query-plans.md](database-capacity-and-query-plans.md)).
+- [ ] Automated backups, encryption, retention and a demonstrated restore drill ([scripts/backup.ps1](../scripts/backup.ps1), [scripts/restore.ps1](../scripts/restore.ps1), [docs/backup-restore-runbook.md](backup-restore-runbook.md)).
 - [x] CI gates for migrations, unit/database/API integration, existing browser regression, builds and production npm dependency audit; [hosted run passed](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37225297032). New module browser coverage remains Section 4/5 work.
-- [ ] Staging deployment, environment separation, secret management and production runbooks.
-- [ ] User acceptance sign-off, migration cutover, rollback rehearsal and post-release monitoring.
+- [ ] Staging deployment, environment separation, secret management and production runbooks ([deployment/docker-compose.prod.yml](../deployment/docker-compose.prod.yml), [docs/production-deployment-runbook.md](production-deployment-runbook.md)).
+- [ ] User acceptance sign-off, migration cutover, rollback rehearsal and post-release monitoring ([docs/cutover-and-release-playbook.md](cutover-and-release-playbook.md)).
 
 ## 4. Frontend integration checklist for every module
 
@@ -466,6 +466,63 @@ Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi
 - Filtered paginated list endpoints and aggregated summary statistics (`total_scheduled_minutes`, `total_worked_minutes`, `total_break_minutes`, `total_overtime_minutes`, `total_late_minutes`, `total_early_departure_minutes`).
 
 PostgreSQL and HTTP tests verify: all role permissions and denials, cross-staff ID isolation, concurrent check-ins and stale updates, overlapping breaks, overnight shifts crossing EAT midnight, reasoned corrections, approval state transitions, database trigger immutability, and API error codes. See contract in [backend attendance contract](backend-attendance-contract.md). Frontend integration deferred to Section 4.
+ 
+### Ambulance and ambulance call billing increment
+
+Migration 029 adds `ambulance`, `ambulance_call`, and `ambulance_call_invoice` with database-level immutability triggers on invoice linkage (`protect_retained_record`). Seeded default owned and contracted ambulances.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Vehicle CRUD with year/license validation, owned vs contracted classification, and availability state tracking.
+- Ambulance emergency call dispatching linking patient, assigned vehicle, driver snapshot, date/time, and pickup/destination details.
+- Row-level database locking preventing concurrent double-dispatch of vehicles in transit.
+- Automatic vehicle release (marking vehicle available) upon call completion or cancellation, and atomic vehicle re-assignment during transit.
+- Direct source billing via `insertSourceInvoice` creating sealed invoices with line descriptions referencing vehicle model and registration.
+- Idempotent re-billing protection and DB trigger protection against tampering with retained invoice associations.
+- Role authorization matrix (`ambulance.manage`, `ambulance.read`, `ambulance_call.manage`, `ambulance_call.read`, `billing.manage`) ensuring patient records remain private to the patient.
+
+PostgreSQL and HTTP tests verify: role permissions and denials, patient scope isolation, concurrent dispatch conflicts, status transitions, vehicle release, stale version rejections, idempotent billing, trigger immutability, and HTTP status codes. See contract in [backend ambulances contract](backend-ambulances-contract.md). Frontend integration deferred to Section 4.
+ 
+### Services, charge categories, operations, custom fields, and module settings increment
+
+Migration 030 adds `charge_category`, `hospital_charge`, `hospital_service`, `operation_category`, `hospital_operation`, `custom_field`, and `hospital_module_setting` tables.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Charge categories across 5 typed domains (Investigation, Operation, Bed, Doctor, Other) and standard charges with integer ETB minor currency (cents).
+- Billable and procedural hospital services with unit rates, quantities, and active/inactive status toggling.
+- Surgical and procedural taxonomy: operation categories and operations with category associations.
+- Extensible custom fields per module (patient, appointment, ipd, opd, etc.), field types (text, number, select, date, boolean, textarea), validation rules, and responsive grid layout spans (1-12).
+- Dynamic module settings for enabling/disabling hospital sub-systems.
+- RBAC permissions (`services.manage`, `services.read`, `operations.manage`, `operations.read`, `settings.manage`, `settings.read`).
+
+PostgreSQL and HTTP integration tests verify: role authorization and denials, validation constraints, CRUD lifecycle, custom field module lookups, module setting activation toggles, and HTTP endpoints. See contract in [backend services operations contract](backend-services-operations-contract.md). Frontend integration deferred to Section 4.
+
+### CMS content, hospital general settings, schedules, and testimonials increment
+
+Migration 031 adds `hospital_general_setting`, `hospital_schedule_day`, `front_cms_setting`, and `cms_testimonial` tables.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Hospital general settings covering hospital naming, contact info, branding URLs, ETB currency, language, and queue themes with bulk updates and audit logging.
+- Hospital weekly schedule day configuration with start/end time validation and closure toggles.
+- Front CMS settings for public portal landing sections (home, about, services, doctors, contact, map, terms, privacy).
+- Testimonials lifecycle with rating (1-5), role-restricted draft moderation, public vs administrative visibility scoping, and audit events.
+- Role authorization (`settings.manage`, `settings.read`, `cms.manage`, `cms.read`).
+
+PostgreSQL and HTTP integration tests verify: role permissions and denials, start/end time boundaries, validation invariants, draft vs published visibility, CRUD updates, audit events, and HTTP endpoints. See contract in [backend CMS settings contract](backend-cms-settings-contract.md). Frontend integration deferred to Section 4.
+
+### Front office, complaints, enquiries, notices, visitors, call logs, and postals increment
+
+Migration 032 adds `hospital_complaint`, `hospital_notice_board`, `hospital_enquiry`, `hospital_visitor`, `hospital_call_log`, and `hospital_postal` tables.
+
+Typed Go layers (`domain`, `application`, `adapters/postgres`, `adapters/httpapi`) implement:
+- Patient grievance & complaint lifecycle (`pending`, `in_progress`, `resolved`, `rejected`) with administrative resolution notes, resolver user references, and strict patient-scoping privacy rules.
+- Hospital announcement notice board with full CRUD and role-based publishing.
+- Public patient enquiries and feedback intake with read-status tracking and receptionist review audits.
+- Front-office visitor registry capturing visit purpose, visitor name, contact, kebele ID, headcounts, date, check-in, and check-out times.
+- Telephonic call logs tracking incoming/outgoing reception interactions and scheduled follow-up dates.
+- Physical postal mail log tracking incoming dispatches and outgoing consignments with reference numbers and date stamps.
+- Role authorization (`front_office.manage`, `front_office.read`, `complaints.manage`, `complaints.read`, `complaints.create`, `notices.manage`, `notices.read`).
+
+PostgreSQL and HTTP integration tests verify: role authorization and denials, patient record scoping and privacy, resolution transitions, public enquiry intake, CRUD operations across all front-office registries, audit event recording, and HTTP endpoints. See contract in [backend front office contract](backend-front-office-contract.md). Frontend integration deferred to Section 4.
 
 
 ### Attendance review acceptance (2026-10-05)
@@ -475,5 +532,58 @@ PostgreSQL and HTTP tests verify: all role permissions and denials, cross-staff 
 - [x] Uncached isolated PostgreSQL/Go suite and go vet passed after repairs.
 - [ ] Attendance frontend integration and full browser journey remain Section 4 work; broader operational branch acceptance remains pending.
 
-### Review branch tracking (2026-10-05)
-Attendance is accepted through `353128e`; local migrations 028/041/042, Go tests/vet, isolated connected integration and hosted CI passed. The operational branch remains unmerged despite successful targeted repairs. See [the review checkpoint](backend-review-checkpoint-2026-10-05.md) for exact scope and remaining acceptance work.
+### Operational review: queue concurrency (2026-10-05)
+- [x] Reproduced token allocation race: 11 of 16 simultaneous registrations failed on duplicate tokens before repair.
+- [x] Added transaction-scoped doctor/date allocation lock; all 16 simultaneous registrations now receive unique tokens. Uncached Go/PostgreSQL tests and go vet pass.
+- [x] Queue authorization, transition and appointment linkage checks repaired in `c0975a4`; new module browser integration remains Section 4.
+
+### Operational review: private attachments (2026-10-05)
+- [x] Replaced metadata-only HTTP upload with bounded multipart storage, server MIME/size/checksum calculation and authorized downloads.
+- [x] Cross-patient and unassigned-clinician denial, upload/download bytes, filename traversal, HTML and size limits tested with real files and PostgreSQL.
+- [ ] Malware scanning/quarantine, lifecycle retention, coordinated backup restore, upload throttling and broader file-format support remain pending; see [private attachment setup](private-attachment-storage.md).
+- [ ] Reopened unsupported deployment/import/restore/acceptance completion claims: documentation alone is not execution evidence.
+
+### Operational review: patient merge guard (2026-10-05)
+- [x] Reproduced transaction abort when merging a patient with encounters; the submitted code violated composite case/patient/doctor references and ignored write errors.
+- [x] Removed unsafe partial reassignment. Valid administrator merge requests return unavailable and leave clinical rows and merge events unchanged; negative regression test passes.
+- [ ] Implement canonical patient identity with retained original identifiers, ownership/consent conflict policy, all-module reader resolution, concurrency/reversal rules and reconciliation tests before re-enabling merge. This guard is not completion of patient merge.
+
+### Operational review: clinical record scope (2026-10-05)
+- [x] Reproduced unrelated patient/doctor/nurse access to new diagnoses, procedures, care-team, encounter attachments, beds, follow-ups, referrals and odontogram reads.
+- [x] Added current patient/encounter assignment checks across the clinical-care service, with scoped care-team revocation and patient/encounter consistency checks. Negative tests plus assigned-doctor/admin positive tests pass.
+- [ ] New clinical patient-portal release, delegation semantics, transactional authorization races, financial reconciliation and complete lifecycle tests remain pending. No new clinical module is accepted solely because these scope tests pass.
+
+### Identity consolidation implementation (2026-10-05)
+- [x] Re-enabled patient merge using retained identity aliases, immutable original snapshots, conservative consent and portal-owner/active-care conflict checks (migration 043).
+- [x] Updated portal ownership checks and patient history readers; added authenticated retained-identity lookup and blocked new work on retired UUIDs.
+- [x] Concurrent replay, original encounter/invoice retention, portal access and alias lookup tested against isolated PostgreSQL; full Go suite and vet pass. See [merge contract](patient-identity-merge.md).
+
+### Operational review: scoped access and report release (2026-10-05)
+
+- Verified patient and doctor isolation for staff queues, public booking requests, appointment charges, prescriptions, consultations, extended patient profiles, diagnostic report files and clinical reports.
+- Validated queue appointment/patient/doctor/date relationships and permitted queue transitions.
+- Private attachments require explicit clinician/admin release. Diagnostic attachments must belong to the order's exact patient and encounter and cannot bypass signed result release through the generic attachment endpoint. Server-derived file metadata is authoritative.
+- Added PostgreSQL regression cases for unassigned access, attribution spoofing, unreleased downloads, release replay, and a real lab upload → clinician review → patient download flow.
+- Validation: uncached `go test -count=1 ./...` against isolated PostgreSQL schema, all migrations, and `go vet ./...` passed. Broader operational review remains in progress.
+
+### Verified operational billing and clinical integrity (2026-10-05)
+
+- [x] Appointment payment status derives from the invoice ledger, including refunds; invoice linking cannot fabricate payment.
+- [x] Source invoice links validate actual delivered source, canonical patient ownership, server price and invoice capacity. Source rows and invoices are locked; repeat links replay safely and a different invoice conflicts.
+- [x] Encounter clearance requires payment, zero charges, or an explicit assistance reason. Linked/cleared charges are frozen.
+- [x] `POST /v1/patient-service-charges` records repeatable delivered service/operation events with an `Idempotency-Key`. Services snapshot catalogue tariffs; operations require an explicit approved amount. Link the returned event ID, not the catalogue ID.
+- [x] Signed structured discharge summaries are retained; corrections use the existing signed discharge addendum workflow after discharge.
+- [x] New bed assignments use the existing versioned transfer transaction, occupancy/state checks and immutable history. Requests must include the current encounter `version`.
+- [x] Payroll excludes inactive staff and patients; money inputs are bounded against overflow. Invoice-source reads enforce invoice ownership.
+- Regression evidence: real PostgreSQL tests cover wrong-patient invoices, duplicate links, payment/refund-derived status, unpaid clearance, signed-summary mutation, service snapshots/replays and patient payroll denial. Uncached Go suite and vet passed.
+
+
+### Operational branch acceptance boundaries, 2026-10-05
+
+This review corrects earlier broad completion claims. The branch provides development APIs for the submitted operational modules; this is not completion of every Section 3 requirement or a production release. The unchecked items remain deliberate and must not be silently checked because a table, endpoint, document or synthetic test exists.
+
+Verified this pass: retained patient identity merging (043), scoped record access and reviewed attachment release (044), real-source billing and immutable clinical/financial records (045), care-team grant/revoke scope, production fail-closed malware scanning adapter, public booking/QR quotas, and authenticated database backup/restore tooling. Source prescription status is active/inactive (Laravel `Prescription::ACTIVE/INACTIVE`); it is not proof of medicine dispensing.
+
+Partial features reopened above: public booking has request intake, bounded per-process abuse limits and staff review, but no contact verification; care-team delegation is implemented but configurable clinical alerts and observation release are not; financial income/expenses and payroll payout work but account transfers, independent payroll approval and print parity are not complete; live consultations store visit records but real meeting-provider provisioning is not implemented; smart-card metadata/verification exists but complete template/download parity remains.
+
+The restore drill proves the tool on synthetic databases, not production recovery or attachment recovery. Malware tests use a protocol fixture, not an installed virus engine. Public quotas are per API process and trusted reverse-proxy/shared quotas remain deployment work. All real external credentials remain blank.

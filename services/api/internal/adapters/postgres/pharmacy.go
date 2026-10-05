@@ -134,7 +134,7 @@ func (s Store) MedicationOrders(ctx context.Context, a domain.Actor, id string, 
 	}
 	defer tx.Rollback(ctx)
 	var authorized bool
-	e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM encounter e JOIN patient p ON p.id=e.patient_id WHERE e.id=$1 AND ($2 IN ('admin','pharmacist') OR ($2='doctor' AND e.doctor_id=$3) OR ($2='patient' AND p.user_id=$3)))`, id, a.Role, a.ID).Scan(&authorized)
+	e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM encounter e JOIN patient p ON p.id=e.patient_id WHERE e.id=$1 AND ($2 IN ('admin','pharmacist') OR ($2='doctor' AND e.doctor_id=$3) OR ($2='patient' AND patient_portal_owner(p.id)=$3)))`, id, a.Role, a.ID).Scan(&authorized)
 	if e != nil {
 		return nil, e
 	}

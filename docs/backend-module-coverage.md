@@ -90,8 +90,8 @@ This inventory contains 111 source-catalog screens and 5 additional frontend scr
 | Radiology Tests (`radiology-tests`) | Radiology | Diagnostic catalog/order/result/release core API tested; full source parity and UI integration pending | Open |
 | Insurances (`insurances`) | Services | Preview only; typed backend, integration and workflow QA pending | Open |
 | Packages (`packages`) | Services | Preview only; typed backend, integration and workflow QA pending | Open |
-| Ambulances (`ambulances`) | Services | Preview only; typed backend, integration and workflow QA pending | Open |
-| Ambulance Calls (`ambulance-calls`) | Services | Preview only; typed backend, integration and workflow QA pending | Open |
+| Ambulances (`ambulances`) | Services | Typed Go backend, vehicle CRUD, availability tracking and optimistic locking (migration 029); UI integration pending Section 4 | Core Complete (UI Pending) |
+| Ambulance Calls (`ambulance-calls`) | Services | Typed Go backend, dispatch, atomic vehicle locking, status transitions and source billing to sealed invoices (migration 029); UI integration pending Section 4 | Core Complete (UI Pending) |
 | SMS (`sms`) | SMS / Mail | Outbox available through Communications; this original screen still preview | Open |
 | Emails (`emails`) | SMS / Mail | SMTP outbox available through Communications; this original screen still preview | Open |
 | Email Template (`email-template`) | SMS / Mail | Preview only; typed backend, integration and workflow QA pending | Open |

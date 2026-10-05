@@ -17,22 +17,35 @@ type ActorStore interface {
 	Actor(context.Context, string) (domain.Actor, error)
 }
 type Server struct {
-	Staff          application.Staff
-	Audit          application.Audit
-	OnlinePayments application.OnlinePayments
-	Inventory      application.Inventory
-	Attendance     application.Attendance
-	App            application.Hospital
-	Scheduling     application.Scheduling
-	Clinical       application.Clinical
-	Billing        application.Billing
-	Pharmacy       application.Pharmacy
-	Diagnostics    application.Diagnostics
-	Ready          func(context.Context) error
-	Actors         ActorStore
-	AuthURL        string
-	Origin         string
-	Client         *http.Client
+	Staff              application.Staff
+	Audit              application.Audit
+	OnlinePayments     application.OnlinePayments
+	Inventory          application.Inventory
+	Attendance         application.Attendance
+	Ambulance          application.AmbulanceService
+	ServicesOperations application.ServicesOperationsService
+	CMSSettings        application.CMSSettingsService
+	FrontOffice        application.FrontOfficeService
+	LiveConsultation   application.LiveConsultationService
+	PharmacyBloodBank  application.PharmacyBloodBankService
+	FinancePayroll     application.FinancePayrollService
+	MasterData         application.MasterDataService
+	PatientExt         application.PatientExtensionsService
+	AppointmentOps     application.AppointmentOpsService
+	ClinicalCare       application.ClinicalCareService
+	DiagnosticReports  application.DiagnosticReportsService
+	Attachments        application.AttachmentsService
+	App                application.Hospital
+	Scheduling         application.Scheduling
+	Clinical           application.Clinical
+	Billing            application.Billing
+	Pharmacy           application.Pharmacy
+	Diagnostics        application.Diagnostics
+	Ready              func(context.Context) error
+	Actors             ActorStore
+	AuthURL            string
+	Origin             string
+	Client             *http.Client
 }
 
 func write(w http.ResponseWriter, status int, v any) {
@@ -121,6 +134,7 @@ func (s Server) identify(r *http.Request) (domain.Actor, error) {
 	return s.Actors.Actor(r.Context(), result.User.ID)
 }
 func (s Server) Handler() http.Handler {
+	limiter := &publicLimiter{}
 	return observe(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/readyz" && r.Method == "GET" {
 			ctx, cancel := context.WithTimeout(r.Context(), time.Second)
@@ -136,7 +150,20 @@ func (s Server) Handler() http.Handler {
 			write(w, 200, map[string]string{"status": "ok"})
 			return
 		}
+		if r.URL.Path == "/metrics" && r.Method == "GET" {
+			s.metrics(w, r)
+			return
+		}
 		if s.paymentWebhook(w, r) {
+			return
+		}
+		if !limiter.guard(w, r, s.Origin) {
+			return
+		}
+		if s.publicPatientExtensions(w, r) {
+			return
+		}
+		if s.publicAppointmentOps(w, r) {
 			return
 		}
 		if r.Method != "GET" && r.Header.Get("Origin") != s.Origin {
@@ -152,6 +179,45 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.attendance(w, r, a) {
+			return
+		}
+		if s.ambulance(w, r, a) {
+			return
+		}
+		if s.servicesOperations(w, r, a) {
+			return
+		}
+		if s.cmsSettings(w, r, a) {
+			return
+		}
+		if s.frontOffice(w, r, a) {
+			return
+		}
+		if s.liveConsultations(w, r, a) {
+			return
+		}
+		if s.pharmacyBloodBank(w, r, a) {
+			return
+		}
+		if s.financePayroll(w, r, a) {
+			return
+		}
+		if s.masterData(w, r, a) {
+			return
+		}
+		if s.patientExtensions(w, r, a) {
+			return
+		}
+		if s.appointmentOps(w, r, a) {
+			return
+		}
+		if s.clinicalCare(w, r, a) {
+			return
+		}
+		if s.diagnosticReports(w, r, a) {
+			return
+		}
+		if s.attachments(w, r, a) {
 			return
 		}
 		if s.audit(w, r, a) {

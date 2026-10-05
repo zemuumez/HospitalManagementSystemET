@@ -36,6 +36,12 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "accountant" || a.Role == "patient"
 	case "billing.manage":
 		return a.Role == "admin" || a.Role == "accountant"
+	case "finance.read", "finance.manage":
+		return a.Role == "admin" || a.Role == "accountant"
+	case "payroll.read", "payroll.manage":
+		return a.Role == "admin" || a.Role == "accountant"
+	case "payroll.read_own":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "receptionist" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
 	case "beds.read":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse"
 	case "clinical.read":
@@ -47,6 +53,58 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "receptionist" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
 	case "attendance.manage":
 		return a.Role == "admin"
+	case "ambulance.manage", "ambulance_call.manage":
+		return a.Role == "admin" || a.Role == "case_manager" || a.Role == "receptionist"
+	case "ambulance.read":
+		return a.Role == "admin" || a.Role == "case_manager" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse"
+	case "ambulance_call.read":
+		return a.Role == "admin" || a.Role == "case_manager" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "accountant" || a.Role == "patient"
+	case "services.manage":
+		return a.Role == "admin" || a.Role == "accountant"
+	case "services.read":
+		return a.Role == "admin" || a.Role == "accountant" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "receptionist"
+	case "operations.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "operations.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "receptionist"
+	case "settings.manage":
+		return a.Role == "admin"
+	case "settings.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
+	case "cms.manage":
+		return a.Role == "admin"
+	case "cms.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician" || a.Role == "patient"
+	case "front_office.manage":
+		return a.Role == "admin" || a.Role == "receptionist"
+	case "front_office.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "case_manager" || a.Role == "accountant"
+	case "complaints.manage":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "case_manager"
+	case "complaints.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "case_manager" || a.Role == "patient"
+	case "complaints.create":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "patient"
+	case "notices.manage":
+		return a.Role == "admin"
+	case "notices.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician" || a.Role == "patient"
+	case "live_consultations.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "live_consultations.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "patient"
+	case "live_meetings.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "live_meetings.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "receptionist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
+	case "blood_bank.manage":
+		return a.Role == "admin" || a.Role == "lab_technician" || a.Role == "doctor"
+	case "blood_bank.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "lab_technician" || a.Role == "pharmacist" || a.Role == "receptionist" || a.Role == "patient"
+	case "prescriptions.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "prescriptions.read":
+		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "patient"
 	case "appointments.read", "appointments.book":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "patient"
 	case "staff.manage":
@@ -57,12 +115,33 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "receptionist"
 	case "messages.manage":
 		return a.Role == "admin" || a.Role == "receptionist"
+	case "enquiries.manage":
+		return a.Role == "admin" || a.Role == "receptionist"
+	case "enquiries.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "case_manager"
+	case "scheduling.manage":
+		return a.Role == "admin" || a.Role == "doctor"
+	case "doctor_dept.manage":
+		return a.Role == "admin"
 	}
 	return false
 }
 func (a Actor) Permissions() []string {
 	result := []string{}
-	for _, p := range []string{"diagnostics.catalog", "diagnostics.read", "pharmacy.catalog", "pharmacy.manage", "medication.read", "patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book", "staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage", "attendance.clock", "attendance.read_own", "attendance.manage"} {
+	for _, p := range []string{
+		"diagnostics.catalog", "diagnostics.read", "pharmacy.catalog", "pharmacy.manage", "medication.read",
+		"patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book",
+		"staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage",
+		"attendance.clock", "attendance.read_own", "attendance.manage", "ambulance.manage", "ambulance.read",
+		"ambulance_call.manage", "ambulance_call.read", "services.manage", "services.read", "operations.manage",
+		"operations.read", "settings.manage", "settings.read", "enquiries.read", "enquiries.manage",
+		"complaints.read", "complaints.manage", "complaints.create", "notices.read", "notices.manage",
+		"front_office.manage", "front_office.read", "live_consultations.manage", "live_consultations.read",
+		"live_meetings.manage", "live_meetings.read", "blood_bank.manage", "blood_bank.read",
+		"prescriptions.manage", "prescriptions.read", "finance.read", "finance.manage",
+		"payroll.read", "payroll.read_own", "payroll.manage",
+		"scheduling.manage", "doctor_dept.manage", "messages.manage",
+	} {
 		if a.Can(p) {
 			result = append(result, p)
 		}

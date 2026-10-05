@@ -22,7 +22,7 @@ func (s Store) Checkout(ctx context.Context, a domain.Actor, id string) (domain.
 	}
 	defer tx.Rollback(ctx)
 	var balance int64
-	e = tx.QueryRow(ctx, `SELECT i.total_minor-i.paid_minor FROM invoice i JOIN patient p ON p.id=i.patient_id WHERE i.id=$1 AND ($2 IN ('admin','accountant') OR ($2='patient' AND p.user_id=$3)) FOR UPDATE OF i`, id, a.Role, a.ID).Scan(&balance)
+	e = tx.QueryRow(ctx, `SELECT i.total_minor-i.paid_minor FROM invoice i JOIN patient p ON p.id=i.patient_id WHERE i.id=$1 AND ($2 IN ('admin','accountant') OR ($2='patient' AND patient_portal_owner(p.id)=$3)) FOR UPDATE OF i`, id, a.Role, a.ID).Scan(&balance)
 	if e != nil {
 		return out, clinicalError(e)
 	}

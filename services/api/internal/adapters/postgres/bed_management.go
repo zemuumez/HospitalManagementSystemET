@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5"
 	"hms.local/api/internal/domain"
 )
 
@@ -41,11 +42,18 @@ func (s Store) SetBedState(ctx context.Context, a domain.Actor, id string, i dom
 	return b, tx.Commit(ctx)
 }
 func (s Store) TransferBed(ctx context.Context, a domain.Actor, id string, i domain.BedTransfer) (domain.Encounter, error) {
-	tx, e := s.DB.Begin(ctx)
-	if e != nil {
-		return domain.Encounter{}, e
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.Encounter{}, err
 	}
 	defer tx.Rollback(ctx)
+	out, err := transferBedTx(ctx, tx, a, id, i)
+	if err != nil {
+		return out, err
+	}
+	return out, tx.Commit(ctx)
+}
+func transferBedTx(ctx context.Context, tx pgx.Tx, a domain.Actor, id string, i domain.BedTransfer) (domain.Encounter, error) {
 	out, e := scanEncounter(tx.QueryRow(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE `+encounterScope+` AND e.id=$3 FOR UPDATE OF e`, a.Role, a.ID, id))
 	if e != nil {
 		return out, e
@@ -78,7 +86,7 @@ func (s Store) TransferBed(ctx context.Context, a domain.Actor, id string, i dom
 	out.BedID = i.BedID
 	out.BedName = name
 	out.Version++
-	return out, tx.Commit(ctx)
+	return out, nil
 }
 func (s Store) BedHistory(ctx context.Context, a domain.Actor, id string, page int) ([]domain.BedEvent, error) {
 	tx, e := s.DB.Begin(ctx)

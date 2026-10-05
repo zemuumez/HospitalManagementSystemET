@@ -23,6 +23,10 @@ func (s Store) PatientProfile(ctx context.Context, a domain.Actor, id string) (d
 		return domain.PatientProfile{}, e
 	}
 	defer tx.Rollback(ctx)
+	e = tx.QueryRow(ctx, `SELECT canonical_patient_id(id)::text FROM patient WHERE id=$1`, id).Scan(&id)
+	if e != nil {
+		return domain.PatientProfile{}, e
+	}
 	p, e := scanProfile(tx.QueryRow(ctx, profileSelect+`WHERE `+scope+` AND p.id=$3`, a.Role, a.ID, id))
 	if e != nil {
 		return p, e

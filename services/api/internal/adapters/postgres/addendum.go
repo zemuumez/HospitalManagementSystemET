@@ -67,7 +67,7 @@ func (s Store) Addenda(ctx context.Context, a domain.Actor, id string, page int)
 	}
 	defer tx.Rollback(ctx)
 	var found string
-	if e = tx.QueryRow(ctx, `SELECT e.id FROM encounter e JOIN patient p ON p.id=e.patient_id WHERE e.id=$3 AND ($1='admin' OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND p.user_id=$2))`, a.Role, a.ID, id).Scan(&found); e != nil {
+	if e = tx.QueryRow(ctx, `SELECT e.id FROM encounter e JOIN patient p ON p.id=e.patient_id WHERE e.id=$3 AND ($1='admin' OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`, a.Role, a.ID, id).Scan(&found); e != nil {
 		return nil, clinicalError(e)
 	}
 	rows, e := tx.Query(ctx, `SELECT `+addendumFields+` FROM clinical_addendum WHERE encounter_id=$1 ORDER BY signed_at DESC,id LIMIT 25 OFFSET $2`, id, (page-1)*25)

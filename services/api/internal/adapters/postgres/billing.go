@@ -50,7 +50,7 @@ func (s Store) CreateChargeAccount(ctx context.Context, a domain.Actor, name str
 
 const invoiceFields = `i.id,i.number,i.patient_id,p.given_name||' '||p.family_name,i.invoice_date::text,i.subtotal_minor,i.discount_basis_points,i.total_minor,i.paid_minor,i.version`
 const invoiceFrom = ` FROM invoice i JOIN patient p ON p.id=i.patient_id `
-const invoiceScope = `($1 IN ('admin','accountant') OR ($1='patient' AND p.user_id=$2))`
+const invoiceScope = `($1 IN ('admin','accountant') OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
 
 func scanInvoice(row pgx.Row) (domain.Invoice, error) {
 	i := domain.Invoice{Lines: []domain.InvoiceLine{}}

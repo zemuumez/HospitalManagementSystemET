@@ -63,7 +63,7 @@ func (s Store) CreateBed(ctx context.Context, a domain.Actor, i domain.BedInput)
 	return b, tx.Commit(ctx)
 }
 
-const caseScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND c.doctor_id=$2) OR ($1='patient' AND p.user_id=$2))`
+const caseScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND c.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
 
 func (s Store) Cases(ctx context.Context, a domain.Actor, page int) ([]domain.Case, error) {
 	tx, e := s.DB.Begin(ctx)
@@ -121,7 +121,7 @@ func (s Store) CreateCase(ctx context.Context, a domain.Actor, i domain.CaseInpu
 
 const encounterFields = `e.id,e.number,e.kind,e.case_id,COALESCE(e.bed_id::text,''),e.admitted_at,e.symptoms,e.patient_id,p.given_name||' '||p.family_name,e.doctor_id,u.name,COALESCE(b.name,''),e.status,e.version,e.discharged_at,e.discharge_summary`
 const encounterFrom = ` FROM encounter e JOIN patient p ON p.id=e.patient_id JOIN "user" u ON u.id=e.doctor_id LEFT JOIN hospital_bed b ON b.id=e.bed_id `
-const encounterScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND p.user_id=$2))`
+const encounterScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
 
 func scanEncounter(row pgx.Row) (domain.Encounter, error) {
 	var e domain.Encounter

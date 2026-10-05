@@ -44,3 +44,31 @@ All Go/PostgreSQL tests and vet pass on this review branch. The review branch ha
 6. Merge only verified increments; then complete Section 3 acceptance before beginning Section 4.
 
 Real Firebase, SMS, payment and production delivery credentials remain blank. Existing setup instructions are in `provider-setup.md`. No external message, payment charge or production deployment was performed.
+
+
+## Operational review update
+
+Additional verified commits:
+
+- `a69352c`: patient identity aliases preserve original clinical/financial identifiers, resolve portal ownership and consent conflicts, and prevent new writes to merged aliases.
+- `c0975a4`: scoped appointment/prescription/consultation/diagnostic access and explicit reviewed file release.
+- `346075c`: real delivered-service billing sources, payment-derived appointment state, controlled financial clearance, immutable signed summaries and guarded bed transfers.
+- `63894f3`: production malware-scan gate, bounded public request quotas, active care-team delegation/revocation, source-correct prescription status, and operational lifecycle checks.
+- `d978587`: authenticated encrypted backups, empty-target transactional restore, real-schema reconciliation and corrected acceptance claims.
+
+The uncached Go/PostgreSQL suite and vet pass through migration 045. Connected API integration and the synthetic encrypted backup/restore drill pass. New-module browser integration, full original parity and the open Section 3 deployment/business requirements are not implied by these tests. Real provider credentials remain blank.
+
+
+## Final local acceptance evidence
+
+The reviewed operational branch passed on 2026-10-05:
+
+- Uncached Go unit, PostgreSQL transaction/concurrency/authorization and HTTP tests through migration 045; `go vet`.
+- Web unit tests, formatting, production build and TypeScript checks.
+- Connected API integration: session/role/record isolation, CSRF, booking concurrency, captured SMS, Mailpit and revocation.
+- Existing connected browser journeys: billing/payment, bed/case/admission/discharge, staff/schedules/patient booking, reload persistence and mobile layout.
+- Firebase Auth emulator and MFA, password recovery, and staff invitations.
+- Real-schema reconciliation during every connected suite; encrypted synthetic database restore with wrong-key, tampering and nonempty-target denial.
+- Production dependency audit: zero vulnerabilities.
+
+These results support integrating the submitted development branch. They do not establish full Section 3 completion: the corrected checklist retains outstanding tax/insurance/accounting workflows, complete original-module parity, provider provisioning, private-file recovery/retention, production deployment/security review and user acceptance. New-module frontend integration remains Section 4.

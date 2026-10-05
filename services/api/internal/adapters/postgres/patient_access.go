@@ -32,7 +32,7 @@ func (s Store) LinkPatient(ctx context.Context, a domain.Actor, id string, acces
 		}
 	}
 	var current string
-	err = tx.QueryRow(ctx, `SELECT COALESCE(user_id,'') FROM patient WHERE id=$1 FOR UPDATE`, id).Scan(&current)
+	err = tx.QueryRow(ctx, `SELECT COALESCE(patient_portal_owner(id),'') FROM patient WHERE id=$1 AND canonical_patient_id(id)=id FOR UPDATE`, id).Scan(&current)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrNotFound
 	}
@@ -43,7 +43,7 @@ func (s Store) LinkPatient(ctx context.Context, a domain.Actor, id string, acces
 	if current != "" && current != access.UserID {
 		return domain.ErrStale
 	}
-	_, err = tx.Exec(ctx, `UPDATE patient SET user_id=NULLIF($2,''),clinician_user_id=NULLIF($3,'') WHERE id=$1`, id, access.UserID, access.ClinicianID)
+	_, err = tx.Exec(ctx, `UPDATE patient SET user_id=CASE WHEN patient_portal_owner(id) IS NULL THEN NULLIF($2,'') ELSE user_id END,clinician_user_id=NULLIF($3,'') WHERE id=$1`, id, access.UserID, access.ClinicianID)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
