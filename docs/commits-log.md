@@ -23,6 +23,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`4c6ec33`](https://github.com/zemuumez/HospitalManagementSystemET/commit/4c6ec33) | **3.A** | Source parity review, inactive/commented route audit, PDF role contradiction reconciliation, single-hospital architecture decisions, and OpenAPI 3.1 specification | N/A | Pushed |
 | [`8a7a23f`](https://github.com/zemuumez/HospitalManagementSystemET/commit/8a7a23f) | **Frontend/Billing** | Recreate billing module with 8 tabs matching legacy Laravel screenshots (Manual Billing Payments, Advance Payments, Payment Reports, Payments, Invoices, Accounts, Payrolls, Bills) | N/A | Pushed (`main`) |
 | [`9bf4476`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9bf4476) | **Frontend/BedManagement** | Recreate Bed Management module with 4 tabs matching screenshots (Bed Status with 17 ward grids, Bed Assigns, Beds, Bed Types, New Bed Type modal) | N/A | Pushed (`main`) |
+| [`cda7d7e`](https://github.com/zemuumez/HospitalManagementSystemET/commit/cda7d7e) | **Frontend/Modules** | Workspaces for Prescriptions, Doctors (5 tabs, New Schedule, Breaks), Blood Bank (5 tabs, Donors, Reports), and Diagnosis (Categories, Tests) | N/A | Pushed (`main`) |
 
 ---
 
@@ -214,5 +215,35 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - Added full Amharic localization in `apps/web/src/lib/am.json` for all bed management tabs, wards, buttons, fields, and headers.
   - Updated routing and aliases in `apps/web/src/app/(hospital)/modules/[slug]/page.tsx`, `apps/web/src/components/workspace.tsx`, and `apps/web/src/lib/legacy.ts`.
   - Authored automated verification suite `scripts/verify-bed-management.mjs` and expanded `scripts/verify-reference-pages.mjs`.
+
+### 16. Commit `cda7d7e` — Frontend Prescriptions, Doctors, Blood Bank, and Diagnosis Modules
+- **Message**: `feat(workspaces): add Prescriptions, Doctors, Blood Bank, and Diagnosis workspaces with complete screenshot fidelity`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Recreated **Blood Bank** workspace (`apps/web/src/components/blood-bank-workspace.tsx`) covering 5 sub-tabs with screenshot fidelity:
+    - `blood-banks`: Remained bags counter, Bag code badges, Blood Group indicators, Action buttons.
+    - `blood-donors`: Donor name link, age, gender, blood group, last donation date, New Blood Donor modal.
+    - `blood-donations`: Donor reference, bags donated, donation date.
+    - `blood-issues`: Issue date, patient link, doctor link, donor link, amount, blood group, remarks, New Blood Issue modal.
+    - `blood-donor-reports`: Blood donor name link, blood group, dynamic disease testing rows with Negative (green pill) and Positive (red pill) badges, and interactive Add Blood Donor Report modal with dynamic test disease addition/removal.
+  - Recreated **Doctors** workspace (`apps/web/src/components/doctors-workspace.tsx`) covering 5 sub-tabs:
+    - `doctors`: Doctor card/table views, department filters, status toggles, quick actions.
+    - `doctor-departments`: Department list, doctor count, actions, New Doctor Department modal.
+    - `schedules`: Available schedules, per-day time slots, New Schedule view with Monday-to-Sunday rows and "Copy Monday to All" shortcut.
+    - `doctor-holidays`: Doctor holiday records, date ranges, reasons, New Holiday modal.
+    - `breaks`: Doctor breaks table with blue time/date badges, search filter, and Add Break form view.
+  - Recreated **Prescriptions** workspace (`apps/web/src/components/prescriptions-workspace.tsx`):
+    - `prescriptions`: Prescriptions table with patient links, doctor links, medical condition, status toggle, actions (view, edit, print, delete).
+    - `New Prescription` view: Full-page form with patient select, doctor select, food allergies, tendencies, physical measurements (high BP, pulse, temp, weight, height), dynamic medicine rows (medicine select, dosage, day, time, comment), and "Suggest Medicines" magic-wand button with required-info toast alert.
+    - `New Medicine` modal accessible from both prescription listing and create views.
+    - Printable prescription view with layout matching medical prescription sheets.
+  - Recreated **Diagnosis** workspace (`apps/web/src/components/diagnosis-workspace.tsx`):
+    - `diagnosis-categories`: Category list, description, action buttons, New Diagnosis Category modal dialog.
+    - `patient-diagnosis-test`: Diagnosis Tests table with test report links, patient links, doctor links, category badges, test dates.
+    - `New Patient Diagnosis Test` view: Full-page test order form with auto-generated report numbers, diagnosis category, test name, physical measurements, and dynamic custom property rows (Property Name + Property Value).
+  - Supported dark mode and light mode visual fidelity in `apps/web/src/app/globals.css`.
+  - Added Amharic localization in `apps/web/src/lib/am.json` for all four modules.
+  - Created end-to-end verification script `scripts/verify-four-modules.mjs` verifying navigation, forms, modals, tabs, and UI elements across all 4 modules.
+
 
 
