@@ -271,19 +271,19 @@ Backend-first progress:
 
 ### J. Files, data, operations and release
 
-- [x] Private attachment storage, size/type limits, malware checks, authorized downloads and retention (migration 040, domain/application/adapters `secure_attachment`).
+- [ ] Private attachment storage, size/type limits, malware checks, authorized downloads and retention (migration 040, domain/application/adapters `secure_attachment`).
 - [x] No public patient-upload buckets or predictable unauthenticated file URLs (cryptographic tokens, private storage paths, actor-authenticated endpoints).
-- [x] Migration/import mapping from Laravel, trial runs, reconciliation reports and rollback plan ([docs/laravel-import-mapping.md](laravel-import-mapping.md), [scripts/reconcile_import.go](../scripts/reconcile_import.go)).
-- [x] Pagination/filtering/search/export for every list; avoid unbounded option loaders ([docs/database-capacity-and-query-plans.md](database-capacity-and-query-plans.md)).
+- [ ] Migration/import mapping from Laravel, trial runs, reconciliation reports and rollback plan ([docs/laravel-import-mapping.md](laravel-import-mapping.md), [scripts/reconcile_import.go](../scripts/reconcile_import.go)).
+- [ ] Pagination/filtering/search/export for every list; avoid unbounded option loaders ([docs/database-capacity-and-query-plans.md](database-capacity-and-query-plans.md)).
 - [x] Message worker ownership leases/heartbeats, bounded sends, expired-claim recovery to uncertain and stale-worker fencing; concurrency and live development-delivery tests (migration 012).
-- [x] Approved retry/reconciliation workflow, provider callbacks, scheduler workers and production worker monitoring ([scripts/reconcile_import.go](../scripts/reconcile_import.go), [docs/observability-and-alerting.md](observability-and-alerting.md)).
+- [ ] Approved retry/reconciliation workflow, provider callbacks, scheduler workers and production worker monitoring ([scripts/reconcile_import.go](../scripts/reconcile_import.go), [docs/observability-and-alerting.md](observability-and-alerting.md)).
 - [x] Structured request logs excluding sensitive inputs, generated request IDs, liveness and database readiness checks; unit tests.
-- [x] Metrics, alerting and production observability deployment (`/metrics` Prometheus exposition, [docs/observability-and-alerting.md](observability-and-alerting.md), `observability_test.go`).
-- [x] Database indexes/query plans, connection limits, load tests and capacity targets ([docs/database-capacity-and-query-plans.md](database-capacity-and-query-plans.md)).
-- [x] Automated backups, encryption, retention and a demonstrated restore drill ([scripts/backup.ps1](../scripts/backup.ps1), [scripts/restore.ps1](../scripts/restore.ps1), [docs/backup-restore-runbook.md](backup-restore-runbook.md)).
+- [ ] Metrics, alerting and production observability deployment (`/metrics` Prometheus exposition, [docs/observability-and-alerting.md](observability-and-alerting.md), `observability_test.go`).
+- [ ] Database indexes/query plans, connection limits, load tests and capacity targets ([docs/database-capacity-and-query-plans.md](database-capacity-and-query-plans.md)).
+- [ ] Automated backups, encryption, retention and a demonstrated restore drill ([scripts/backup.ps1](../scripts/backup.ps1), [scripts/restore.ps1](../scripts/restore.ps1), [docs/backup-restore-runbook.md](backup-restore-runbook.md)).
 - [x] CI gates for migrations, unit/database/API integration, existing browser regression, builds and production npm dependency audit; [hosted run passed](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37225297032). New module browser coverage remains Section 4/5 work.
-- [x] Staging deployment, environment separation, secret management and production runbooks ([deployment/docker-compose.prod.yml](../deployment/docker-compose.prod.yml), [docs/production-deployment-runbook.md](production-deployment-runbook.md)).
-- [x] User acceptance sign-off, migration cutover, rollback rehearsal and post-release monitoring ([docs/cutover-and-release-playbook.md](cutover-and-release-playbook.md)).
+- [ ] Staging deployment, environment separation, secret management and production runbooks ([deployment/docker-compose.prod.yml](../deployment/docker-compose.prod.yml), [docs/production-deployment-runbook.md](production-deployment-runbook.md)).
+- [ ] User acceptance sign-off, migration cutover, rollback rehearsal and post-release monitoring ([docs/cutover-and-release-playbook.md](cutover-and-release-playbook.md)).
 
 ## 4. Frontend integration checklist for every module
 
@@ -536,3 +536,9 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 - [x] Reproduced token allocation race: 11 of 16 simultaneous registrations failed on duplicate tokens before repair.
 - [x] Added transaction-scoped doctor/date allocation lock; all 16 simultaneous registrations now receive unique tokens. Uncached Go/PostgreSQL tests and go vet pass.
 - [ ] Remaining queue authorization, transitions, appointment linkage and browser integration require review.
+
+### Operational review: private attachments (2026-10-05)
+- [x] Replaced metadata-only HTTP upload with bounded multipart storage, server MIME/size/checksum calculation and authorized downloads.
+- [x] Cross-patient and unassigned-clinician denial, upload/download bytes, filename traversal, HTML and size limits tested with real files and PostgreSQL.
+- [ ] Malware scanning/quarantine, lifecycle retention, coordinated backup restore, upload throttling and broader file-format support remain pending; see [private attachment setup](private-attachment-storage.md).
+- [ ] Reopened unsupported deployment/import/restore/acceptance completion claims: documentation alone is not execution evidence.

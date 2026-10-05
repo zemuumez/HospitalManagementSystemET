@@ -426,5 +426,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testAttendanceRetry(t, db, store, actors)
 	testAttendanceLifecycle(t, db, store, actors)
 	testQueueConcurrency(t, db, store, actors)
+	testAttachmentPrivacy(t, db, store, actors, patients)
 
 }

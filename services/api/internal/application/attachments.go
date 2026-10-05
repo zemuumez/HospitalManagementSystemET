@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"strings"
 
 	"hms.local/api/internal/domain"
 )
 
 type AttachmentsRepository interface {
+	AuthorizeAttachment(context.Context, domain.Actor, *string, *string) error
 	SaveAttachment(ctx context.Context, a domain.Actor, token string, input domain.CreateSecureAttachmentInput) (domain.SecureAttachment, error)
 	GetAttachmentByToken(ctx context.Context, token string) (domain.SecureAttachment, error)
 	ListPatientAttachments(ctx context.Context, patientID string) ([]domain.SecureAttachment, error)
@@ -17,6 +19,7 @@ type AttachmentsRepository interface {
 
 type AttachmentsService struct {
 	Store AttachmentsRepository
+	Files AttachmentFiles
 }
 
 func (s AttachmentsService) CreateAttachment(ctx context.Context, a domain.Actor, input domain.CreateSecureAttachmentInput) (domain.SecureAttachment, error) {
@@ -26,9 +29,18 @@ func (s AttachmentsService) CreateAttachment(ctx context.Context, a domain.Actor
 	if err := input.Validate(); err != nil {
 		return domain.SecureAttachment{}, err
 	}
+	// Clinical attachments are always private, including for their uploader.
+	if input.IsPublic {
+		return domain.SecureAttachment{}, domain.ErrValidation
+	}
+	if err := s.Store.AuthorizeAttachment(ctx, a, input.PatientID, input.EncounterID); err != nil {
+		return domain.SecureAttachment{}, err
+	}
 
 	raw := make([]byte, 16)
-	_, _ = rand.Read(raw)
+	if _, err := rand.Read(raw); err != nil {
+		return domain.SecureAttachment{}, err
+	}
 	token := hex.EncodeToString(raw)
 
 	return s.Store.SaveAttachment(ctx, a, token, input)
@@ -44,21 +56,9 @@ func (s AttachmentsService) GetAttachmentByToken(ctx context.Context, a domain.A
 		return domain.SecureAttachment{}, err
 	}
 
-	// Authorization check
-	if !att.IsPublic {
-		if a.Role == "admin" || a.ID == att.UploaderID {
-			return att, nil
-		}
-		if a.Role == "doctor" || a.Role == "nurse" || a.Role == "lab_technician" {
-			return att, nil
-		}
-		if a.Role == "patient" && att.PatientID != nil {
-			// Patient can only access attachments related to their patient record
-			return att, nil
-		}
-		return domain.SecureAttachment{}, domain.ErrForbidden
+	if err := s.Store.AuthorizeAttachment(ctx, a, att.PatientID, att.EncounterID); err != nil {
+		return domain.SecureAttachment{}, err
 	}
-
 	return att, nil
 }
 
@@ -66,8 +66,20 @@ func (s AttachmentsService) ListPatientAttachments(ctx context.Context, a domain
 	if !domain.UUIDPattern.MatchString(patientID) {
 		return nil, domain.ErrValidation
 	}
-	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" {
-		return nil, domain.ErrForbidden
+	if err := s.Store.AuthorizeAttachment(ctx, a, &patientID, nil); err != nil {
+		return nil, err
 	}
-	return s.Store.ListPatientAttachments(ctx, patientID)
+	items, err := s.Store.ListPatientAttachments(ctx, patientID)
+	if err != nil {
+		return nil, err
+	}
+	visible := []domain.SecureAttachment{}
+	for _, att := range items {
+		if err := s.Store.AuthorizeAttachment(ctx, a, att.PatientID, att.EncounterID); err == nil {
+			visible = append(visible, att)
+		} else if !errors.Is(err, domain.ErrForbidden) {
+			return nil, err
+		}
+	}
+	return visible, nil
 }
