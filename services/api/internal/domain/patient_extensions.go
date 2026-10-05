@@ -92,6 +92,13 @@ type MergePatientInput struct {
 	Reason           string `json:"reason"`
 }
 
+type PatientIdentity struct {
+	ID        string `json:"id"`
+	PrimaryID string `json:"primaryId"`
+	MRN       string `json:"mrn"`
+	Name      string `json:"name"`
+}
+
 func (m *MergePatientInput) Validate() error {
 	m.Reason = strings.TrimSpace(m.Reason)
 	if !UUIDPattern.MatchString(m.PrimaryPatientID) || !UUIDPattern.MatchString(m.MergedPatientID) {

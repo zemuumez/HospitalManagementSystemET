@@ -257,7 +257,7 @@ func (s Store) PatientVaccinations(ctx context.Context, patientID string) ([]dom
 		FROM patient_vaccination pv
 		JOIN patient p ON p.id = pv.patient_id
 		JOIN vaccine_catalog vc ON vc.id = pv.vaccine_id
-		WHERE pv.patient_id = $1
+		WHERE canonical_patient_id(pv.patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY pv.administered_at DESC
 	`, patientID)
 	if err != nil {
@@ -533,7 +533,7 @@ func (s Store) InvestigationReports(ctx context.Context, patientID string) ([]do
 		FROM investigation_report ir
 		JOIN patient p ON p.id = ir.patient_id
 		JOIN "user" u ON u.id = ir.investigated_by
-		WHERE ir.patient_id = $1
+		WHERE canonical_patient_id(ir.patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY ir.created_at DESC
 	`, patientID)
 	if err != nil {

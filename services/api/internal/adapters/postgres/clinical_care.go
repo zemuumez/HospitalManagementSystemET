@@ -621,7 +621,7 @@ func (s Store) OPDFollowUps(ctx context.Context, patientID string) ([]domain.OPD
 		FROM opd_follow_up f
 		JOIN patient p ON p.id = f.patient_id
 		JOIN "user" u ON u.id = f.doctor_id
-		WHERE f.patient_id = $1
+		WHERE canonical_patient_id(f.patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY f.follow_up_date DESC
 	`, patientID)
 	if err != nil {
@@ -677,7 +677,7 @@ func (s Store) PatientReferrals(ctx context.Context, patientID string) ([]domain
 		       r.referral_type, r.external_facility, r.department, r.reason, r.referred_by, r.referred_at
 		FROM patient_referral r
 		JOIN patient p ON p.id = r.patient_id
-		WHERE r.patient_id = $1
+		WHERE canonical_patient_id(r.patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY r.referred_at DESC
 	`, patientID)
 	if err != nil {
@@ -734,7 +734,7 @@ func (s Store) Odontogram(ctx context.Context, patientID string) ([]domain.Odont
 	rows, err := s.DB.Query(ctx, `
 		SELECT id, patient_id, encounter_id::text, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
 		FROM patient_odontogram_entry
-		WHERE patient_id = $1
+		WHERE canonical_patient_id(patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY tooth_number ASC
 	`, patientID)
 	if err != nil {

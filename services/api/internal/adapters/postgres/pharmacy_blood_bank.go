@@ -420,7 +420,7 @@ func (s Store) BloodIssues(ctx context.Context, patientFilter string, page int) 
 	whereClause := ""
 	args := []any{}
 	if patientFilter != "" {
-		whereClause = " WHERE (bi.patient_id = $1 OR bi.patient_id IN (SELECT id::text FROM patient WHERE user_id = $1))"
+		whereClause = " WHERE (bi.patient_id = $1 OR bi.patient_id IN (SELECT id::text FROM patient WHERE patient_portal_owner(id) = $1))"
 		args = append(args, patientFilter)
 	}
 
@@ -431,7 +431,7 @@ func (s Store) BloodIssues(ctx context.Context, patientFilter string, page int) 
 	}
 
 	query := fmt.Sprintf(`
-		SELECT bi.id, bi.issue_date, bi.doctor_id, bi.donor_id, bi.patient_id, p.user_id,
+		SELECT bi.id, bi.issue_date, bi.doctor_id, bi.donor_id, bi.patient_id, patient_portal_owner(p.id),
 		       bi.blood_group, bi.bags, bi.amount_minor, bi.remarks, bi.issued_by, bi.invoice_id,
 		       bi.created_at, bi.updated_at
 		FROM blood_issue bi
@@ -474,7 +474,7 @@ func (s Store) BloodIssue(ctx context.Context, id string) (domain.BloodIssue, er
 	var patientUserID *string
 	var invoiceID *string
 	err := s.DB.QueryRow(ctx, `
-		SELECT bi.id, bi.issue_date, bi.doctor_id, bi.donor_id, bi.patient_id, p.user_id,
+		SELECT bi.id, bi.issue_date, bi.doctor_id, bi.donor_id, bi.patient_id, patient_portal_owner(p.id),
 		       bi.blood_group, bi.bags, bi.amount_minor, bi.remarks, bi.issued_by, bi.invoice_id,
 		       bi.created_at, bi.updated_at
 		FROM blood_issue bi
@@ -552,7 +552,7 @@ func (s Store) Prescriptions(ctx context.Context, patientFilter string, page int
 	whereClause := ""
 	args := []any{}
 	if patientFilter != "" {
-		whereClause = " WHERE (pr.patient_id = $1 OR pr.patient_id IN (SELECT id::text FROM patient WHERE user_id = $1))"
+		whereClause = " WHERE (pr.patient_id = $1 OR pr.patient_id IN (SELECT id::text FROM patient WHERE patient_portal_owner(id) = $1))"
 		args = append(args, patientFilter)
 	}
 
@@ -563,7 +563,7 @@ func (s Store) Prescriptions(ctx context.Context, patientFilter string, page int
 	}
 
 	query := fmt.Sprintf(`
-		SELECT pr.id, pr.patient_id, p.user_id, pr.doctor_id, pr.encounter_id, pr.food_allergies,
+		SELECT pr.id, pr.patient_id, patient_portal_owner(p.id), pr.doctor_id, pr.encounter_id, pr.food_allergies,
 		       pr.tendency_bleed, pr.heart_disease, pr.high_blood_pressure, pr.diabetic, pr.surgery,
 		       pr.accident, pr.others, pr.medical_history, pr.current_medication, pr.female_pregnancy,
 		       pr.breast_feeding, pr.health_insurance, pr.low_income, pr.reference, pr.status,
@@ -609,7 +609,7 @@ func (s Store) Prescription(ctx context.Context, id string) (domain.Prescription
 	var encID *string
 	var patientUserID *string
 	err := s.DB.QueryRow(ctx, `
-		SELECT pr.id, pr.patient_id, p.user_id, pr.doctor_id, pr.encounter_id, pr.food_allergies,
+		SELECT pr.id, pr.patient_id, patient_portal_owner(p.id), pr.doctor_id, pr.encounter_id, pr.food_allergies,
 		       pr.tendency_bleed, pr.heart_disease, pr.high_blood_pressure, pr.diabetic, pr.surgery,
 		       pr.accident, pr.others, pr.medical_history, pr.current_medication, pr.female_pregnancy,
 		       pr.breast_feeding, pr.health_insurance, pr.low_income, pr.reference, pr.status,

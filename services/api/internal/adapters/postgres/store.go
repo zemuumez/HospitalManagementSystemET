@@ -18,7 +18,7 @@ func (s Store) Actor(ctx context.Context, id string) (domain.Actor, error) {
 }
 
 // Scope is enforced inside data access for lists AND aggregate counts.
-const scope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND clinician_user_id=$2) OR ($1='patient' AND user_id=$2))`
+const scope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND clinician_user_id=$2) OR ($1='patient' AND patient_portal_owner(id)=$2))`
 
 func (s Store) Patients(ctx context.Context, a domain.Actor, search string, page int) ([]domain.Patient, error) {
 	tx, err := s.DB.Begin(ctx)
@@ -26,7 +26,7 @@ func (s Store) Patients(ctx context.Context, a domain.Actor, search string, page
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, `SELECT id,medical_record_number,given_name,family_name,COALESCE(date_of_birth::text,''),phone,created_at,COALESCE(user_id,''),COALESCE(clinician_user_id,'') FROM patient WHERE `+scope+` AND ($3='' OR strpos(lower(given_name || ' ' || family_name),lower($3))>0 OR medical_record_number::text=$3) ORDER BY created_at DESC,id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
+	rows, err := tx.Query(ctx, `SELECT id,medical_record_number,given_name,family_name,COALESCE(date_of_birth::text,''),phone,created_at,COALESCE(patient_portal_owner(id),''),COALESCE(clinician_user_id,'') FROM patient WHERE canonical_patient_id(id)=id AND `+scope+` AND ($3='' OR strpos(lower(given_name || ' ' || family_name),lower($3))>0 OR medical_record_number::text=$3) ORDER BY created_at DESC,id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s Store) RegisterPatient(ctx context.Context, a domain.Actor, in domain.Pa
 }
 func (s Store) Overview(ctx context.Context, a domain.Actor) (domain.Overview, error) {
 	var o domain.Overview
-	err := s.DB.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE created_at::date=CURRENT_DATE) FROM patient WHERE `+scope, a.Role, a.ID).Scan(&o.PatientCount, &o.RegisteredToday)
+	err := s.DB.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE created_at::date=CURRENT_DATE) FROM patient WHERE canonical_patient_id(id)=id AND `+scope, a.Role, a.ID).Scan(&o.PatientCount, &o.RegisteredToday)
 	return o, err
 }
 func (s Store) Enqueue(ctx context.Context, a domain.Actor, in domain.MessageInput, key string) (domain.Message, error) {

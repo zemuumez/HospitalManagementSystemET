@@ -29,7 +29,7 @@ func (s Store) LiveConsultations(ctx context.Context, doctorFilter, patientFilte
 		argIdx++
 	}
 	if patientFilter != "" {
-		conditions = append(conditions, fmt.Sprintf("(lc.patient_id = $%d OR lc.patient_id IN (SELECT id::text FROM patient WHERE user_id = $%d))", argIdx, argIdx))
+		conditions = append(conditions, fmt.Sprintf("(lc.patient_id = $%d OR lc.patient_id IN (SELECT id::text FROM patient WHERE patient_portal_owner(id) = $%d))", argIdx, argIdx))
 		args = append(args, patientFilter)
 		argIdx++
 	}
@@ -54,7 +54,7 @@ func (s Store) LiveConsultations(ctx context.Context, doctorFilter, patientFilte
 		SELECT lc.id, lc.doctor_id, lc.patient_id, lc.encounter_id, lc.consultation_title, lc.consultation_date,
 		       lc.duration_minutes, lc.host_video, lc.participant_video, lc.type, lc.type_number, lc.platform_type,
 		       lc.meeting_id, lc.password, lc.time_zone, lc.status, lc.description, lc.created_by, lc.created_at, lc.updated_at,
-		       p.user_id
+		       patient_portal_owner(p.id)
 		FROM live_consultation lc
 		LEFT JOIN patient p ON p.id::text = lc.patient_id
 		%s
@@ -96,7 +96,7 @@ func (s Store) LiveConsultation(ctx context.Context, id string) (domain.LiveCons
 		SELECT lc.id, lc.doctor_id, lc.patient_id, lc.encounter_id, lc.consultation_title, lc.consultation_date,
 		       lc.duration_minutes, lc.host_video, lc.participant_video, lc.type, lc.type_number, lc.platform_type,
 		       lc.meeting_id, lc.password, lc.time_zone, lc.status, lc.description, lc.created_by, lc.created_at, lc.updated_at,
-		       p.user_id
+		       patient_portal_owner(p.id)
 		FROM live_consultation lc
 		LEFT JOIN patient p ON p.id::text = lc.patient_id
 		WHERE lc.id = $1

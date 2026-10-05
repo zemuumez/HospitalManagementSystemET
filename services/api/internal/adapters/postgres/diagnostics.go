@@ -83,7 +83,7 @@ func (s Store) CreateDiagnosticTest(ctx context.Context, a domain.Actor, i domai
 
 const diagnosticOrderFields = `o.id,o.accession,o.encounter_id,o.test_id,o.indication,o.status,o.sample_reference,o.version,t.name,t.kind,o.created_at`
 const diagnosticOrderFrom = ` FROM diagnostic_order o JOIN diagnostic_test t ON t.id=o.test_id JOIN encounter e ON e.id=o.encounter_id JOIN patient p ON p.id=e.patient_id `
-const diagnosticScope = `($1 IN ('admin','lab_technician') OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND p.user_id=$2 AND EXISTS(SELECT 1 FROM diagnostic_result r JOIN diagnostic_review v ON v.result_id=r.id AND v.action='release' WHERE r.order_id=o.id)))`
+const diagnosticScope = `($1 IN ('admin','lab_technician') OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2 AND EXISTS(SELECT 1 FROM diagnostic_result r JOIN diagnostic_review v ON v.result_id=r.id AND v.action='release' WHERE r.order_id=o.id)))`
 
 func scanDiagnosticOrder(row pgx.Row) (domain.DiagnosticOrder, error) {
 	var o domain.DiagnosticOrder

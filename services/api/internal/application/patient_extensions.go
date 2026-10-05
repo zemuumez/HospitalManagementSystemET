@@ -12,6 +12,8 @@ import (
 )
 
 type PatientExtensionsRepository interface {
+	AuthorizePatientRecord(context.Context, domain.Actor, string) error
+	PatientIdentities(context.Context, string) ([]domain.PatientIdentity, error)
 	// Guardian & consent
 	PatientContactConsent(ctx context.Context, patientID string) (domain.PatientContactConsent, error)
 	SavePatientContactConsent(ctx context.Context, a domain.Actor, c domain.PatientContactConsent) error
@@ -40,6 +42,9 @@ func (s PatientExtensionsService) GetConsent(ctx context.Context, a domain.Actor
 	if !domain.UUIDPattern.MatchString(patientID) {
 		return domain.PatientContactConsent{}, domain.ErrValidation
 	}
+	if err := s.Store.AuthorizePatientRecord(ctx, a, patientID); err != nil {
+		return domain.PatientContactConsent{}, err
+	}
 	return s.Store.PatientContactConsent(ctx, patientID)
 }
 
@@ -48,6 +53,9 @@ func (s PatientExtensionsService) SaveConsent(ctx context.Context, a domain.Acto
 		return domain.ErrForbidden
 	}
 	if err := c.Validate(); err != nil {
+		return err
+	}
+	if err := s.Store.AuthorizePatientRecord(ctx, a, c.PatientID); err != nil {
 		return err
 	}
 	return s.Store.SavePatientContactConsent(ctx, a, c)
@@ -61,6 +69,9 @@ func (s PatientExtensionsService) ListSmartCards(ctx context.Context, a domain.A
 	}
 	if !domain.UUIDPattern.MatchString(patientID) {
 		return nil, domain.ErrValidation
+	}
+	if err := s.Store.AuthorizePatientRecord(ctx, a, patientID); err != nil {
+		return nil, err
 	}
 	return s.Store.PatientSmartCards(ctx, patientID)
 }
@@ -120,7 +131,7 @@ func (s PatientExtensionsService) VerifySmartCardQR(ctx context.Context, qrToken
 // ─── Duplicates & Merge ───────────────────────────────────────────────────────
 
 func (s PatientExtensionsService) FindDuplicates(ctx context.Context, a domain.Actor, query string) ([]domain.DuplicatePatientCandidate, error) {
-	if !a.Can("patients.read") {
+	if a.Role != "admin" && a.Role != "receptionist" {
 		return nil, domain.ErrForbidden
 	}
 	query = strings.TrimSpace(query)
@@ -138,4 +149,14 @@ func (s PatientExtensionsService) MergePatients(ctx context.Context, a domain.Ac
 		return err
 	}
 	return s.Store.MergePatients(ctx, a, input)
+}
+
+func (s PatientExtensionsService) Identities(ctx context.Context, a domain.Actor, id string) ([]domain.PatientIdentity, error) {
+	if !domain.UUIDPattern.MatchString(id) {
+		return nil, domain.ErrValidation
+	}
+	if err := s.Store.AuthorizePatientRecord(ctx, a, id); err != nil {
+		return nil, err
+	}
+	return s.Store.PatientIdentities(ctx, id)
 }

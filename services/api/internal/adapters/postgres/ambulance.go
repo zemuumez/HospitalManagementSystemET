@@ -322,7 +322,7 @@ func (s Store) AmbulanceCalls(ctx context.Context, a domain.Actor, page int, sta
 	argIdx := 1
 
 	if a.Role == "patient" {
-		whereClause += fmt.Sprintf(" AND p.user_id = $%d", argIdx)
+		whereClause += fmt.Sprintf(" AND patient_portal_owner(p.id) = $%d", argIdx)
 		args = append(args, a.ID)
 		argIdx++
 	} else if patientID != "" {
@@ -409,7 +409,7 @@ func (s Store) AmbulanceCall(ctx context.Context, a domain.Actor, id string) (do
 	var patientUserID string
 	err := s.DB.QueryRow(ctx, `
 		SELECT c.id, c.ambulance_id, a.vehicle_model, a.vehicle_number,
-		       c.patient_id, p.given_name || ' ' || p.family_name, p.user_id,
+		       c.patient_id, p.given_name || ' ' || p.family_name, patient_portal_owner(p.id),
 		       c.driver_name, c.call_date, c.amount_minor, c.status,
 		       c.pickup_location, c.destination, c.notes,
 		       i.invoice_id, c.version, c.created_by, c.created_at, c.updated_at

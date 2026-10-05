@@ -170,7 +170,7 @@ func (s Store) Slots(ctx context.Context, id string, day, now time.Time) ([]time
 
 const appointmentColumns = `a.patient_id,a.doctor_id,a.starts_at,a.problem,a.notify_sms,a.id,p.given_name||' '||p.family_name,u.name,a.ends_at,a.status,a.version`
 const appointmentJoin = ` FROM appointment a JOIN patient p ON p.id=a.patient_id JOIN "user" u ON u.id=a.doctor_id `
-const appointmentScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND a.doctor_id=$2) OR ($1='patient' AND p.user_id=$2))`
+const appointmentScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND a.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
 
 func scanAppointment(row pgx.Row) (domain.Appointment, error) {
 	var a domain.Appointment
@@ -243,7 +243,7 @@ func (s Store) Book(ctx context.Context, actor domain.Actor, i domain.Appointmen
 		return empty, err
 	}
 	var phone string
-	err = tx.QueryRow(ctx, `SELECT phone FROM patient WHERE id=$1 AND ($2 IN ('admin','receptionist') OR ($2='patient' AND user_id=$3) OR ($2='doctor' AND clinician_user_id=$3)) FOR UPDATE`, i.PatientID, actor.Role, actor.ID).Scan(&phone)
+	err = tx.QueryRow(ctx, `SELECT phone FROM patient WHERE id=$1 AND ($2 IN ('admin','receptionist') OR ($2='patient' AND patient_portal_owner(id)=$3) OR ($2='doctor' AND clinician_user_id=$3)) FOR UPDATE`, i.PatientID, actor.Role, actor.ID).Scan(&phone)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return empty, domain.ErrNotFound
 	}

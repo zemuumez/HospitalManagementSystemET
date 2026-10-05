@@ -15,7 +15,7 @@ func (s Server) publicPatientExtensions(w http.ResponseWriter, r *http.Request) 
 			fail(w, err)
 			return true
 		}
-		write(w, 200, card)
+		write(w, 200, map[string]any{"valid": true, "cardNumber": card.CardNumber, "expiresAt": card.ExpiresAt})
 		return true
 	}
 	return false
@@ -23,6 +23,15 @@ func (s Server) publicPatientExtensions(w http.ResponseWriter, r *http.Request) 
 
 func (s Server) patientExtensions(w http.ResponseWriter, r *http.Request, a domain.Actor) bool {
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/v1/patients/") && strings.HasSuffix(r.URL.Path, "/identities") && r.Method == "GET":
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/patients/"), "/identities")
+		items, err := s.PatientExt.Identities(r.Context(), a, id)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, map[string]any{"identities": items})
+		return true
 	case r.URL.Path == "/v1/patients/duplicates" && r.Method == "GET":
 		q := r.URL.Query().Get("q")
 		dupes, err := s.PatientExt.FindDuplicates(r.Context(), a, q)

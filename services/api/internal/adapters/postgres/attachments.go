@@ -18,7 +18,7 @@ func (s Store) AuthorizeAttachment(ctx context.Context, a domain.Actor, patientI
 	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM patient p
  WHERE p.id=$3::uuid
  AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM encounter e WHERE e.id=$4::uuid AND e.patient_id=p.id))
- AND ($1='admin' OR ($1='patient' AND p.user_id=$2)
+ AND ($1='admin' OR ($1='patient' AND patient_portal_owner(p.id)=$2)
  OR ($1='doctor' AND (p.clinician_user_id=$2 OR EXISTS(SELECT 1 FROM encounter e WHERE e.patient_id=p.id AND e.doctor_id=$2 AND ($4::uuid IS NULL OR e.id=$4::uuid))))
  OR ($1='nurse' AND EXISTS(SELECT 1 FROM encounter e JOIN encounter_nurse n ON n.encounter_id=e.id WHERE e.patient_id=p.id AND n.nurse_id=$2 AND n.active AND ($4::uuid IS NULL OR e.id=$4::uuid)))))`, a.Role, a.ID, *patientID, encounterID).Scan(&allowed)
 	if err != nil {
@@ -86,7 +86,7 @@ func (s Store) ListPatientAttachments(ctx context.Context, patientID string) ([]
 		SELECT id, token, file_name, mime_type, file_size_bytes, storage_path,
 		       sha256_hash, uploader_id, patient_id::text, encounter_id::text, is_public, created_at
 		FROM secure_attachment
-		WHERE patient_id = $1
+		WHERE canonical_patient_id(patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY created_at DESC
 	`, patientID)
 	if err != nil {

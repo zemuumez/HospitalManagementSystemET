@@ -18,16 +18,16 @@ func (s Store) PatientContactConsent(ctx context.Context, patientID string) (dom
 		SELECT guardian_name, guardian_relation, guardian_phone, guardian_email,
 		       sms_consent, email_consent, data_sharing_consent, updated_at
 		FROM patient_contact_consent
-		WHERE patient_id = $1
+		WHERE patient_id = canonical_patient_id($1::uuid)
 	`, patientID).Scan(
 		&c.GuardianName, &c.GuardianRelation, &c.GuardianPhone, &c.GuardianEmail,
 		&c.SmsConsent, &c.EmailConsent, &c.DataSharingConsent, &c.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Return default consent record
-		c.SmsConsent = true
-		c.EmailConsent = true
-		c.DataSharingConsent = true
+		c.SmsConsent = false
+		c.EmailConsent = false
+		c.DataSharingConsent = false
 		c.UpdatedAt = time.Now().UTC()
 		return c, nil
 	}
@@ -68,7 +68,7 @@ func (s Store) PatientSmartCards(ctx context.Context, patientID string) ([]domai
 		FROM patient_smart_card sc
 		JOIN patient p ON p.id = sc.patient_id
 		LEFT JOIN patient_profile pp ON pp.patient_id = sc.patient_id
-		WHERE sc.patient_id = $1
+		WHERE canonical_patient_id(sc.patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY sc.issued_at DESC
 	`, patientID)
 	if err != nil {
@@ -185,11 +185,4 @@ func (s Store) FindDuplicatePatients(ctx context.Context, query string) ([]domai
 		list = []domain.DuplicatePatientCandidate{}
 	}
 	return list, nil
-}
-
-// Historical patient IDs participate in composite clinical references and
-// immutable financial/revision records. Until a canonical-identity resolver and
-// every scoped reader are implemented together, refuse partial reassignment.
-func (s Store) MergePatients(ctx context.Context, a domain.Actor, input domain.MergePatientInput) error {
-	return domain.ErrUnavailable
 }

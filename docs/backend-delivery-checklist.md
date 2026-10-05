@@ -552,3 +552,8 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 - [x] Reproduced unrelated patient/doctor/nurse access to new diagnoses, procedures, care-team, encounter attachments, beds, follow-ups, referrals and odontogram reads.
 - [x] Added current patient/encounter assignment checks across the clinical-care service, with scoped care-team revocation and patient/encounter consistency checks. Negative tests plus assigned-doctor/admin positive tests pass.
 - [ ] New clinical patient-portal release, delegation semantics, transactional authorization races, financial reconciliation and complete lifecycle tests remain pending. No new clinical module is accepted solely because these scope tests pass.
+
+### Identity consolidation implementation (2026-10-05)
+- [x] Re-enabled patient merge using retained identity aliases, immutable original snapshots, conservative consent and portal-owner/active-care conflict checks (migration 043).
+- [x] Updated portal ownership checks and patient history readers; added authenticated retained-identity lookup and blocked new work on retired UUIDs.
+- [x] Concurrent replay, original encounter/invoice retention, portal access and alias lookup tested against isolated PostgreSQL; full Go suite and vet pass. See [merge contract](patient-identity-merge.md).
