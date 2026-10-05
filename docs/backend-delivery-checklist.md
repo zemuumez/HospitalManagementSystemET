@@ -172,7 +172,7 @@ Backend-first progress:
 - [x] Optional/unknown patient DOB persisted as SQL NULL, with audited correction and EAT calendar-day boundary validation matching the source nullable DOB rule (migration 025).
 - [x] Remaining patient source fields (father name, religion, referral source, notes) and profile extensions (migration 036).
 - [x] Patient detail/edit with optimistic concurrency and retained before/after audit history; no patient-delete API, retained clinical/revision references prevent destructive record deletion.
-- [x] Duplicate detection, merge/correction policy and imported identifier preservation (migration 037; `/v1/patients/duplicates`, `/v1/patients/merge`, immutable `patient_merge_event` audit).
+- [ ] Duplicate detection, merge/correction policy and imported identifier preservation (migration 037; `/v1/patients/duplicates`, `/v1/patients/merge`, immutable `patient_merge_event` audit).
 - [x] Doctor departments, qualifications, specialties, fees, profiles, photos and availability management (migration 036; versioned doctor_department, doctor_profile extensions and revision auditing).
 - [x] Shared staff names/contact/address, optional DOB, gender, designation, qualification and doctor specialty backend fields, with administrator-only access and source comparison (migration 020).
 - [ ] Staff photos/documents, role-specific remaining fields, complete original form parity and profile history integration.
@@ -542,3 +542,8 @@ PostgreSQL and HTTP integration tests verify: role authorization and denials, pa
 - [x] Cross-patient and unassigned-clinician denial, upload/download bytes, filename traversal, HTML and size limits tested with real files and PostgreSQL.
 - [ ] Malware scanning/quarantine, lifecycle retention, coordinated backup restore, upload throttling and broader file-format support remain pending; see [private attachment setup](private-attachment-storage.md).
 - [ ] Reopened unsupported deployment/import/restore/acceptance completion claims: documentation alone is not execution evidence.
+
+### Operational review: patient merge guard (2026-10-05)
+- [x] Reproduced transaction abort when merging a patient with encounters; the submitted code violated composite case/patient/doctor references and ignored write errors.
+- [x] Removed unsafe partial reassignment. Valid administrator merge requests return unavailable and leave clinical rows and merge events unchanged; negative regression test passes.
+- [ ] Implement canonical patient identity with retained original identifiers, ownership/consent conflict policy, all-module reader resolution, concurrency/reversal rules and reconciliation tests before re-enabling merge. This guard is not completion of patient merge.

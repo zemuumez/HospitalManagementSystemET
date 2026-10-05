@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -188,55 +187,9 @@ func (s Store) FindDuplicatePatients(ctx context.Context, query string) ([]domai
 	return list, nil
 }
 
+// Historical patient IDs participate in composite clinical references and
+// immutable financial/revision records. Until a canonical-identity resolver and
+// every scoped reader are implemented together, refuse partial reassignment.
 func (s Store) MergePatients(ctx context.Context, a domain.Actor, input domain.MergePatientInput) error {
-	tx, err := s.DB.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	// Verify both patients exist
-	var primaryName, mergedName string
-	err = tx.QueryRow(ctx, `SELECT given_name || ' ' || family_name FROM patient WHERE id = $1`, input.PrimaryPatientID).Scan(&primaryName)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-
-	err = tx.QueryRow(ctx, `SELECT given_name || ' ' || family_name FROM patient WHERE id = $1`, input.MergedPatientID).Scan(&mergedName)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-
-	snapshot := map[string]interface{}{
-		"primary_patient_id":   input.PrimaryPatientID,
-		"primary_patient_name": primaryName,
-		"merged_patient_id":    input.MergedPatientID,
-		"merged_patient_name":  mergedName,
-		"merged_at":            time.Now().UTC().Format(time.RFC3339),
-	}
-	snapshotBytes, _ := json.Marshal(snapshot)
-
-	// Reassign encounters, appointments, queues, and smart cards to primary patient
-	_, _ = tx.Exec(ctx, `UPDATE encounter SET patient_id = $1 WHERE patient_id = $2`, input.PrimaryPatientID, input.MergedPatientID)
-	_, _ = tx.Exec(ctx, `UPDATE appointment SET patient_id = $1 WHERE patient_id = $2`, input.PrimaryPatientID, input.MergedPatientID)
-	_, _ = tx.Exec(ctx, `UPDATE patient_queue SET patient_id = $1 WHERE patient_id = $2`, input.PrimaryPatientID, input.MergedPatientID)
-	_, _ = tx.Exec(ctx, `UPDATE patient_smart_card SET patient_id = $1 WHERE patient_id = $2`, input.PrimaryPatientID, input.MergedPatientID)
-
-	// Record immutable patient merge event
-	_, err = tx.Exec(ctx, `
-		INSERT INTO patient_merge_event (
-			primary_patient_id, merged_patient_id, reason, actor_id, merged_snapshot
-		) VALUES ($1, $2, $3, $4, $5)
-	`, input.PrimaryPatientID, input.MergedPatientID, input.Reason, a.ID, snapshotBytes)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+	return domain.ErrUnavailable
 }
