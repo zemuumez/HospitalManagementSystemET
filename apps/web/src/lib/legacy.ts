@@ -87,10 +87,50 @@ const overrides: Record<string, Partial<Screen>> = {
     columns: ["Patient", "Doctor", "Queue Number", "Date", "Status"],
   },
   "payment-reports": {
-    columns: ["Payment Date", "Patient", "Payment Type", "Amount", "Status"],
+    columns: ["Payment Date", "Account", "Pay To", "Type", "Amount"],
   },
   "manual-bill-payments": {
-    columns: ["Patient", "Bill Number", "Amount", "Payment Date", "Status"],
+    columns: [
+      "Patient",
+      "Payment Status",
+      "Status",
+      "Transaction Date",
+      "Amount",
+    ],
+  },
+  "advanced-payments": {
+    columns: ["Receipt No", "Patient", "Date", "Amount", "Action"],
+  },
+  payments: {
+    columns: ["Account", "Payment Date", "Pay To", "Amount", "Action"],
+  },
+  invoices: {
+    columns: [
+      "Invoice ID",
+      "Patient",
+      "Invoice Date",
+      "Amount",
+      "Status",
+      "Action",
+    ],
+  },
+  accounts: {
+    columns: ["Account", "Type", "Status", "Action"],
+  },
+  "employee-payrolls": {
+    columns: [
+      "Sr No",
+      "Payroll ID",
+      "Employee",
+      "Month",
+      "Year",
+      "Net Salary",
+      "Status",
+      "Action",
+    ],
+  },
+  bills: {
+    columns: ["Bill ID", "Patient", "Bill Date", "Amount", "Status", "Action"],
   },
   enquiries: {
     fields: fields(
@@ -181,7 +221,7 @@ const groupNames: Record<string, string> = {
   "Blood Bank": "Blood Banks",
   Medicine: "Medicines",
 };
-export const screens: Screen[] = [
+const baseScreens: Screen[] = [
   ...source.map((s) => ({ ...s, ...overrides[s.id] })),
   extra("attendance", "Attendance", "Attendance"),
   extra("attendance-report", "Daily Report", "Attendance"),
@@ -211,7 +251,9 @@ export const screens: Screen[] = [
             ? "Front CMS"
             : s.id === "services"
               ? "Services"
-              : groupNames[s.group] || s.group,
+              : s.group === "Billing"
+                ? "Billings"
+                : groupNames[s.group] || s.group,
   title:
     (
       {
@@ -223,9 +265,55 @@ export const screens: Screen[] = [
         "add-custom-fields": "Custom Field",
         complaints: "Complaint",
         "add-on": "AddOn",
+        accounts: "Account",
+        "advanced-payments": "Advance Payments",
+        "manual-bill-payments": "Manual Billing Payments",
       } as Record<string, string>
     )[s.id] || s.title,
 }));
+
+const manualBillingAlias: Screen = {
+  ...(baseScreens.find((s) => s.id === "manual-bill-payments") || {
+    id: "manual-bill-payments",
+    title: "Manual Billing Payments",
+    group: "Billings",
+    fields: [],
+    columns: [
+      "Patient",
+      "Payment Status",
+      "Status",
+      "Transaction Date",
+      "Amount",
+    ],
+    source: "review/legacy/resources/views/manual_bill_payments",
+    extracted: true,
+  }),
+  id: "manual-billing-payments",
+  title: "Manual Billing Payments",
+  group: "Billings",
+};
+
+const advancePaymentsAlias: Screen = {
+  ...(baseScreens.find((s) => s.id === "advanced-payments") || {
+    id: "advanced-payments",
+    title: "Advance Payments",
+    group: "Billings",
+    fields: [],
+    columns: ["Receipt No", "Patient", "Date", "Amount", "Action"],
+    source: "review/legacy/resources/views/advanced_payments",
+    extracted: true,
+  }),
+  id: "advance-payments",
+  title: "Advance Payments",
+  group: "Billings",
+};
+
+export const screens: Screen[] = [
+  ...baseScreens,
+  manualBillingAlias,
+  advancePaymentsAlias,
+];
+
 // Source menu order, with screenshot-confirmed attendance add-on entries.
 export const groups = [
   "Patient Smart Cards",
@@ -263,6 +351,26 @@ export const groups = [
   "Vaccinations",
 ];
 const tabOrder: Record<string, string[]> = {
+  Billings: [
+    "accounts",
+    "employee-payrolls",
+    "invoices",
+    "payments",
+    "payment-reports",
+    "advance-payments",
+    "bills",
+    "manual-billing-payments",
+  ],
+  Billing: [
+    "accounts",
+    "employee-payrolls",
+    "invoices",
+    "payments",
+    "payment-reports",
+    "advance-payments",
+    "bills",
+    "manual-billing-payments",
+  ],
   Settings: [
     "settings",
     "hospital-schedule",
@@ -303,12 +411,33 @@ const tabOrder: Record<string, string[]> = {
   ],
 };
 export function groupScreens(group: string) {
-  const items = screens.filter((s) => s.group === group);
-  const order = tabOrder[group];
+  const normalized = group === "Billing" ? "Billings" : group;
+  const seen = new Set<string>();
+  const items = screens.filter((s) => {
+    if (s.group !== group && s.group !== normalized) return false;
+    const canon =
+      s.id === "manual-bill-payments"
+        ? "manual-billing-payments"
+        : s.id === "advanced-payments"
+          ? "advance-payments"
+          : s.id;
+    if (seen.has(canon)) return false;
+    seen.add(canon);
+    return true;
+  });
+  const order = tabOrder[normalized] || tabOrder[group];
   return order
     ? items.sort((a, b) => {
-        const rank = (id: string) =>
-          order.includes(id) ? order.indexOf(id) : 999;
+        const rank = (id: string) => {
+          const canon =
+            id === "manual-bill-payments"
+              ? "manual-billing-payments"
+              : id === "advanced-payments"
+                ? "advance-payments"
+                : id;
+          const idx = order.indexOf(canon);
+          return idx !== -1 ? idx : 999;
+        };
         return rank(a.id) - rank(b.id);
       })
     : items;
@@ -396,7 +525,11 @@ export function visibleGroups(role: string) {
       );
 }
 export function screenHref(s: Screen) {
-  return s.id === "patients" ? "/patients" : `/modules/${s.id}`;
+  if (s.id === "patients") return "/patients";
+  if (s.id === "manual-bill-payments")
+    return "/modules/manual-billing-payments";
+  if (s.id === "advanced-payments") return "/modules/advance-payments";
+  return `/modules/${s.id}`;
 }
 export const people = [
   "Alex Morgan",

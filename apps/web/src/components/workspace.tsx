@@ -113,8 +113,25 @@ export function Workspace({ children }: { children: React.ReactNode }) {
     "/modules/ipd-patient-departments",
     "/modules/opd-patient-departments",
   ].includes(path);
-  const selected = screens.find((s) => screenHref(s) === path);
-  const group = selected?.group;
+  const selected = screens.find(
+    (s) => screenHref(s) === path || `/modules/${s.id}` === path,
+  );
+  const group =
+    selected?.group ||
+    ([
+      "/modules/accounts",
+      "/modules/employee-payrolls",
+      "/modules/invoices",
+      "/modules/payments",
+      "/modules/payment-reports",
+      "/modules/advance-payments",
+      "/modules/advanced-payments",
+      "/modules/bills",
+      "/modules/manual-billing-payments",
+      "/modules/manual-bill-payments",
+    ].includes(path)
+      ? "Billings"
+      : undefined);
   useEffect(() => {
     api<Identity>("me")
       .then((result) => {

@@ -20,7 +20,8 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`1be09eb`](https://github.com/zemuumez/HospitalManagementSystemET/commit/1be09eb) | **Clinical/UI** | Dedicated full-page IPD and OPD registration forms with dependent selects and measurement inputs | N/A | Pushed (`main`) |
 | [`be4975b`](https://github.com/zemuumez/HospitalManagementSystemET/commit/be4975b) | **Frontend/Parity** | Attendance workspace (6 original tabs, shifts, duty assignments, leaves, requests), odontogram register, Amharic labels | N/A | Pushed (`main`) |
 | [`27d29dd`](https://github.com/zemuumez/HospitalManagementSystemET/commit/27d29dd) | **QA/Verification** | Expanded reference-page Playwright suite, isolated integration runner fixes, Prettier formatting | N/A | Pushed (`main`) |
-| [`4c6ec33`(https://github.com/zemuumez/HospitalManagementSystemET/commit/4c6ec33) | **3.A** | Source parity review, inactive/commented route audit, PDF role contradiction reconciliation, single-hospital architecture decisions, and OpenAPI 3.1 specification | N/A | Pushed |
+| [`4c6ec33`](https://github.com/zemuumez/HospitalManagementSystemET/commit/4c6ec33) | **3.A** | Source parity review, inactive/commented route audit, PDF role contradiction reconciliation, single-hospital architecture decisions, and OpenAPI 3.1 specification | N/A | Pushed |
+| [`8a7a23f`](https://github.com/zemuumez/HospitalManagementSystemET/commit/8a7a23f) | **Frontend/Billing** | Recreate billing module with 8 tabs matching legacy Laravel screenshots (Manual Billing Payments, Advance Payments, Payment Reports, Payments, Invoices, Accounts, Payrolls, Bills) | N/A | Pushed (`main`) |
 
 ---
 
@@ -181,3 +182,21 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 - **Scope & Features**:
   - Authored `scripts/verify-reference-pages.mjs` testing dashboard, smart card toggle & download, odontogram modal & marking persistence, attendance leave approval, shift creation, 6 attendance tabs, IPD/OPD forms, and mobile layout without overflow.
   - Resolved cold-compilation timeouts in `scripts/verify-connected.mjs` and formatted integration scripts with Prettier.
+
+### 14. Commit `8a7a23f` — Frontend Billing (8 Tabs Matching Legacy Laravel Screenshots)
+- **Message**: `feat(billing): recreate billing module with 8 tabs matching legacy Laravel screenshots`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Created `apps/web/src/components/billing-workspace.tsx` providing complete visual and functional parity for all 8 billing views:
+    - `manual-billing-payments`: Avatar circle + patient name link + email, Payment Status (`Approved` green badge), Status (`Paid` green badge), Transaction Date (dual-line card with time & date in cyan link style), Amount.
+    - `advance-payments`: Receipt No (blue pill badge link e.g. `X4MFUWHZ`), Avatar + patient link + email, Date (cyan link), Amount, Action (edit blue pencil, delete red trash). Top button `+ New Advance Payment`.
+    - `payment-reports`: Payment Date (cyan link), Account, Pay To, Type (`Credit` green badge / `Debit` red badge), Amount. Top buttons: Filter icon + `Export to Excel`.
+    - `payments`: Account, Payment Date, Pay To, Amount, Actions (View eye, Edit pencil, Delete trash). Top buttons: export icon + `+ New Payment`.
+    - `invoices`: Invoice ID (blue pill badge link e.g. `HMS13`), Patient avatar + name + email, Invoice Date, Amount, Status (`Paid` green / `Pending` amber), Actions (Edit, Delete). Top buttons: Filter icon + `+ New Invoice`.
+    - `accounts`: Account Name, Type (`Credit`/`Debit`), Status (`Active`/`Inactive`), Actions. Top buttons: Filter icon + `+ New Account`.
+    - `employee-payrolls`: Sr No, Payroll ID, Employee avatar + name + email, Month, Year, Net Salary, Status, Actions. Top buttons: Filter icon + `Export to Excel` + `+ New Employee Payroll`.
+    - `bills`: Bill ID, Patient avatar + name + email, Bill Date, Amount, Status, Actions. Top buttons: Filter icon + `+ New Bill`.
+  - Added dedicated styling in `apps/web/src/app/globals.css` (.billing-toolbar, .billing-search-box, .btn-action-blue, .btn-icon-blue, .billing-card, .billing-table, .badge-green, .badge-red, .badge-amber, .badge-blue-link, .tx-date-badge) for dark & light modes.
+  - Added full Amharic localization in `apps/web/src/lib/am.json` for all billing tabs, buttons, statuses, and headers.
+  - Updated routing and aliases in `apps/web/src/app/(hospital)/modules/[slug]/page.tsx`, `apps/web/src/components/workspace.tsx`, and `apps/web/src/lib/legacy.ts`.
+

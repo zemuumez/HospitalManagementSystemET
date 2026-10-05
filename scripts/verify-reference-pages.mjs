@@ -38,6 +38,14 @@ import { chromium } from "@playwright/test";
     "attendance-leaves",
     "attendance-requests",
     "manage-attendance",
+    "manual-billing-payments",
+    "advance-payments",
+    "payment-reports",
+    "payments",
+    "invoices",
+    "accounts",
+    "employee-payrolls",
+    "bills",
   ]) {
     await p.goto(
       "http://127.0.0.1:3000/" +
@@ -133,6 +141,18 @@ import { chromium } from "@playwright/test";
     });
     await p.getByRole("button", { name: "Cancel", exact: true }).click();
   }
+  await p.setViewportSize({ width: 1440, height: 1000 });
+  await p.goto("http://127.0.0.1:3000/modules/manual-billing-payments");
+  await p.locator('[data-ready="true"]').waitFor();
+  await p.locator(".billing-search-box input").fill("Trith");
+  if ((await p.locator(".billing-table tbody tr").count()) !== 3)
+    throw Error("Manual billing search did not filter correctly");
+  await p.locator(".billing-search-box input").fill("");
+  await p.goto("http://127.0.0.1:3000/modules/invoices");
+  await p.locator('[data-ready="true"]').waitFor();
+  await p.getByRole("button", { name: "New Invoice", exact: true }).click();
+  await p.locator("#billing-form-title").waitFor();
+  await p.getByRole("button", { name: "Cancel", exact: true }).click();
   await p.goto("http://127.0.0.1:3000/modules/attendance");
   await p.setViewportSize({ width: 390, height: 844 });
   await p.screenshot({

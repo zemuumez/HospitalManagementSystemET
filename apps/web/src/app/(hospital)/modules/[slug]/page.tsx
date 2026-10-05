@@ -11,6 +11,7 @@ import {
   ConnectedAccounts,
   ConnectedInvoices,
 } from "@/components/connected-billing";
+import { BillingWorkspace } from "@/components/billing-workspace";
 import { notFound } from "next/navigation";
 import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
@@ -21,17 +22,30 @@ export default async function ModulePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const screen = screens.find((s) => s.id === slug);
-  if (!screen) notFound();
+  if (
+    [
+      "manual-billing-payments",
+      "manual-bill-payments",
+      "advance-payments",
+      "advanced-payments",
+      "payment-reports",
+      "payments",
+      "invoices",
+      "accounts",
+      "employee-payrolls",
+      "bills",
+    ].includes(slug)
+  )
+    return <BillingWorkspace key={slug} id={slug} />;
   if (
     slug === "attendance" ||
     slug.startsWith("attendance-") ||
     slug === "manage-attendance"
   )
     return <AttendanceWorkspace key={slug} id={slug} />;
+  const screen = screens.find((s) => s.id === slug);
+  if (!screen) notFound();
   if (slug === "odontogram") return <OdontogramRegister />;
-  if (slug === "accounts") return <ConnectedAccounts />;
-  if (slug === "invoices") return <ConnectedInvoices />;
   if (slug === "beds" || slug === "bed-status")
     return <ConnectedClinical mode="beds" />;
   if (slug === "patient-cases") return <ConnectedClinical mode="cases" />;
