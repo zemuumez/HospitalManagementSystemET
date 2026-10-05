@@ -1,5 +1,7 @@
 # Backend review checkpoint — 2026-10-05
 
+> Current outcome: the operational branch is merged and pushed as `d618b0e`; all development migrations through 045 are applied, API readiness is 200, database reconciliation passes, and [hosted CI is successful](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37254122802). Section 3 still has explicitly open requirements. Earlier attendance-only and pending-merge statements below are historical and superseded by this outcome.
+
 Section 3 is still in progress. Section 4 new frontend integration has not started.
 
 ## Accepted and running: attendance

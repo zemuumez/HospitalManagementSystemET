@@ -1,6 +1,6 @@
 # Current backend checkpoint
 
-The large operational branch is reviewed, merged and pushed to `main` in `d618b0e`. Development migrations 001–045 are applied, the rebuilt `api-operational.exe` is running on port 8080, readiness returned 200, and post-migration database reconciliation passed. An encrypted pre-migration development backup is retained under ignored `.local/pre-operational-backup`; its local restore key is not committed. Private development attachments use ignored `.local/private-attachments`.
+The large operational branch is reviewed, merged and pushed to `main` in `d618b0e`. Development migrations 001â€“045 are applied, the rebuilt `api-operational.exe` is running on port 8080, readiness returned 200, and post-migration database reconciliation passed. An encrypted pre-migration development backup is retained under ignored `.local/pre-operational-backup`; its local restore key is not committed. Private development attachments use ignored `.local/private-attachments`.
 
 Section 3 is still incomplete; Section 4 new frontend integration has not started. The corrected [delivery checklist](backend-delivery-checklist.md) is authoritative. Integrating the submitted branch does not turn partial fields, API scaffolding, print previews or runbooks into completed original workflows.
 

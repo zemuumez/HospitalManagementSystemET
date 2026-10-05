@@ -593,6 +593,6 @@ The restore drill proves the tool on synthetic databases, not production recover
 
 - [x] Reviewed operational branch merged and pushed as `d618b0e`.
 - [x] Hosted CI passed: https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37254122802.
-- [x] Encrypted development backup taken before applying remaining migrations 029–040 and 043–045.
+- [x] Encrypted development backup taken before applying remaining migrations 029â€“040 and 043â€“045.
 - [x] All migrations through 045 applied locally; rebuilt API readiness 200; post-migration reconciliation PASS.
 - [ ] Complete the remaining Section 3 items before treating the entire backend as finished. Reopened full-parity items have partial APIs, not proof of print/export, versioning, clinical unit traceability, or every original workflow.
