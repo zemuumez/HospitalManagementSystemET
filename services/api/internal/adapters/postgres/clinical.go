@@ -119,13 +119,16 @@ func (s Store) CreateCase(ctx context.Context, a domain.Actor, i domain.CaseInpu
 	return c, tx.Commit(ctx)
 }
 
-const encounterFields = `e.id,e.number,e.kind,e.case_id,COALESCE(e.bed_id::text,''),e.admitted_at,e.symptoms,e.patient_id,p.given_name||' '||p.family_name,e.doctor_id,u.name,COALESCE(b.name,''),e.status,e.version,e.discharged_at,e.discharge_summary,e.intake`
+const encounterFields = `e.id,e.number,e.kind,e.case_id,COALESCE(e.bed_id::text,''),e.admitted_at,e.symptoms,e.patient_id,p.given_name||' '||p.family_name,e.doctor_id,u.name,COALESCE(b.name,''),e.status,e.version,e.discharged_at,e.discharge_summary,e.intake,
+COALESCE((SELECT email FROM "user" WHERE id=patient_portal_owner(p.id)),''),u.email,
+COALESCE((SELECT CASE WHEN i.paid_minor>=i.total_minor THEN 'Paid' ELSE 'Unpaid' END FROM encounter_billing eb JOIN invoice i ON i.id=eb.invoice_id WHERE eb.encounter_id=e.id),'Unbilled'),
+(SELECT count(*) FROM encounter visits WHERE visits.patient_id=e.patient_id AND visits.doctor_id=e.doctor_id AND visits.kind='opd')`
 const encounterFrom = ` FROM encounter e JOIN patient p ON p.id=e.patient_id JOIN "user" u ON u.id=e.doctor_id LEFT JOIN hospital_bed b ON b.id=e.bed_id `
 const encounterScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
 
 func scanEncounter(row pgx.Row) (domain.Encounter, error) {
 	var e domain.Encounter
-	err := row.Scan(&e.ID, &e.Number, &e.Kind, &e.CaseID, &e.BedID, &e.AdmittedAt, &e.Symptoms, &e.PatientID, &e.PatientName, &e.DoctorID, &e.DoctorName, &e.BedName, &e.Status, &e.Version, &e.DischargedAt, &e.DischargeSummary, &e.Intake)
+	err := row.Scan(&e.ID, &e.Number, &e.Kind, &e.CaseID, &e.BedID, &e.AdmittedAt, &e.Symptoms, &e.PatientID, &e.PatientName, &e.DoctorID, &e.DoctorName, &e.BedName, &e.Status, &e.Version, &e.DischargedAt, &e.DischargeSummary, &e.Intake, &e.PatientEmail, &e.DoctorEmail, &e.BillStatus, &e.TotalVisits)
 	return e, clinicalError(err)
 }
 func (s Store) Encounters(ctx context.Context, a domain.Actor, kind string, page int) ([]domain.Encounter, error) {

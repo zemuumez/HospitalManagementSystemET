@@ -53,6 +53,10 @@ type Case struct {
 // EncounterIntake retains the original IPD/OPD registration fields. Charges here
 // are registration quotations; posting an invoice remains a separate ledger action.
 type EncounterIntake struct {
+	// These are the original deployment's Tel and TAX registration text fields,
+	// not a payment instruction or a calculated tax amount.
+	Telephone            string  `json:"telephone"`
+	TaxReference         string  `json:"taxReference"`
 	Height               float64 `json:"height"`
 	Weight               float64 `json:"weight"`
 	BloodPressure        string  `json:"bloodPressure"`
@@ -69,7 +73,7 @@ func (i *EncounterIntake) Validate() error {
 	i.Notes = strings.TrimSpace(i.Notes)
 	i.IdentificationNumber = strings.TrimSpace(i.IdentificationNumber)
 	i.Reference = strings.TrimSpace(i.Reference)
-	if i.Height < 0 || i.Height > 300 || i.Weight < 0 || i.Weight > 1000 || len(i.BloodPressure) > 40 || len([]rune(i.Notes)) > 4000 || len([]rune(i.IdentificationNumber)) > 200 || len([]rune(i.Reference)) > 200 || i.StandardChargeMinor < 0 || i.StandardChargeMinor > 1000000000 {
+	if len(i.Telephone) > 80 || len(i.TaxReference) > 200 || i.Height < 0 || i.Height > 300 || i.Weight < 0 || i.Weight > 1000 || len(i.BloodPressure) > 40 || len([]rune(i.Notes)) > 4000 || len([]rune(i.IdentificationNumber)) > 200 || len([]rune(i.Reference)) > 200 || i.StandardChargeMinor < 0 || i.StandardChargeMinor > 1000000000 {
 		return ErrValidation
 	}
 	switch i.PaymentMode {
@@ -102,6 +106,10 @@ func (e *EncounterInput) Validate(now time.Time) error {
 }
 
 type Encounter struct {
+	PatientEmail string `json:"patientEmail"`
+	DoctorEmail  string `json:"doctorEmail"`
+	BillStatus   string `json:"billStatus"`
+	TotalVisits  int    `json:"totalVisits"`
 	EncounterInput
 	ID               string     `json:"id"`
 	Number           int64      `json:"number"`
