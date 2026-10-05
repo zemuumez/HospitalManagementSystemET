@@ -284,3 +284,21 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
     - Registered all subtab routes in `workspace.tsx` group resolution fallback so tabs switch smoothly.
     - Added dedicated CSS classes and light-mode overrides in `apps/web/src/app/globals.css`.
     - Extended Amharic translations dictionary in `apps/web/src/lib/am.json`.
+
+### 18. Commit `pending` — Odontogram Legends Creation & Edit Feature
+- **Message**: `feat(odontogram): add custom legends creation, editing, and palette customization to odontogram`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Enhanced `apps/web/src/components/odontogram-register.tsx` with full dynamic legend management:
+    - Added `OdontogramLegend` data structure with standard dental condition presets (`Healthy`, `K` Caries, `C` Crown, `Ce` Pulpitis/Deep Caries, `D` Decayed, `KR` Root Canal, `PS` Porcelain/Prosthetic, `IP` Implant, `X` Missing/Extracted, `F` Composite Filling, `B` Bridge).
+    - Added toolbar action button **"Odontogram Legends"** opening the **Odontogram Legends Management** modal listing all configured condition symbols, names, and color swatches.
+    - **Create New Legend Form**: Symbol / Code (1-8 chars, uppercase), Condition Name, interactive Color Picker + Hex input + 16 preset dental color swatches, clinical remarks, and real-time live button preview.
+    - **Edit Existing Legend**: Edit modal allowing modifications to code, name, color, and description with automatic condition migration across patient charts.
+    - **Delete & Reset**: Ability to delete custom legends and one-click "Reset Defaults" restore.
+    - **In-Modal Quick Creation**: Added `+ Add Legend` shortcut directly inside the dental chart editor palette for on-the-fly condition configuration during patient charting.
+    - **Dynamic Palette & Chart**: Tooth palette buttons and SVG polygons dynamically reflect custom legend colors and active tooth indicators.
+    - **Report Printing**: Enhanced print report with a structured Odontogram Legend Guide table.
+    - **Main Page Legend Strip**: Quick-reference legend badge strip displayed on the main odontogram screen.
+  - Added Amharic translations in `apps/web/src/lib/am.json` for all legend actions and clinical terms.
+  - Created automated Playwright verification test `scripts/verify-odontogram-legends.mjs` validating end-to-end creation, editing, SVG rendering, and persistence.
+
