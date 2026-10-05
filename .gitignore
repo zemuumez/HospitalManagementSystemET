@@ -21,3 +21,4 @@ services/api/bin/
 apps/web/tsconfig.tsbuildinfo
 
 .next-qa-*/
+ScreenshotsOfMissedPagesAndTabs/

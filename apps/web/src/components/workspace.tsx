@@ -138,7 +138,31 @@ export function Workspace({ children }: { children: React.ReactNode }) {
             "/modules/bed-types",
           ].includes(path)
         ? "Bed Management"
-        : undefined);
+        : [
+              "/modules/blood-banks",
+              "/modules/blood-donors",
+              "/modules/blood-donations",
+              "/modules/blood-issues",
+              "/modules/blood-donor-reports",
+            ].includes(path)
+          ? "Blood Banks"
+          : [
+                "/modules/doctors",
+                "/modules/doctor-departments",
+                "/modules/schedules",
+                "/modules/doctor-holidays",
+                "/modules/holidays",
+                "/modules/breaks",
+              ].includes(path)
+            ? "Doctors"
+            : ["/modules/prescriptions"].includes(path)
+              ? "Prescriptions"
+              : [
+                    "/modules/diagnosis-categories",
+                    "/modules/patient-diagnosis-test",
+                  ].includes(path)
+                ? "Diagnosis"
+                : undefined);
   useEffect(() => {
     api<Identity>("me")
       .then((result) => {

@@ -3,16 +3,15 @@ import { AttendanceWorkspace } from "@/components/attendance-workspace";
 import { OdontogramRegister } from "@/components/odontogram-register";
 import {
   ConnectedUsers,
-  ConnectedSchedules,
   ConnectedAppointments,
 } from "@/components/connected-scheduling";
 import { ConnectedClinical } from "@/components/connected-clinical";
-import {
-  ConnectedAccounts,
-  ConnectedInvoices,
-} from "@/components/connected-billing";
 import { BillingWorkspace } from "@/components/billing-workspace";
 import { BedManagementWorkspace } from "@/components/bed-management-workspace";
+import { BloodBankWorkspace } from "@/components/blood-bank-workspace";
+import { DoctorsWorkspace } from "@/components/doctors-workspace";
+import { PrescriptionsWorkspace } from "@/components/prescriptions-workspace";
+import { DiagnosisWorkspace } from "@/components/diagnosis-workspace";
 import { notFound } from "next/navigation";
 import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
@@ -23,6 +22,30 @@ export default async function ModulePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  if (
+    [
+      "blood-banks",
+      "blood-donors",
+      "blood-donations",
+      "blood-issues",
+      "blood-donor-reports",
+    ].includes(slug)
+  )
+    return <BloodBankWorkspace key={slug} id={slug} />;
+  if (
+    [
+      "doctors",
+      "doctor-departments",
+      "schedules",
+      "doctor-holidays",
+      "holidays",
+      "breaks",
+    ].includes(slug)
+  )
+    return <DoctorsWorkspace key={slug} id={slug} />;
+  if (slug === "prescriptions") return <PrescriptionsWorkspace key={slug} />;
+  if (["diagnosis-categories", "patient-diagnosis-test"].includes(slug))
+    return <DiagnosisWorkspace key={slug} id={slug} />;
   if (["bed-status", "bed-assigns", "beds", "bed-types"].includes(slug))
     return <BedManagementWorkspace key={slug} id={slug} />;
   if (
@@ -55,7 +78,6 @@ export default async function ModulePage({
   if (slug === "opd-patient-departments")
     return <EncounterRegister kind="opd" />;
   if (slug === "users") return <ConnectedUsers />;
-  if (slug === "schedules") return <ConnectedSchedules />;
   if (slug === "appointments") return <ConnectedAppointments />;
   if (
     [

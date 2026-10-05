@@ -256,6 +256,9 @@ const baseScreens: Screen[] = [
   extra("bed-assigns", "Bed Assigns", "Bed Management"),
   extra("beds", "Beds", "Bed Management"),
   extra("bed-types", "Bed Types", "Bed Management"),
+  extra("blood-donor-reports", "Blood Donor Report", "Blood Banks"),
+  extra("doctor-holidays", "Doctor Holidays", "Doctors"),
+  extra("breaks", "Breaks", "Doctors"),
   {
     ...source.find((s) => s.id === "services")!,
     id: "front-cms-services",
@@ -292,6 +295,10 @@ const baseScreens: Screen[] = [
         accounts: "Account",
         "advanced-payments": "Advance Payments",
         "manual-bill-payments": "Manual Billing Payments",
+        "patient-diagnosis-test": "Diagnosis Tests",
+        "blood-donor-reports": "Blood Donor Report",
+        "doctor-holidays": "Doctor Holidays",
+        breaks: "Breaks",
       } as Record<string, string>
     )[s.id] || s.title,
 }));
@@ -396,6 +403,29 @@ const tabOrder: Record<string, string[]> = {
     "manual-billing-payments",
   ],
   "Bed Management": ["bed-status", "bed-assigns", "beds", "bed-types"],
+  "Blood Banks": [
+    "blood-banks",
+    "blood-donors",
+    "blood-donations",
+    "blood-issues",
+    "blood-donor-reports",
+  ],
+  "Blood Bank": [
+    "blood-banks",
+    "blood-donors",
+    "blood-donations",
+    "blood-issues",
+    "blood-donor-reports",
+  ],
+  Doctors: [
+    "doctors",
+    "doctor-departments",
+    "schedules",
+    "doctor-holidays",
+    "breaks",
+  ],
+  Prescriptions: ["prescriptions"],
+  Diagnosis: ["diagnosis-categories", "patient-diagnosis-test"],
   Settings: [
     "settings",
     "hospital-schedule",
@@ -414,7 +444,6 @@ const tabOrder: Record<string, string[]> = {
     "testimonials",
     "complaints",
   ],
-  Diagnosis: ["diagnosis-categories", "patient-diagnosis-test"],
   Appointments: [
     "appointments",
     "appointment-transaction",
