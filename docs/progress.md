@@ -1,6 +1,6 @@
 # Current backend checkpoint
 
-Section 3 remains in progress; Section 4 new frontend integration has not started. All verified increments through `faa5f0d` are committed and pushed. Local migrations 001–026 are applied and the local Go API has been rebuilt/restarted with those changes; readiness returned 200. Real Firebase, SMS and payment credentials remain blank in the production worksheet.
+Section 3 remains in progress; Section 4 new frontend integration has not started. Attendance and reviewed repairs through `353128e` are merged and pushed to main. Local migrations 001–028, 041 and 042 are applied; the attendance API build is running and readiness returned 200. The larger operational branch is preserved separately at `fix/operational-review`, with queue, file/privacy and clinical access repairs; it is not accepted or deployed. See [the detailed review checkpoint](backend-review-checkpoint-2026-10-05.md) for commits, verified tests and outstanding work. Real Firebase, SMS and payment credentials remain blank.
 
 ## Implemented and verified backend work
 
@@ -21,7 +21,7 @@ The detailed acceptance list is [Section 3 of the delivery checklist](backend-de
 
 ## Verification evidence
 
-Go unit/database/HTTP/concurrency tests and vet pass against disposable schemas through migration 028. The web tests, formatting, typecheck and production build passed after adding invitations. Real Firebase Auth-emulator tests include MFA enforcement; Mailpit suites cover reset and invitation completion. Existing connected browser journeys run in a separate copied app/database schema. The older API suite was moved into that same isolation model after audit retention correctly blocked its old row-deletion cleanup.
+Go unit/database/HTTP/concurrency tests and vet pass against disposable schemas including attendance migrations 041 and 042. The connected API integration suite also passed after attendance integration. The web tests, formatting, typecheck and production build passed after adding invitations. Real Firebase Auth-emulator tests include MFA enforcement; Mailpit suites cover reset and invitation completion. Existing connected browser journeys run in a separate copied app/database schema. The older API suite was moved into that same isolation model after audit retention correctly blocked its old row-deletion cleanup.
 
 Hosted CI passed commit `ee7ffed` ([run 37231554242](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37231554242)), scheduling commit `f561304` ([run 37231893895](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37231893895)) and invitation commit `1ddde6d` ([run 37232198746](https://github.com/zemuumez/HospitalManagementSystemET/actions/runs/37232198746)). Later runs must be checked separately; a pushed commit is not automatically a passing CI result.
 

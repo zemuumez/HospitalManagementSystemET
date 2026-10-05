@@ -474,3 +474,6 @@ PostgreSQL and HTTP tests verify: all role permissions and denials, cross-staff 
 - [x] Reproduced and repaired approval of unfinished records; approved totals survive subsequent clock-out attempts.
 - [x] Uncached isolated PostgreSQL/Go suite and go vet passed after repairs.
 - [ ] Attendance frontend integration and full browser journey remain Section 4 work; broader operational branch acceptance remains pending.
+
+### Review branch tracking (2026-10-05)
+Attendance is accepted through `353128e`; local migrations 028/041/042, Go tests/vet, isolated connected integration and hosted CI passed. The operational branch remains unmerged despite successful targeted repairs. See [the review checkpoint](backend-review-checkpoint-2026-10-05.md) for exact scope and remaining acceptance work.
