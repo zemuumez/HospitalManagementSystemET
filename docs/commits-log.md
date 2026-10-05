@@ -26,7 +26,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`cda7d7e`](https://github.com/zemuumez/HospitalManagementSystemET/commit/cda7d7e) | **Frontend/Modules** | Workspaces for Prescriptions, Doctors (5 tabs, New Schedule, Breaks), Blood Bank (5 tabs, Donors, Reports), and Diagnosis (Categories, Tests) | N/A | Pushed (`main`) |
 | [`ab08aa7`](https://github.com/zemuumez/HospitalManagementSystemET/commit/ab08aa7) | **Section 4** | Connect Medicines, Billing, Services, Ambulances, and Pathology workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
 | [`62791ab`](#) | **Section 4** | Connect Blood Bank, Prescriptions, Doctors & Scheduling, and Attendance workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
-| [`TBD`](#) | **Section 4** | Connect Front Office (Call Logs, Visitors, Postals, Enquiries, Complaints) and General Inventory workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
+| [`ad114f2`](#) | **Section 4** | Connect Front Office (Call Logs, Visitors, Postals, Enquiries, Complaints) and General Inventory workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
 
 ---
 
@@ -348,7 +348,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
     - Registered all Blood Bank, Prescription, Doctor/Schedule, and Attendance paths into the `isLive` list.
   - Verification: `npm run typecheck` passed (0 errors), all test suites passed (5 frontend unit test suites, all Go backend packages).
 
-### 21. Commit `TBD` — Section 4 Frontend Integration for Front Office & General Inventory
+### 21. Commit `ad114f2` — Section 4 Frontend Integration for Front Office & General Inventory
 - **Message**: `feat: connect front office and general inventory workspaces to postgres backend`
 - **Branch**: `main`
 - **Scope & Features**:
