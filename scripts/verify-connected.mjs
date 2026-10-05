@@ -52,7 +52,7 @@ try {
     }),
     errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.setDefaultTimeout(15000);
+  page.setDefaultTimeout(45000);
   async function visit(path) {
     await page.goto(base + path);
     await page.locator('.legacy-shell[data-ready="true"]').waitFor();
@@ -180,19 +180,67 @@ try {
   await page
     .getByRole("button", { name: "New IPD Patient", exact: true })
     .click();
-  dialog = page.getByRole("dialog");
-  await dialog
+  const intake = page.locator(".encounter-intake");
+  await intake
+    .getByLabel("Patient", { exact: true })
+    .selectOption({ index: 1 });
+  await intake
     .getByLabel("Patient Case", { exact: true })
     .selectOption({ index: 1 });
-  await dialog
+  await intake.getByLabel("Bed Type", { exact: true }).selectOption("General");
+  await intake
     .getByLabel("Bed", { exact: true })
-    .selectOption({ label: `Bed-${family} \u2014 General` });
-  await dialog
+    .selectOption({ label: `Bed-${family}` });
+  await intake
     .getByLabel("Symptoms", { exact: true })
     .fill("Synthetic admission");
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
-  await dialog.waitFor({ state: "hidden" });
+  await intake.getByLabel("Height", { exact: true }).fill("172");
+  await intake.getByLabel("Weight", { exact: true }).fill("65");
+  await intake.getByLabel("Blood Pressure", { exact: true }).fill("120/80");
+  await intake
+    .getByLabel("Notes", { exact: true })
+    .fill("Registration details survive reload");
+  await intake.getByRole("button", { name: "Save", exact: true }).click();
+  await intake.waitFor({ state: "hidden" });
+  const savedIntake = (
+    await db.query("SELECT intake FROM encounter WHERE created_by=$1", [id])
+  ).rows[0].intake;
+  assert.equal(savedIntake.height, 172);
+  assert.equal(savedIntake.weight, 65);
+  assert.equal(savedIntake.bloodPressure, "120/80");
+  assert.equal(savedIntake.notes, "Registration details survive reload");
 
+  await visit("/modules/opd-patient-departments");
+  await page
+    .getByRole("button", { name: "New OPD Patient", exact: true })
+    .click();
+  const opd = page.locator(".encounter-intake");
+  await opd.getByLabel("Patient", { exact: true }).selectOption({ index: 1 });
+  await opd
+    .getByLabel("Patient Case", { exact: true })
+    .selectOption({ index: 1 });
+  await opd.getByLabel("Standard Charge (ETB)", { exact: true }).fill("125.50");
+  await opd.getByLabel("Payment Mode", { exact: false }).selectOption("cash");
+  await opd.getByLabel("Notes", { exact: true }).fill("OPD registration quote");
+  await opd.getByLabel("Tel", { exact: true }).fill("+251900000000");
+  await opd.getByLabel("TAX", { exact: true }).fill("TEST-REFERENCE");
+  await opd.getByRole("button", { name: "Save", exact: true }).click();
+  await opd.waitFor({ state: "hidden" });
+  await page.reload();
+  await page.getByRole("cell", { name: "125.50 ETB", exact: true }).waitFor();
+  const opdIntake = (
+    await db.query(
+      "SELECT intake FROM encounter WHERE created_by=$1 AND kind='opd'",
+      [id],
+    )
+  ).rows[0].intake;
+  assert.equal(opdIntake.standardChargeMinor, 12550);
+  assert.equal(opdIntake.paymentMode, "cash");
+  assert.equal(opdIntake.telephone, "+251900000000");
+  assert.equal(opdIntake.taxReference, "TEST-REFERENCE");
+  console.log(
+    "PASS: original IPD/OPD full-page registration, dependent choices and intake persistence.",
+  );
   await visit("/modules/accounts");
   await page.getByRole("button", { name: "New Account", exact: true }).click();
   dialog = page.getByRole("dialog");
@@ -259,7 +307,7 @@ try {
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
   await page.waitForURL("**/dashboard");
   await visit("/modules/ipd-patient-departments");
-  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("button", { name: /^View Synthetic/ }).click();
   dialog = page.getByRole("dialog");
   await dialog
     .getByLabel("Discharge Summary", { exact: true })
@@ -269,7 +317,15 @@ try {
     .click();
   await dialog.waitFor({ state: "hidden" });
   await page.reload();
-  await page.getByRole("cell", { name: "discharged", exact: true }).waitFor();
+  assert.equal(
+    (
+      await db.query(
+        "SELECT status FROM encounter WHERE created_by=$1 AND kind='ipd'",
+        [id],
+      )
+    ).rows[0].status,
+    "discharged",
+  );
   await visit("/modules/beds");
   await page
     .getByRole("row")

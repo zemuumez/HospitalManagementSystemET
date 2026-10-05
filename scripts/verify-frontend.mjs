@@ -282,26 +282,38 @@ try {
             ?.value === "10:00",
       );
     });
-    await check("dental chart patient isolation and persistence", async () => {
+    await check("dental register chart isolation and persistence", async () => {
       await visit("/modules/odontogram");
-      await page.getByRole("button", { name: "K", exact: true }).click();
+      await page
+        .getByRole("button", {
+          name: "Edit odontogram Alex Morgan",
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole("button", { name: "K tooth 1", exact: true })
+        .click();
       await page.getByRole("button", { name: "Save", exact: true }).click();
       await page
-        .getByLabel("Patient:", { exact: false })
-        .selectOption("Jamie Wilson");
+        .getByRole("button", {
+          name: "Edit odontogram Jamie Wilson",
+          exact: true,
+        })
+        .click();
       assert.equal(await page.locator("#Tooth1").getAttribute("fill"), "#fff");
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.reload();
       await page
-        .getByLabel("Patient:", { exact: false })
-        .selectOption("Alex Morgan");
+        .getByRole("button", {
+          name: "Edit odontogram Alex Morgan",
+          exact: true,
+        })
+        .click();
       assert.equal(
         await page.locator("#Tooth1").getAttribute("fill"),
         "#e91e63",
       );
-      await page.reload();
-      await page.waitForFunction(
-        () =>
-          document.querySelector("#Tooth1")?.getAttribute("fill") === "#e91e63",
-      );
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
     });
     await check("card template rename updates cards", async () => {
       await visit("/modules/patient-id-card-template");
