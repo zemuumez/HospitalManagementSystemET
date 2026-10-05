@@ -119,13 +119,13 @@ func (s Store) CreateCase(ctx context.Context, a domain.Actor, i domain.CaseInpu
 	return c, tx.Commit(ctx)
 }
 
-const encounterFields = `e.id,e.number,e.kind,e.case_id,COALESCE(e.bed_id::text,''),e.admitted_at,e.symptoms,e.patient_id,p.given_name||' '||p.family_name,e.doctor_id,u.name,COALESCE(b.name,''),e.status,e.version,e.discharged_at,e.discharge_summary`
+const encounterFields = `e.id,e.number,e.kind,e.case_id,COALESCE(e.bed_id::text,''),e.admitted_at,e.symptoms,e.patient_id,p.given_name||' '||p.family_name,e.doctor_id,u.name,COALESCE(b.name,''),e.status,e.version,e.discharged_at,e.discharge_summary,e.intake`
 const encounterFrom = ` FROM encounter e JOIN patient p ON p.id=e.patient_id JOIN "user" u ON u.id=e.doctor_id LEFT JOIN hospital_bed b ON b.id=e.bed_id `
 const encounterScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
 
 func scanEncounter(row pgx.Row) (domain.Encounter, error) {
 	var e domain.Encounter
-	err := row.Scan(&e.ID, &e.Number, &e.Kind, &e.CaseID, &e.BedID, &e.AdmittedAt, &e.Symptoms, &e.PatientID, &e.PatientName, &e.DoctorID, &e.DoctorName, &e.BedName, &e.Status, &e.Version, &e.DischargedAt, &e.DischargeSummary)
+	err := row.Scan(&e.ID, &e.Number, &e.Kind, &e.CaseID, &e.BedID, &e.AdmittedAt, &e.Symptoms, &e.PatientID, &e.PatientName, &e.DoctorID, &e.DoctorName, &e.BedName, &e.Status, &e.Version, &e.DischargedAt, &e.DischargeSummary, &e.Intake)
 	return e, clinicalError(err)
 }
 func (s Store) Encounters(ctx context.Context, a domain.Actor, kind string, page int) ([]domain.Encounter, error) {
@@ -173,7 +173,7 @@ func (s Store) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInpu
 		if err = tx.QueryRow(ctx, `SELECT COALESCE(admission_bed_id::text,'') FROM encounter WHERE id=$1`, old.ID).Scan(&originalBed); err != nil {
 			return empty, err
 		}
-		if originalBed != i.BedID || old.Kind != i.Kind || old.CaseID != i.CaseID || !old.AdmittedAt.Equal(i.AdmittedAt) || old.Symptoms != i.Symptoms {
+		if originalBed != i.BedID || old.Kind != i.Kind || old.CaseID != i.CaseID || !old.AdmittedAt.Equal(i.AdmittedAt) || old.Symptoms != i.Symptoms || old.Intake != i.Intake {
 			return empty, domain.ErrConflict
 		}
 		return old, tx.Commit(ctx)
@@ -194,7 +194,7 @@ func (s Store) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInpu
 		}
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO encounter(kind,case_id,patient_id,doctor_id,bed_id,admitted_at,symptoms,bed_charge_minor,created_by,request_key) VALUES($1,$2,$3,$4,NULLIF($5,'')::uuid,$6,$7,$8,$9,$10) RETURNING id`, i.Kind, i.CaseID, patientID, doctorID, i.BedID, i.AdmittedAt, i.Symptoms, charge, a.ID, key).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO encounter(kind,case_id,patient_id,doctor_id,bed_id,admitted_at,symptoms,bed_charge_minor,created_by,request_key,intake) VALUES($1,$2,$3,$4,NULLIF($5,'')::uuid,$6,$7,$8,$9,$10,$11) RETURNING id`, i.Kind, i.CaseID, patientID, doctorID, i.BedID, i.AdmittedAt, i.Symptoms, charge, a.ID, key, i.Intake).Scan(&id)
 	if err != nil {
 		return empty, clinicalError(err)
 	}

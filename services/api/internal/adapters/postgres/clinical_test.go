@@ -142,7 +142,7 @@ func TestClinicalTransactions(t *testing.T) {
 			t.Fatal("renamed master not reflected")
 		}
 	}
-	inputs := []domain.EncounterInput{{Kind: "ipd", CaseID: cases[0].ID, BedID: bed.ID, AdmittedAt: time.Now().Add(-time.Minute)}, {Kind: "ipd", CaseID: cases[1].ID, BedID: bed.ID, AdmittedAt: time.Now().Add(-time.Minute)}}
+	inputs := []domain.EncounterInput{{Kind: "ipd", CaseID: cases[0].ID, BedID: bed.ID, AdmittedAt: time.Now().Add(-time.Minute), Intake: domain.EncounterIntake{Height: 172, Weight: 65, BloodPressure: "120/80", Notes: "Registration note", OldPatient: true}}, {Kind: "ipd", CaseID: cases[1].ID, BedID: bed.ID, AdmittedAt: time.Now().Add(-time.Minute), Intake: domain.EncounterIntake{Height: 172, Weight: 65, BloodPressure: "120/80", Notes: "Registration note", OldPatient: true}}}
 	results := make([]domain.Encounter, 2)
 	errs := make([]error, 2)
 	var wg sync.WaitGroup
@@ -163,6 +163,14 @@ func TestClinicalTransactions(t *testing.T) {
 		t.Fatalf("bed race: %v", errs)
 	}
 	enc := results[winner]
+	if results[winner].Intake != inputs[winner].Intake {
+		t.Fatal("intake fields were not retained")
+	}
+	changed := inputs[winner]
+	changed.Intake.Notes = "Different note"
+	if _, err := clinic.Admit(ctx, actors[0], changed, "admission-key-000"+string(rune('0'+winner))); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("changed intake replay: %v", err)
+	}
 	retry, e := clinic.Admit(ctx, actors[0], inputs[winner], "admission-key-000"+string(rune('0'+winner)))
 	if e != nil || retry.ID != enc.ID {
 		t.Fatal("retry did not return same admission", e)

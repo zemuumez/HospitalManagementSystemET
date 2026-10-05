@@ -49,15 +49,50 @@ type Case struct {
 	PatientName string `json:"patientName"`
 	DoctorName  string `json:"doctorName"`
 }
+
+// EncounterIntake retains the original IPD/OPD registration fields. Charges here
+// are registration quotations; posting an invoice remains a separate ledger action.
+type EncounterIntake struct {
+	Height               float64 `json:"height"`
+	Weight               float64 `json:"weight"`
+	BloodPressure        string  `json:"bloodPressure"`
+	Notes                string  `json:"notes"`
+	IdentificationNumber string  `json:"identificationNumber"`
+	Reference            string  `json:"reference"`
+	OldPatient           bool    `json:"oldPatient"`
+	StandardChargeMinor  int64   `json:"standardChargeMinor"`
+	PaymentMode          string  `json:"paymentMode"`
+}
+
+func (i *EncounterIntake) Validate() error {
+	i.BloodPressure = strings.TrimSpace(i.BloodPressure)
+	i.Notes = strings.TrimSpace(i.Notes)
+	i.IdentificationNumber = strings.TrimSpace(i.IdentificationNumber)
+	i.Reference = strings.TrimSpace(i.Reference)
+	if i.Height < 0 || i.Height > 300 || i.Weight < 0 || i.Weight > 1000 || len(i.BloodPressure) > 40 || len([]rune(i.Notes)) > 4000 || len([]rune(i.IdentificationNumber)) > 200 || len([]rune(i.Reference)) > 200 || i.StandardChargeMinor < 0 || i.StandardChargeMinor > 1000000000 {
+		return ErrValidation
+	}
+	switch i.PaymentMode {
+	case "", "cash", "bank_transfer", "card", "other":
+	default:
+		return ErrValidation
+	}
+	return nil
+}
+
 type EncounterInput struct {
-	Kind       string    `json:"kind"`
-	CaseID     string    `json:"caseId"`
-	BedID      string    `json:"bedId"`
-	AdmittedAt time.Time `json:"admittedAt"`
-	Symptoms   string    `json:"symptoms"`
+	Intake     EncounterIntake `json:"intake"`
+	Kind       string          `json:"kind"`
+	CaseID     string          `json:"caseId"`
+	BedID      string          `json:"bedId"`
+	AdmittedAt time.Time       `json:"admittedAt"`
+	Symptoms   string          `json:"symptoms"`
 }
 
 func (e *EncounterInput) Validate(now time.Time) error {
+	if err := e.Intake.Validate(); err != nil {
+		return err
+	}
 	e.AdmittedAt = e.AdmittedAt.UTC().Truncate(time.Microsecond)
 	e.Symptoms = strings.TrimSpace(e.Symptoms)
 	if !UUIDPattern.MatchString(e.CaseID) || (e.Kind != "ipd" && e.Kind != "opd") || (e.Kind == "ipd" && !UUIDPattern.MatchString(e.BedID)) || (e.Kind == "opd" && e.BedID != "") || e.AdmittedAt.After(now) || e.AdmittedAt.Before(now.AddDate(-1, 0, 0)) || len([]rune(e.Symptoms)) > 2000 {
