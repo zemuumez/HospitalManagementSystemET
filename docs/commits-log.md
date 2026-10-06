@@ -460,3 +460,35 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 - Removed the global claim that every module is connected. Attendance identifies its remaining previews; unimplemented shift/assignment deletion and assignment saving no longer pretend to mutate hospital records.
 - Shift code/default editing is still a backend parity gap; no default shift is inferred from the active flag.
 - Verified: frontend typecheck, 8 unit tests (including create/edit and failure contracts), production build with local environment loaded only into the process. No browser persistence check is claimed for this step yet.
+
+## Integration verification — 2026-10-06, step 3 (Commit `03feb14`)
+
+- Commit `03feb14`: `feat(attendance): shift identity, unique codes, single default constraint and live staff counts`
+- **Database Migration 048** (`db/migrations/048_attendance_shift_identity.sql`):
+  - Added unique `code` constraint to `attendance_shift` (`DAY`, `NIGHT`, etc.).
+  - Added `is_default` boolean column to `attendance_shift` with partial unique index `idx_attendance_shift_single_default WHERE is_default = true AND active = true`.
+  - Check constraint enforcing that default shifts must be active (`chk_attendance_shift_default_active`).
+- **Go Backend (`services/api`)**:
+  - `domain/attendance.go`: `Shift` domain struct now includes `Code` and `IsDefault`. Strict input validation on unique codes, half/full-day thresholds, and active-default invariant. Added `ShiftStaffCount` projection.
+  - `adapters/postgres/attendance.go`: Transactional default replacement (atomically clearing existing default when setting a new active default), persisted code/default, configured-default resolution without silent fallback. Staff count projection accurately calculates active staff assigned to shift or falling back to default shift, strictly excluding patient accounts.
+  - `adapters/postgres/attendance_shift_identity_test.go`: Added isolated regression tests for duplicate shift codes, rename/default changes, stale version updates, inactive default rejections, transactional rollback, and staff count queries.
+- **Frontend & QA Harness**:
+  - `apps/web/src/lib/attendance-shifts.ts`: Maps `code` and `isDefault` in API payload and response.
+  - `apps/web/src/components/attendance-workspace.tsx`: Restored code and default controls, live staff count display, and refresh after save.
+  - `scripts/verify-connected-isolated.mjs`: Added `--manual` mode for temporary isolated QA service bootstrap.
+  - `.prettierrc.json`: Added `endOfLine: auto` for cross-platform Windows CRLF formatting consistency.
+- **Verification**:
+  - `go test ./...` in `services/api` passed (including `attendance_shift_identity_test.go`).
+  - `npm test` in `apps/web` passed (8/8 unit test suites).
+  - `npm run typecheck` passed (0 errors).
+
+## Integration verification — 2026-10-06, step 4 (Commit `3914157`)
+
+- Commit `3914157`: `fix(qa): clean up ephemeral qa working tree in isolated runner`
+- Resolved `ENOSPC` disk exhaustion on Windows local drive by ensuring `rmSync` recursively cleans up ephemeral `.local/qa-${token}` directories and logs in the isolated runner's `finally` block.
+- Recovered 5+ GB free space on local drive C:.
+- Verified full test suites in isolated PostgreSQL test schemas:
+  - `npm run test:connected`: PASS (Browser staff, schedule, patient, appointment, admission, discharge, invoice, account persistence).
+  - `npm run test:operational`: PASS (All 15 operational workspaces verified cleanly).
+  - `npm run format:check`: PASS.
+

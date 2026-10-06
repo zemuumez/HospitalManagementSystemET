@@ -291,7 +291,9 @@ Backend-first progress:
 - [ ] Staging deployment, environment separation, secret management and production runbooks ([deployment/docker-compose.prod.yml](../deployment/docker-compose.prod.yml), [docs/production-deployment-runbook.md](production-deployment-runbook.md)).
 - [ ] User acceptance sign-off, migration cutover, rollback rehearsal and post-release monitoring ([docs/cutover-and-release-playbook.md](cutover-and-release-playbook.md)).
 
-## 4. Frontend integration checklist for every module
+## 4. Frontend integration requirements and workflow tracking matrix
+
+### 4.1 Requirements for every module
 
 - [ ] Preserve the original navigation order, fields, tabs and key workflows when replacing preview implementations.
 - [ ] Replace fixture rows and browser-storage persistence with authenticated API data.
@@ -605,7 +607,7 @@ The restore drill proves the tool on synthetic databases, not production recover
 
 ---
 
-## 4. Frontend integration checklist for operational modules
+### 4.2 Historical operational frontend integration notes (2026-10-05)
 
 Frontend client workspaces connected to the persistent Go/PostgreSQL backend services via the Next.js API proxy (`/api/hms/...` $\rightarrow$ `http://127.0.0.1:8080/v1/...`) with full responsive fidelity, Amharic translations, resilient dual-mode offline preview fallback, and live status banners:
 
@@ -676,9 +678,29 @@ Frontend client workspaces connected to the persistent Go/PostgreSQL backend ser
 - [x] Available-bed aggregate requires active/ready/unoccupied beds.
 - [x] Migration 047 applied successfully in the temporary PostgreSQL test schema. Public development database unchanged.
 - [x] Shift create/edit request contracts, versioned PATCH, server identity and failure handling verified by unit tests and typecheck/build.
-- [ ] Browser create/edit/reload verification of shifts against the isolated database.
-- [ ] Attendance default/code fields, assignments, leaves, correction requests, dashboard/report and manual attendance fully connected and verified. Preview behavior is not completion.
+- [x] Migration 048 shift identity, unique code, single default index and staff count projection implemented and tested.
+- [x] Browser QA isolation harness with ephemeral directory cleanup verified across all 15 operational workspaces.
+- [ ] Attendance duty assignments, leaves, correction requests, and manual clocking fully connected end-to-end.
 - [ ] Implement original encounter-specific IPD/OPD detail tabs and their workflows; aliasing each tab to the register is not completion.
 - [ ] Advance-payment ledger operations and invoice allocation/refunds verified beyond table creation and dashboard totals.
 - [ ] Dashboard bill/payment amount definitions reconciled with actual issued bills and reversals.
 - [ ] Finish live-demo exploration and visual/functional parity evidence for every module and role.
+
+### 4.3 Granular workflow tracking matrix (13-column model)
+
+| Module | Original Route/Tab | Role | Source Reference | Database/Migration | Domain Rule | API/Permission | Frontend Route | Persistence Test | Negative Test | Visual Evidence | Commit | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Overview** | `/dashboard` | Admin | Laravel DashboardController | `001`..`047` | Full aggregates (finance, beds, staff, patients) | `GET /api/hms/overview` | `/dashboard` | `overview_test.go` | Role regression (non-admin denial of totals) | `01-dashboard.png` | `2d1a407` | **end-to-end verified** |
+| **Overview** | `/dashboard` | Doctor | Laravel DoctorDashboardController | `001`..`047` | Scoped patient count only; zeroed out finance/staff totals | `GET /api/hms/overview` (scoped) | `/dashboard` | `overview_test.go` | Non-admin forbidden from hospital-wide finances | Live QA session check | `2d1a407` | **end-to-end verified** |
+| **Attendance** | `/attendance/shifts` (Shifts) | Admin | Laravel ShiftController | `028`, `048` | Unique code; single active default; non-negative thresholds | `GET,POST,PATCH /v1/attendance/shifts` (`attendance.manage`) | `/modules/attendance` (tab: Shifts) | `attendance_shift_identity_test.go` | Duplicate code 409, inactive default 422, stale version 409 | Shift editor QA reload | `03feb14` | **end-to-end verified** |
+| **Attendance** | `/attendance/duty-assignments` | Admin | Laravel DutyAssignmentController | `028` | Real staff/shift mapping; non-overlapping periods; active state | `/v1/attendance/assignments` (`attendance.manage`) | `/modules/attendance` (tab: Duty Assignments) | Go store test | Overlapping assignment rejection | Workspace table render | Pending Phase 3 | **backend verified** |
+| **Attendance** | `/attendance` (Clock-in/Out) | All staff | Laravel AttendanceController | `028` | Timestamp in EAT; break closure on checkout; duration calc | `/v1/attendance/clock-in`, `/clock-out` (`attendance.clock`) | `/modules/attendance` (tab: Attendance) | `attendance_test.go` | Cross-staff clocking denial | Operational suite check | Pending Phase 3 | **backend verified** |
+| **Attendance** | `/attendance/daily-report` | Admin, HR | Laravel AttendanceReportController | `028`, `048` | Real staff records; late/early calculation; scheduled vs worked | `/v1/attendance/summary` (`attendance.manage`) | `/modules/attendance` (tab: Daily Report) | `attendance_test.go` | Unauthenticated access denial | Workspace table render | Pending Phase 3 | **backend partial** |
+| **Attendance** | `/attendance/leaves` | Staff, HR | Laravel LeaveRequestController | `028` | Type/reason; approver audit trail; no history overwriting | `/v1/attendance/leaves` (`attendance.read_own`, `manage`) | `/modules/attendance` (tab: Leave Requests) | `attendance_test.go` | Stale update rejection | Pending browser check | Pending Phase 3 | **backend partial** |
+| **Attendance** | `/attendance/corrections` | Staff, HR | Laravel AttendanceCorrectionController | `028` | Reasoned corrections with immutable snapshots | `/v1/attendance/corrections` (`attendance.manage`) | `/modules/attendance` (tab: Attendance Requests) | Database trigger immutability test | Tampering rejection trigger | Pending browser check | Pending Phase 3 | **backend verified** |
+| **Bed Management** | `/beds` | Admin, Reception | Laravel BedController | `011`, `014`, `047` | Active, ready and unoccupied for availability; ward groupings | `GET,POST /v1/beds`, `/v1/bed-types` (`beds.manage`, `read`) | `/modules/beds`, `/modules/bed-types` | `clinical_test.go`, Playwright connected | Occupied bed deletion denial | `04-beds.png` | `f585fcb` | **end-to-end verified** |
+| **Clinical Encounter** | `/ipd-patient-departments` | Admin, Doctor | Laravel IpdPatientDepartmentController | `003`, `046` | Atomic admission; bed occupancy lock; doctor/patient integrity | `GET,POST /v1/encounters` (`encounters.manage`) | `/modules/ipd-patient-departments` | `clinical_test.go`, Playwright connected | Concurrent double admission denial | `02-patients.png` | `21e2f55`, `74d2eb6` | **end-to-end verified** |
+| **Clinical Encounter** | `/opd-patient-departments` | Admin, Doctor | Laravel OpdPatientDepartmentController | `003`, `046` | Generated encounter number; case/doctor relationship | `GET,POST /v1/encounters` (`encounters.manage`) | `/modules/opd-patient-departments` | `clinical_test.go`, Playwright connected | Inconsistent case-doctor denial | Form intake check | `21e2f55`, `74d2eb6` | **end-to-end verified** |
+| **Invoices & Billing** | `/invoices` | Admin, Accountant | Laravel InvoiceController | `004`, `005` | Integer minor units; immutable sealed invoices; payment locks | `GET,POST /v1/invoices` (`billing.manage`) | `/modules/invoices` | Isolated PostgreSQL concurrency & Playwright | Overpayment denial, post-seal modification denial | `05-billing.png` | `bf1d623`, `ab08aa7` | **end-to-end verified** |
+| **Advance Payments** | `/patient-advance-payments` | Admin, Accountant | Laravel PatientAdvancePaymentController | `047` | Generated serial receipt; integer minor units; patient linkage | Pending `/v1/patient-advance-payments` | `/modules/patient-advance-payments` | Seed / migration test | Missing patient FK rejection | `05-billing.png` table render | Phase 6 | **backend partial** |
+
