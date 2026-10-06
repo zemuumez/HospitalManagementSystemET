@@ -20,8 +20,22 @@ import {
 } from "lucide-react";
 import { useLanguage } from "./language";
 import { Modal } from "./modal";
-import { people } from "@/lib/legacy";
 import { shiftRow, saveAttendanceShift } from "@/lib/attendance-shifts";
+import {
+  assignmentRow,
+  saveShiftAssignment,
+  leaveRow,
+  saveLeaveRequest,
+  updateLeaveStatus,
+  recordRow,
+  updateRecordApproval,
+  clockIn,
+  clockOut,
+  startBreak,
+  endBreak,
+  StaffOption,
+} from "@/lib/attendance-ops";
+
 type Row = { id: string; [key: string]: string };
 type Field = {
   key: string;
@@ -30,6 +44,7 @@ type Field = {
   options?: string[];
   required?: boolean;
 };
+
 const shiftFields: Field[] = [
   { key: "name", label: "Name", required: true },
   { key: "code", label: "Code", required: true },
@@ -46,18 +61,21 @@ const shiftFields: Field[] = [
   { key: "fullDay", label: "Full Day Minutes", type: "number", required: true },
   { key: "status", label: "Status", options: ["Active", "Inactive"] },
 ];
-const staff: Field = {
+
+const staffField: Field = {
   key: "staff",
   label: "Staff",
-  options: people,
+  options: [],
   required: true,
 };
-const shift: Field = {
+
+const shiftField: Field = {
   key: "shift",
   label: "Shift",
-  options: ["Day Shift", "Night Shift"],
+  options: [],
   required: true,
 };
+
 const configs: Record<
   string,
   {
@@ -89,8 +107,8 @@ const configs: Record<
     subtitle: "Assign a shift to staff members and manage active duty periods.",
     action: "Add Duty Assignments",
     fields: [
-      staff,
-      shift,
+      staffField,
+      shiftField,
       { key: "from", label: "Effective From", type: "date", required: true },
       { key: "to", label: "Effective To", type: "date" },
       { key: "status", label: "Status", options: ["Active", "Inactive"] },
@@ -109,14 +127,14 @@ const configs: Record<
     subtitle: "Review and approve staff leave requests.",
     action: "Leave Request",
     fields: [
-      staff,
+      staffField,
       { key: "from", label: "From Date", type: "date", required: true },
       { key: "to", label: "To Date", type: "date", required: true },
       { key: "days", label: "Total Days", type: "number", required: true },
       {
         key: "type",
         label: "Type",
-        options: ["Casual", "Annual", "Emergency", "Sick"],
+        options: ["Casual", "Annual", "Emergency", "Sick", "Other"],
       },
       { key: "reason", label: "Reason", type: "textarea", required: true },
     ],
@@ -153,7 +171,6 @@ const configs: Record<
     fields: [],
     columns: [
       ["staff", "Staff"],
-      ["role", "Roles"],
       ["shift", "Shift"],
       ["status", "Status"],
       ["checkIn", "Check In"],
@@ -162,9 +179,8 @@ const configs: Record<
       ["early", "Early Out"],
       ["worked", "Worked"],
       ["overtime", "Over Time"],
-      ["break", "Break"],
-      ["leaveType", "Leave Type"],
-      ["reason", "Reason"],
+      ["breakTime", "Break Time"],
+      ["remarks", "Remarks"],
     ],
   },
   "manage-attendance": {
@@ -172,9 +188,9 @@ const configs: Record<
     subtitle: "Admin can create and edit attendance records manually.",
     action: "Add Attendance",
     fields: [
-      staff,
+      staffField,
       { key: "date", label: "Date", type: "date", required: true },
-      shift,
+      shiftField,
       { key: "checkIn", label: "Check In", type: "time", required: true },
       { key: "checkOut", label: "Check Out", type: "time" },
       { key: "break", label: "Break Minutes", type: "number" },
@@ -196,98 +212,32 @@ const configs: Record<
     ],
   },
 };
-const initial: Record<string, Row[]> = {
-  "attendance-shifts": [
-    {
-      id: "day",
-      name: "Day Shift",
-      code: "DS",
-      start: "08:00",
-      end: "17:00",
-      grace: "10",
-      break: "45",
-      default: "Is Default",
-      status: "Active",
-      staffCount: "6",
-    },
-    {
-      id: "night",
-      name: "Night Shift",
-      code: "NS",
-      start: "20:00",
-      end: "05:00",
-      grace: "10",
-      break: "45",
-      default: "Not Default",
-      status: "Active",
-      staffCount: "0",
-    },
-  ],
-  "attendance-assignments": people.map((staff, i) => ({
-    id: `d-${i}`,
-    staff,
-    shift: "Day Shift",
-    from: "2026-10-01",
-    to: "",
-    status: "Active",
-    note: "Auto assigned default shift",
-  })),
-  "attendance-leaves": [
-    {
-      id: "l-1",
-      staff: people[0],
-      from: "2026-10-06",
-      to: "2026-10-07",
-      days: "2",
-      type: "Emergency",
-      reason: "Sample leave request",
-      status: "Pending",
-      approver: "N/A",
-    },
-  ],
-  "attendance-requests": [
-    {
-      id: "r-1",
-      staff: people[1],
-      date: "2026-10-04",
-      shift: "Day Shift",
-      checkIn: "08:30",
-      checkOut: "17:00",
-      reason: "Missed clock out",
-      status: "Pending",
-    },
-  ],
-  "manage-attendance": people.map((staff, i) => ({
-    id: `m-${i}`,
-    staff,
-    date: "2026-10-04",
-    shift: "Day Shift",
-    checkIn: i === 1 ? "08:30" : "08:00",
-    checkOut: "17:00",
-    status: i === 1 ? "Late" : "Present",
-    break: "45",
-    remarks: "N/A",
-    role: i % 2 ? "Nurse" : "Doctor",
-  })),
-};
+
 const minute = (time: string) => {
   const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
+  return (h || 0) * 60 + (m || 0);
 };
+
 const duration = (n: number) =>
   `${String(Math.floor(Math.max(0, n) / 60)).padStart(2, "0")}:${String(Math.max(0, n) % 60).padStart(2, "0")}`;
+
 export function AttendanceWorkspace({ id }: { id: string }) {
   const { t } = useLanguage();
 
   const attendanceTabs = [
     {
       id: "attendance",
-      label: "Attendance Dashboard",
+      label: "Attendance",
       href: "/modules/attendance",
     },
     {
+      id: "attendance-report",
+      label: "Daily Report",
+      href: "/modules/attendance-report",
+    },
+    {
       id: "attendance-shifts",
-      label: "Attendance Shifts",
+      label: "Shifts",
       href: "/modules/attendance-shifts",
     },
     {
@@ -305,33 +255,41 @@ export function AttendanceWorkspace({ id }: { id: string }) {
       label: "Attendance Requests",
       href: "/modules/attendance-requests",
     },
-    {
-      id: "attendance-report",
-      label: "Attendance Report",
-      href: "/modules/attendance-report",
-    },
-    {
-      id: "manage-attendance",
-      label: "Manage Attendance",
-      href: "/modules/manage-attendance",
-    },
   ];
 
   const [data, setData] = useState<Record<string, Row[]>>({
-      ...initial,
-      "attendance-shifts": [] as Row[],
-      "attendance-assignments": [] as Row[],
-    }),
-    [search, setSearch] = useState(""),
-    [filters, setFilters] = useState(false),
-    [status, setStatus] = useState("All"),
-    [date, setDate] = useState(""),
-    [shiftFilter, setShiftFilter] = useState("All"),
-    [page, setPage] = useState(1),
-    [size, setSize] = useState(10),
-    [editing, setEditing] = useState<Row | null>(null),
-    [view, setView] = useState<Row | null>(null),
-    [error, setError] = useState("");
+    "attendance-shifts": [],
+    "attendance-assignments": [],
+    "attendance-leaves": [],
+    "attendance-requests": [],
+    "attendance-report": [],
+    "manage-attendance": [],
+  });
+  const [staffList, setStaffList] = useState<StaffOption[]>([]);
+  const [summary, setSummary] = useState<Record<string, any>>({
+    totalCount: 0,
+    presentCount: 0,
+    lateCount: 0,
+    halfDayCount: 0,
+    absentCount: 0,
+    totalWorkedMinutes: 0,
+    totalOvertimeMinutes: 0,
+    pendingApprovalCount: 0,
+  });
+  const [todayRecord, setTodayRecord] = useState<Row | null>(null);
+  const [todayOnBreak, setTodayOnBreak] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState(false);
+  const [status, setStatus] = useState("All");
+  const [date, setDate] = useState("");
+  const [shiftFilter, setShiftFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(10);
+  const [editing, setEditing] = useState<Row | null>(null);
+  const [view, setView] = useState<Row | null>(null);
+  const [error, setError] = useState("");
 
   const [apiConnected, setApiConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -343,20 +301,44 @@ export function AttendanceWorkspace({ id }: { id: string }) {
     setIsSyncing(true);
     setApiErrorBanner("");
     try {
-      const [shiftsRes, assignRes] = await Promise.all([
+      const [
+        shiftsRes,
+        assignRes,
+        leavesRes,
+        requestsRes,
+        recordsRes,
+        staffRes,
+        summaryRes,
+        todayRes,
+      ] = await Promise.all([
         fetch("/api/hms/attendance/shifts").catch(() => null),
         fetch("/api/hms/attendance/assignments").catch(() => null),
+        fetch("/api/hms/attendance/leaves").catch(() => null),
+        fetch("/api/hms/attendance/records?approvalStatus=submitted").catch(
+          () => null,
+        ),
+        fetch(
+          `/api/hms/attendance/records${date ? `?workDate=${encodeURIComponent(date)}` : ""}`,
+        ).catch(() => null),
+        fetch("/api/hms/attendance/staff").catch(() => null),
+        fetch("/api/hms/attendance/summary").catch(() => null),
+        fetch("/api/hms/attendance/today").catch(() => null),
       ]);
+
+      const newData: Record<string, Row[]> = {
+        "attendance-shifts": [],
+        "attendance-assignments": [],
+        "attendance-leaves": [],
+        "attendance-requests": [],
+        "attendance-report": [],
+        "manage-attendance": [],
+      };
 
       if (shiftsRes && shiftsRes.ok) {
         const d = await shiftsRes.json();
         const raw = Array.isArray(d) ? d : d.shifts || [];
         if (Array.isArray(raw)) {
-          const mappedShifts: Row[] = raw.map(shiftRow);
-          setData((prev) => ({
-            ...prev,
-            "attendance-shifts": mappedShifts,
-          }));
+          newData["attendance-shifts"] = raw.map(shiftRow);
         }
       }
 
@@ -364,44 +346,88 @@ export function AttendanceWorkspace({ id }: { id: string }) {
         const d = await assignRes.json();
         const raw = Array.isArray(d) ? d : d.assignments || [];
         if (Array.isArray(raw)) {
-          const mappedAssigns: Row[] = raw.map((a: any) => ({
-            id: a.id,
-            staff: a.staffName || a.staffId || "Staff Member",
-            shift: a.shiftName || "Day Shift",
-            from: a.effectiveFrom || "2026-10-01",
-            to: a.effectiveTo || "",
-            status: "Active",
-            note: "Active assignment",
-          }));
-          setData((prev) => ({
-            ...prev,
-            "attendance-assignments": mappedAssigns,
-          }));
+          newData["attendance-assignments"] = raw.map(assignmentRow);
         }
       }
 
+      if (leavesRes && leavesRes.ok) {
+        const d = await leavesRes.json();
+        const raw = Array.isArray(d) ? d : d.leaves || [];
+        if (Array.isArray(raw)) {
+          newData["attendance-leaves"] = raw.map(leaveRow);
+        }
+      }
+
+      if (requestsRes && requestsRes.ok) {
+        const d = await requestsRes.json();
+        const raw = Array.isArray(d) ? d : d.records || [];
+        if (Array.isArray(raw)) {
+          newData["attendance-requests"] = raw.map(recordRow);
+        }
+      }
+
+      if (recordsRes && recordsRes.ok) {
+        const d = await recordsRes.json();
+        const raw = Array.isArray(d) ? d : d.records || [];
+        if (Array.isArray(raw)) {
+          const mapped = raw.map(recordRow);
+          newData["attendance-report"] = mapped;
+          newData["manage-attendance"] = mapped;
+        }
+      }
+
+      if (staffRes && staffRes.ok) {
+        const d = await staffRes.json();
+        const list = Array.isArray(d) ? d : d.staff || [];
+        if (Array.isArray(list)) {
+          setStaffList(list);
+        }
+      }
+
+      if (summaryRes && summaryRes.ok) {
+        const s = await summaryRes.json();
+        if (s && typeof s === "object") {
+          setSummary(s);
+        }
+      }
+
+      if (todayRes && todayRes.ok) {
+        const d = await todayRes.json();
+        if (d && d.record) {
+          const mapped = recordRow(d.record);
+          setTodayRecord(mapped);
+          const breaks = d.record.breaks || [];
+          const openBreak = breaks.some((b: any) => !b.endAt);
+          setTodayOnBreak(openBreak);
+        } else {
+          setTodayRecord(null);
+          setTodayOnBreak(false);
+        }
+      }
+
+      setData(newData);
       const connected = Boolean(shiftsRes?.ok && assignRes?.ok);
       setApiConnected(connected);
-      if (!connected)
+      if (!connected) {
         setApiErrorBanner(
           "Some attendance data could not be loaded. Retry before making changes.",
         );
+      }
     } catch {
       setApiConnected(false);
       setApiErrorBanner("Attendance data could not be loaded. Please retry.");
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [date]);
 
   useEffect(() => {
     loadAttendanceData();
   }, [loadAttendanceData]);
 
-  const source = id === "attendance-report" ? "manage-attendance" : id;
-  const config = configs[id];
   const shifts = data["attendance-shifts"] || [];
-  const rows = (data[source] || []).filter(
+  const config = configs[id] || configs["attendance-shifts"];
+  const rows = (data[id] || []).filter(
     (row) =>
       Object.values(row)
         .join(" ")
@@ -413,39 +439,166 @@ export function AttendanceWorkspace({ id }: { id: string }) {
   );
   const pages = Math.max(1, Math.ceil(rows.length / size));
   const current = Math.min(page, pages);
-  function update(row: Row) {
-    setData((old) => ({
-      ...old,
-      [source]: (old[source] || []).map((r) => (r.id === row.id ? row : r)),
-    }));
-  }
+
+  const handleClockIn = async () => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await clockIn();
+      setApiSuccessBanner(t("Successfully clocked in today."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error ? err.message : "Failed to clock in.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await clockOut();
+      setApiSuccessBanner(t("Successfully clocked out."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error ? err.message : "Failed to clock out.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStartBreak = async () => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await startBreak();
+      setApiSuccessBanner(t("Break started."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error ? err.message : "Failed to start break.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEndBreak = async () => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await endBreak();
+      setApiSuccessBanner(t("Break ended. Resumed shift."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error ? err.message : "Failed to end break.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApproveLeave = async (row: Row) => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await updateLeaveStatus(
+        row.id,
+        "approved",
+        Number(row.version) || 1,
+        "Approved by admin",
+      );
+      setApiSuccessBanner(t("Leave request approved."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error ? err.message : "Failed to approve leave request.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRejectLeave = async (row: Row) => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await updateLeaveStatus(
+        row.id,
+        "rejected",
+        Number(row.version) || 1,
+        "Rejected by admin",
+      );
+      setApiSuccessBanner(t("Leave request rejected."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error ? err.message : "Failed to reject leave request.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleApproveRecord = async (row: Row) => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await updateRecordApproval(row.id, "approved", "Approved by admin");
+      setApiSuccessBanner(t("Attendance record approved."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error
+          ? err.message
+          : "Failed to approve attendance record.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRejectRecord = async (row: Row) => {
+    setActionLoading(true);
+    setApiErrorBanner("");
+    try {
+      await updateRecordApproval(row.id, "rejected", "Rejected by admin");
+      setApiSuccessBanner(t("Attendance record rejected."));
+      await loadAttendanceData();
+    } catch (err) {
+      setApiErrorBanner(
+        err instanceof Error
+          ? err.message
+          : "Failed to reject attendance record.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   function cell(row: Row, key: string) {
     if (key === "period") return `${row.from} - ${row.to || t("Open")}`;
     if (key === "time") return `${row.start} - ${row.end}`;
-    const sh = shifts.find((s) => s.name === row.shift);
-    const start = minute(row.checkIn || "00:00"),
-      scheduled = minute(sh?.start || "08:00");
-    let end = minute(row.checkOut || "00:00"),
-      finish = minute(sh?.end || "17:00");
-    if (end < start) end += 1440;
-    if (finish < scheduled) finish += 1440;
-    const worked = row.checkOut
-      ? Math.max(0, end - start - Number(row.break || 0))
-      : 0;
-    if (key === "late") return duration(Math.max(0, start - scheduled));
-    if (key === "early")
-      return duration(row.checkOut ? Math.max(0, finish - end) : 0);
-    if (key === "worked") return duration(worked);
-    if (key === "overtime")
-      return duration(row.checkOut ? Math.max(0, end - finish) : 0);
-    if (key === "breakTime") return duration(Number(row.break || 0));
+    if (key === "late") return row.late || "0m";
+    if (key === "early") return row.early || "0m";
+    if (key === "worked") return row.worked || "0m";
+    if (key === "overtime") return row.overtime || "0m";
+    if (key === "breakTime") return row.breakTime || "0m";
     return row[key] || "N/A";
   }
+
   const badge = (value: string) => (
     <span className={`badge attendance-badge status-${value.toLowerCase()}`}>
       {t(value)}
     </span>
   );
+
   const table = (items: Row[], columns: [string, string][], actions = true) => (
     <div className="legacy-table-wrap">
       <table className="legacy-table">
@@ -495,9 +648,7 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                           if (window.confirm(t("Delete this record?")))
                             setData({
                               ...data,
-                              [source]: data[source].filter(
-                                (r) => r.id !== row.id,
-                              ),
+                              [id]: data[id].filter((r) => r.id !== row.id),
                             });
                         }}
                       >
@@ -505,43 +656,52 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                       </button>
                     ) : (
                       <button
-                        aria-label={`View ${row.staff}`}
+                        aria-label={`View ${row.staff || row.name}`}
                         onClick={() => setView(row)}
                       >
                         <Eye size={17} />
                       </button>
                     )}
-                    {["attendance-leaves", "attendance-requests"].includes(
-                      id,
-                    ) &&
-                      row.status === "Pending" && (
+                    {id === "attendance-leaves" && row.status === "Pending" && (
+                      <>
+                        <button
+                          aria-label={`Approve ${row.staff}`}
+                          disabled={actionLoading}
+                          onClick={() => handleApproveLeave(row)}
+                          title={t("Approve Leave")}
+                        >
+                          <CheckCircle color="#00c97b" size={17} />
+                        </button>
+                        <button
+                          aria-label={`Reject ${row.staff}`}
+                          disabled={actionLoading}
+                          onClick={() => handleRejectLeave(row)}
+                          title={t("Reject Leave")}
+                        >
+                          <XCircle color="#ffb400" size={17} />
+                        </button>
+                      </>
+                    )}
+                    {id === "attendance-requests" &&
+                      (row.status === "Pending" ||
+                        row.approvalStatus === "Submitted") && (
                         <>
                           <button
                             aria-label={`Approve ${row.staff}`}
-                            onClick={() =>
-                              update({
-                                ...row,
-                                status: "Approved",
-                                approver: "Preview Admin",
-                              })
-                            }
+                            disabled={actionLoading}
+                            onClick={() => handleApproveRecord(row)}
+                            title={t("Approve Attendance")}
                           >
                             <CheckCircle color="#00c97b" size={17} />
                           </button>
-                          {id === "attendance-leaves" && (
-                            <button
-                              aria-label={`Reject ${row.staff}`}
-                              onClick={() =>
-                                update({
-                                  ...row,
-                                  status: "Rejected",
-                                  approver: "Preview Admin",
-                                })
-                              }
-                            >
-                              <XCircle color="#ffb400" size={17} />
-                            </button>
-                          )}
+                          <button
+                            aria-label={`Reject ${row.staff}`}
+                            disabled={actionLoading}
+                            onClick={() => handleRejectRecord(row)}
+                            title={t("Reject Attendance")}
+                          >
+                            <XCircle color="#ffb400" size={17} />
+                          </button>
                         </>
                       )}
                   </div>
@@ -560,7 +720,8 @@ export function AttendanceWorkspace({ id }: { id: string }) {
       </table>
     </div>
   );
-  if (id === "attendance")
+
+  if (id === "attendance") {
     return (
       <section>
         {apiErrorBanner && (
@@ -613,17 +774,15 @@ export function AttendanceWorkspace({ id }: { id: string }) {
               }}
             >
               {apiConnected
-                ? t(
-                    "Shifts and assignments loaded. Other attendance screens remain previews.",
-                  )
-                : t(
-                    "Attendance data unavailable. Preview actions are not saved to the hospital.",
-                  )}
+                ? t("Attendance operational with live hospital APIs.")
+                : t("Connecting to hospital attendance services...")}
             </span>
             <span style={{ color: "#94a3b8" }}>•</span>
             <span style={{ color: "#cbd5e1" }}>
               {shifts.length} {t("shifts")} |{" "}
-              {data["attendance-assignments"].length} {t("assignments")}
+              {data["attendance-assignments"].length} {t("assignments")} |{" "}
+              {data["attendance-leaves"].length} {t("leaves")} |{" "}
+              {data["attendance-requests"].length} {t("requests")}
             </span>
           </div>
 
@@ -680,6 +839,72 @@ export function AttendanceWorkspace({ id }: { id: string }) {
           </div>
         )}
 
+        {/* Today's Punch Card */}
+        <div className="legacy-card" style={{ marginBottom: "20px" }}>
+          <div className="page-heading">
+            <div>
+              <h2>{t("Today's Attendance")}</h2>
+              <p className="text-muted">
+                {todayRecord
+                  ? `${t("Current Status")}: ${t(todayRecord.status || "Checked In")} (${todayRecord.checkIn || ""}${todayRecord.checkOut ? ` - ${todayRecord.checkOut}` : ""})`
+                  : t("You have not clocked in today.")}
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              {!todayRecord || !todayRecord.checkIn ? (
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={actionLoading}
+                  onClick={handleClockIn}
+                >
+                  <Clock size={16} />
+                  {t("Clock In")}
+                </button>
+              ) : !todayRecord.checkOut ? (
+                <>
+                  {todayOnBreak ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={actionLoading}
+                      onClick={handleEndBreak}
+                    >
+                      {t("End Break")}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={actionLoading}
+                      onClick={handleStartBreak}
+                    >
+                      {t("Take Break")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={actionLoading}
+                    onClick={handleClockOut}
+                  >
+                    <Clock size={16} />
+                    {t("Clock Out")}
+                  </button>
+                </>
+              ) : (
+                <span className="badge status-present">
+                  <CheckCircle
+                    size={14}
+                    style={{ display: "inline", marginRight: "4px" }}
+                  />
+                  {t("Completed for Today")}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="page-heading">
           <div>
             <h1>{t("Attendance Dashboard")}</h1>
@@ -692,11 +917,16 @@ export function AttendanceWorkspace({ id }: { id: string }) {
         </div>
         <div className="attendance-metrics">
           {[
-            ["Total Staff", people.length, "All"],
-            ["Checked In", 0, "Active"],
-            ["Late Today", 0, "Late"],
-            ["On Leave", 0, "Away"],
-            ["Absent", people.length, "Absent"],
+            ["Total Staff", staffList.length || summary.totalCount || 0, "All"],
+            ["Checked In", summary.presentCount || 0, "Active"],
+            ["Late Today", summary.lateCount || 0, "Late"],
+            [
+              "On Leave",
+              data["attendance-leaves"].filter((r) => r.status === "Approved")
+                .length,
+              "Away",
+            ],
+            ["Absent", summary.absentCount || 0, "Absent"],
             [
               "Active Shifts",
               shifts.filter((s) => s.status === "Active").length,
@@ -769,7 +999,7 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             {data["attendance-leaves"].slice(0, 5).map((r) => (
               <div className="attendance-leave" key={r.id}>
                 <span className="avatar">
-                  {r.staff
+                  {(r.staff || "S")
                     .split(" ")
                     .map((n) => n[0])
                     .join("")}
@@ -786,10 +1016,17 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                 {badge(r.status)}
               </div>
             ))}
+            {!data["attendance-leaves"].length && (
+              <p className="text-muted" style={{ padding: "16px 0" }}>
+                {t("No leave requests found.")}
+              </p>
+            )}
           </div>
         </div>
       </section>
     );
+  }
+
   return (
     <section>
       {apiErrorBanner && (
@@ -842,17 +1079,15 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             }}
           >
             {apiConnected
-              ? t(
-                  "Shifts and assignments loaded. Other attendance screens remain previews.",
-                )
-              : t(
-                  "Attendance data unavailable. Preview actions are not saved to the hospital.",
-                )}
+              ? t("Attendance operational with live hospital APIs.")
+              : t("Connecting to hospital attendance services...")}
           </span>
           <span style={{ color: "#94a3b8" }}>•</span>
           <span style={{ color: "#cbd5e1" }}>
             {shifts.length} {t("shifts")} |{" "}
-            {data["attendance-assignments"].length} {t("assignments")}
+            {data["attendance-assignments"].length} {t("assignments")} |{" "}
+            {data["attendance-leaves"].length} {t("leaves")} |{" "}
+            {data["attendance-requests"].length} {t("requests")}
           </span>
         </div>
 
@@ -1071,36 +1306,12 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             onSubmit={async (e) => {
               e.preventDefault();
               if (saving) return;
-              if (editing.to && editing.from && editing.to < editing.from) {
-                setError("End date must be on or after the start date.");
-                return;
-              }
-              if (id === "attendance-assignments") {
-                setError(
-                  "Duty assignment saving is not connected yet. No hospital record was changed.",
-                );
-                return;
-              }
-              let row = { ...editing };
-              if (id === "manage-attendance") {
-                const sh = shifts.find((s) => s.name === row.shift);
-                row.status =
-                  minute(row.checkIn) >
-                  minute(sh?.start || "08:00") + Number(sh?.grace || 0)
-                    ? "Late"
-                    : "Present";
-              }
+              setError("");
 
               if (id === "attendance-shifts") {
                 setSaving(true);
                 try {
-                  const saved = await saveAttendanceShift(row);
-                  setData((old) => ({
-                    ...old,
-                    [source]: row.version
-                      ? old[source].map((r) => (r.id === row.id ? saved : r))
-                      : [saved, ...old[source]],
-                  }));
+                  await saveAttendanceShift(editing);
                   await loadAttendanceData();
                   setApiSuccessBanner(t("Shift saved."));
                   setEditing(null);
@@ -1116,19 +1327,143 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                 return;
               }
 
-              setData((old) => ({
-                ...old,
-                [source]: (old[source] || []).some((r) => r.id === row.id)
-                  ? old[source].map((r) => (r.id === row.id ? row : r))
-                  : [row, ...(old[source] || [])],
-              }));
-              setEditing(null);
+              if (id === "attendance-assignments") {
+                if (editing.to && editing.from && editing.to < editing.from) {
+                  setError("End date must be on or after the start date.");
+                  return;
+                }
+                setSaving(true);
+                try {
+                  const staffMatch = staffList.find(
+                    (s) => s.name === editing.staff || s.id === editing.staff,
+                  );
+                  const shiftMatch = shifts.find(
+                    (s) => s.name === editing.shift || s.id === editing.shift,
+                  );
+                  if (!staffMatch) {
+                    setError("Please select a valid staff member.");
+                    setSaving(false);
+                    return;
+                  }
+                  if (!shiftMatch) {
+                    setError("Please select a valid shift.");
+                    setSaving(false);
+                    return;
+                  }
+                  await saveShiftAssignment({
+                    staffId: staffMatch.id,
+                    shiftId: shiftMatch.id,
+                    effectiveFrom: editing.from,
+                    effectiveTo: editing.to || undefined,
+                    note: editing.note || "",
+                    active: editing.status !== "Inactive",
+                  });
+                  await loadAttendanceData();
+                  setApiSuccessBanner(t("Duty assignment saved."));
+                  setEditing(null);
+                } catch (failure) {
+                  setError(
+                    failure instanceof Error
+                      ? failure.message
+                      : "Duty assignment was not saved. Please retry.",
+                  );
+                } finally {
+                  setSaving(false);
+                }
+                return;
+              }
+
+              if (id === "attendance-leaves") {
+                if (editing.to && editing.from && editing.to < editing.from) {
+                  setError("To date must be on or after the from date.");
+                  return;
+                }
+                setSaving(true);
+                try {
+                  const staffMatch = staffList.find(
+                    (s) => s.name === editing.staff || s.id === editing.staff,
+                  );
+                  await saveLeaveRequest({
+                    staffId: staffMatch?.id,
+                    fromDate: editing.from,
+                    toDate: editing.to,
+                    leaveType: editing.type || "Casual",
+                    reason: editing.reason || "",
+                  });
+                  await loadAttendanceData();
+                  setApiSuccessBanner(t("Leave request submitted."));
+                  setEditing(null);
+                } catch (failure) {
+                  setError(
+                    failure instanceof Error
+                      ? failure.message
+                      : "Leave request was not saved. Please retry.",
+                  );
+                } finally {
+                  setSaving(false);
+                }
+                return;
+              }
+
+              if (id === "manage-attendance") {
+                setSaving(true);
+                try {
+                  const staffMatch = staffList.find(
+                    (s) => s.name === editing.staff || s.id === editing.staff,
+                  );
+                  const shiftMatch = shifts.find(
+                    (s) => s.name === editing.shift || s.id === editing.shift,
+                  );
+                  if (!staffMatch || !shiftMatch) {
+                    setError("Please select a valid staff member and shift.");
+                    setSaving(false);
+                    return;
+                  }
+                  const workDate =
+                    editing.date || new Date().toISOString().slice(0, 10);
+                  const checkInIso = `${workDate}T${editing.checkIn || "08:00"}:00Z`;
+                  const checkOutIso = editing.checkOut
+                    ? `${workDate}T${editing.checkOut}:00Z`
+                    : undefined;
+                  const res = await fetch("/api/hms/attendance/records", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      staffId: staffMatch.id,
+                      workDate,
+                      shiftId: shiftMatch.id,
+                      checkInAt: checkInIso,
+                      ...(checkOutIso ? { checkOutAt: checkOutIso } : {}),
+                      totalBreakMinutes: Number(editing.break || 0),
+                      adminNotes: editing.remarks || "",
+                      reason: "Manual admin creation",
+                    }),
+                  });
+                  if (!res.ok) {
+                    throw new Error(
+                      `Manual attendance record could not be saved (${res.status}).`,
+                    );
+                  }
+                  await loadAttendanceData();
+                  setApiSuccessBanner(t("Attendance record saved."));
+                  setEditing(null);
+                } catch (failure) {
+                  setError(
+                    failure instanceof Error
+                      ? failure.message
+                      : "Attendance record was not saved. Please retry.",
+                  );
+                } finally {
+                  setSaving(false);
+                }
+                return;
+              }
             }}
           >
             <header className="modal-heading">
               <h2 id="attendance-editor-title">
                 {t(
-                  data[source]?.some((r) => r.id === editing.id)
+                  (data[id] || []).some((r) => r.id === editing.id)
                     ? "Edit " + config.title
                     : config.action,
                 )}
@@ -1153,7 +1488,39 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                     {t(f.label)}:{" "}
                     {f.required && <b className="text-red-500">*</b>}
                   </span>
-                  {f.options ? (
+                  {f.key === "shift" ? (
+                    <select
+                      className="field"
+                      required={f.required}
+                      value={editing[f.key] || ""}
+                      onChange={(e) =>
+                        setEditing({ ...editing, [f.key]: e.target.value })
+                      }
+                    >
+                      <option value="">{t("Select Shift")}</option>
+                      {shifts.map((s) => (
+                        <option key={s.id} value={s.name}>
+                          {s.name} ({s.code || s.start})
+                        </option>
+                      ))}
+                    </select>
+                  ) : f.key === "staff" ? (
+                    <select
+                      className="field"
+                      required={f.required}
+                      value={editing[f.key] || ""}
+                      onChange={(e) =>
+                        setEditing({ ...editing, [f.key]: e.target.value })
+                      }
+                    >
+                      <option value="">{t("Select Staff")}</option>
+                      {staffList.map((st) => (
+                        <option key={st.id} value={st.name}>
+                          {st.name} ({st.role})
+                        </option>
+                      ))}
+                    </select>
+                  ) : f.options ? (
                     <select
                       className="field"
                       required={f.required}
@@ -1163,11 +1530,10 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                       }
                     >
                       <option value="">{t("Select")}</option>
-                      {(f.key === "shift"
-                        ? shifts.map((s) => s.name)
-                        : f.options
-                      ).map((o) => (
-                        <option key={o}>{o}</option>
+                      {f.options.map((o) => (
+                        <option key={o} value={o}>
+                          {t(o)}
+                        </option>
                       ))}
                     </select>
                   ) : f.type === "textarea" ? (
@@ -1219,7 +1585,7 @@ export function AttendanceWorkspace({ id }: { id: string }) {
           <div className="p-6">
             <header className="modal-heading">
               <h2 id="attendance-view-title">
-                {t(config.title)}: {view.staff}
+                {t(config.title)}: {view.staff || view.name}
               </h2>
               <button aria-label="Close" onClick={() => setView(null)}>
                 <X size={20} />

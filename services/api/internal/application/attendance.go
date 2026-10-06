@@ -30,6 +30,11 @@ type AttendanceStore interface {
 	AdminUpdateApproval(ctx context.Context, actor domain.Actor, id string, input domain.ApprovalInput) (domain.AttendanceRecord, error)
 
 	GetAttendanceSummary(ctx context.Context, actor domain.Actor, date string) (domain.AttendanceSummary, error)
+
+	ListLeaveRequests(ctx context.Context, actor domain.Actor, filter domain.LeaveFilter) ([]domain.LeaveRequest, int, error)
+	CreateLeaveRequest(ctx context.Context, actor domain.Actor, input domain.LeaveRequestInput) (domain.LeaveRequest, error)
+	UpdateLeaveStatus(ctx context.Context, actor domain.Actor, id string, input domain.LeaveApprovalInput) (domain.LeaveRequest, error)
+	ListStaff(ctx context.Context, actor domain.Actor) ([]domain.StaffMember, error)
 }
 
 type Attendance struct {
@@ -250,3 +255,61 @@ func (a Attendance) Summary(ctx context.Context, actor domain.Actor, date string
 	}
 	return a.Store.GetAttendanceSummary(ctx, actor, date)
 }
+
+func (a Attendance) ListLeaveRequests(ctx context.Context, actor domain.Actor, filter domain.LeaveFilter) ([]domain.LeaveRequest, int, error) {
+	if actor.Can("attendance.manage") {
+		// Admin can view all or filter by staffId
+	} else if actor.Can("attendance.read_own") {
+		// Non-admin can only view their own leave requests
+		filter.StaffID = actor.ID
+	} else {
+		return nil, 0, domain.ErrForbidden
+	}
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 || filter.PageSize > 100 {
+		filter.PageSize = 25
+	}
+	return a.Store.ListLeaveRequests(ctx, actor, filter)
+}
+
+func (a Attendance) CreateLeaveRequest(ctx context.Context, actor domain.Actor, input domain.LeaveRequestInput) (domain.LeaveRequest, error) {
+	if actor.Can("attendance.manage") {
+		if input.StaffID == "" {
+			input.StaffID = actor.ID
+		}
+	} else if actor.Can("attendance.read_own") {
+		input.StaffID = actor.ID
+	} else {
+		return domain.LeaveRequest{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.LeaveRequest{}, err
+	}
+	return a.Store.CreateLeaveRequest(ctx, actor, input)
+}
+
+func (a Attendance) UpdateLeaveStatus(ctx context.Context, actor domain.Actor, id string, input domain.LeaveApprovalInput) (domain.LeaveRequest, error) {
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.LeaveRequest{}, domain.ErrValidation
+	}
+	if err := input.Validate(); err != nil {
+		return domain.LeaveRequest{}, err
+	}
+	if !actor.Can("attendance.manage") {
+		if input.Status != "cancelled" {
+			return domain.LeaveRequest{}, domain.ErrForbidden
+		}
+	}
+	return a.Store.UpdateLeaveStatus(ctx, actor, id, input)
+}
+
+func (a Attendance) ListStaff(ctx context.Context, actor domain.Actor) ([]domain.StaffMember, error) {
+	if !actor.Can("attendance.manage") && !actor.Can("attendance.read_own") {
+		return nil, domain.ErrForbidden
+	}
+	return a.Store.ListStaff(ctx, actor)
+}
+
+

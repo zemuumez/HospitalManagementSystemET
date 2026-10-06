@@ -440,5 +440,5 @@ func TestClinicalTransactions(t *testing.T) {
 	testOperationalBilling(t, db, store, actors, patients)
 	testOverviewScope(t, store, actors)
 	testShiftIdentity(t, store, actors[0])
-
+	testAttendanceLeavesAndAssignments(t, store, actors)
 }

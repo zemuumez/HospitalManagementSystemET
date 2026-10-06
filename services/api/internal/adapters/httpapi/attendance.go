@@ -221,6 +221,53 @@ func (s Server) attendance(w http.ResponseWriter, r *http.Request, a domain.Acto
 		write(w, 200, rec)
 		return true
 
+	case r.URL.Path == "/v1/attendance/leaves" && r.Method == "GET":
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+		filter := domain.LeaveFilter{
+			StaffID:  r.URL.Query().Get("staffId"),
+			Status:   r.URL.Query().Get("status"),
+			Page:     page,
+			PageSize: pageSize,
+		}
+		leaves, total, err := s.Attendance.ListLeaveRequests(r.Context(), a, filter)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		if leaves == nil {
+			leaves = []domain.LeaveRequest{}
+		}
+		write(w, 200, map[string]any{"leaves": leaves, "total": total, "page": filter.Page, "pageSize": filter.PageSize})
+		return true
+
+	case r.URL.Path == "/v1/attendance/leaves" && r.Method == "POST":
+		var input domain.LeaveRequestInput
+		if !decode(w, r, &input) {
+			return true
+		}
+		lr, err := s.Attendance.CreateLeaveRequest(r.Context(), a, input)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 201, lr)
+		return true
+
+	case strings.HasPrefix(r.URL.Path, "/v1/attendance/leaves/") && strings.HasSuffix(r.URL.Path, "/status") && r.Method == "POST":
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/attendance/leaves/"), "/status")
+		var input domain.LeaveApprovalInput
+		if !decode(w, r, &input) {
+			return true
+		}
+		lr, err := s.Attendance.UpdateLeaveStatus(r.Context(), a, id, input)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, lr)
+		return true
+
 	case r.URL.Path == "/v1/attendance/summary" && r.Method == "GET":
 		date := r.URL.Query().Get("date")
 		sum, err := s.Attendance.Summary(r.Context(), a, date)
@@ -229,6 +276,15 @@ func (s Server) attendance(w http.ResponseWriter, r *http.Request, a domain.Acto
 			return true
 		}
 		write(w, 200, sum)
+		return true
+
+	case r.URL.Path == "/v1/attendance/staff" && r.Method == "GET":
+		staff, err := s.Attendance.ListStaff(r.Context(), a)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, map[string]any{"staff": staff})
 		return true
 
 	default:

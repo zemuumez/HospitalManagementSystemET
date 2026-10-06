@@ -492,3 +492,34 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
   - `npm run test:operational`: PASS (All 15 operational workspaces verified cleanly).
   - `npm run format:check`: PASS.
 
+## Integration verification — 2026-10-06, step 5 (Commit `fb7ff7d`)
+
+- Commit `fb7ff7d`: `fix(security): enforce 403 Forbidden for actors without patients.read on Overview endpoint`
+- Enforced strict 403 Forbidden for non-clinical actors lacking `patients.read` permission (e.g. patients, accountants, pharmacists, lab technicians).
+- Added multi-role HTTP-level test `TestOverviewHTTPAuthorizationAndScoping` covering all 10 system roles.
+
+## Phase 3: Attendance Full End-to-End Module (Pending Commit)
+
+- **Database (Migration 049)**:
+  - Enhanced `attendance_shift_assignment` with `note text NOT NULL DEFAULT ''` and `active boolean NOT NULL DEFAULT true`.
+  - Created `attendance_leave_request` table with UUID primary key, `staff_id` reference to `user(id)`, `from_date`, `to_date`, `days` check, `leave_type` enum constraint (`casual`, `annual`, `emergency`, `sick`, `other`), `reason`, `status` (`pending`, `approved`, `rejected`, `cancelled`), `approver_id`, `approver_notes`, `actioned_at`, `version` concurrency check, `valid_leave_range` constraint (`to_date >= from_date`), and lookup indices.
+- **Go Backend (`services/api`)**:
+  - `domain/attendance.go`: Added `LeaveRequest`, `LeaveRequestInput`, `LeaveApprovalInput`, `LeaveFilter`, `StaffMember` structs with strict validations. Updated `ShiftAssignment` and `ShiftAssignmentInput` with `Note` and `Active`.
+  - `application/attendance.go`: Added `ListLeaveRequests`, `CreateLeaveRequest`, `UpdateLeaveStatus`, and `ListStaff` with strict role-based access control and self-service constraints.
+  - `adapters/postgres/attendance.go`: Implemented `ListLeaveRequests`, `CreateLeaveRequest`, `UpdateLeaveStatus`, `ListStaff`; updated `ListShiftAssignments` and `AssignShift` to persist `note` and `active`; updated `resolveShift` and `ListShifts` staff count subqueries to respect assignment `active` status.
+  - `adapters/httpapi/attendance.go`: Added `GET, POST /v1/attendance/leaves`, `POST /v1/attendance/leaves/{id}/status`, and `GET /v1/attendance/staff`.
+  - `adapters/postgres/attendance_shift_identity_test.go`: Added `testAttendanceLeavesAndAssignments` integration test verifying assignment note/active persistence, inactive assignment fallback, full leave request lifecycle, optimistic locking version checks, and permission scoping.
+- **Frontend & Routing (`apps/web`)**:
+  - `apps/web/src/app/api/hms/[...path]/route.ts`: Allowed attendance subroutes for `leaves`, `leaves/{id}/status`, and `staff`.
+  - `apps/web/src/lib/attendance-ops.ts` & `apps/web/src/lib/attendance-ops.test.ts`: Added typed helpers and 7 unit tests for assignment, leave, record mappings, and API operations.
+  - `apps/web/src/components/attendance-workspace.tsx`: Realigned subtabs in required original order (`Attendance`, `Daily Report`, `Shifts`, `Duty Assignments`, `Leave Requests`, `Attendance Requests`). Connected real authenticated APIs across all tabs. Added interactive today clock-in/out and break actions, real leave approval/rejection, duty assignment creation with live staff and shift selectors, and attendance request approvals.
+- **Verification**:
+  - `go test ./...` in `services/api`: PASS (all packages pass).
+  - PostgreSQL test suite with Migration 049 and `testAttendanceLeavesAndAssignments`: PASS.
+  - `npm test` in `apps/web`: PASS (15/15 unit tests pass).
+  - `npm run typecheck`: PASS (0 errors).
+  - `npm run format:check`: PASS.
+  - `npm run test:connected`: PASS (all isolated browser tests pass).
+  - `npm run test:operational`: PASS (all 15 operational workspaces verified cleanly).
+
+

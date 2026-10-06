@@ -103,6 +103,8 @@ type ShiftAssignment struct {
 	ShiftName     string    `json:"shiftName"`
 	EffectiveFrom string    `json:"effectiveFrom"`
 	EffectiveTo   *string   `json:"effectiveTo"`
+	Note          string    `json:"note"`
+	Active        bool      `json:"active"`
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
@@ -111,6 +113,8 @@ type ShiftAssignmentInput struct {
 	ShiftID       string  `json:"shiftId"`
 	EffectiveFrom string  `json:"effectiveFrom"`
 	EffectiveTo   *string `json:"effectiveTo"`
+	Note          string  `json:"note"`
+	Active        *bool   `json:"active,omitempty"`
 }
 
 func (a *ShiftAssignmentInput) Validate() error {
@@ -131,7 +135,98 @@ func (a *ShiftAssignmentInput) Validate() error {
 			return ErrValidation
 		}
 	}
+	if len([]rune(a.Note)) > 500 {
+		return ErrValidation
+	}
 	return nil
+}
+
+type LeaveRequest struct {
+	ID            string     `json:"id"`
+	StaffID       string     `json:"staffId"`
+	StaffName     string     `json:"staffName"`
+	FromDate      string     `json:"fromDate"`
+	ToDate        string     `json:"toDate"`
+	Days          int        `json:"days"`
+	LeaveType     string     `json:"leaveType"`
+	Reason        string     `json:"reason"`
+	Status        string     `json:"status"`
+	ApproverID    *string    `json:"approverId"`
+	ApproverName  *string    `json:"approverName"`
+	ApproverNotes string     `json:"approverNotes"`
+	ActionedAt    *time.Time `json:"actionedAt"`
+	Version       int        `json:"version"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+}
+
+type LeaveRequestInput struct {
+	StaffID   string `json:"staffId"`
+	FromDate  string `json:"fromDate"`
+	ToDate    string `json:"toDate"`
+	LeaveType string `json:"leaveType"`
+	Reason    string `json:"reason"`
+}
+
+func (l *LeaveRequestInput) Validate() error {
+	l.StaffID = strings.TrimSpace(l.StaffID)
+	if len(l.StaffID) > 128 {
+		return ErrValidation
+	}
+	from, err := time.ParseInLocation("2006-01-02", l.FromDate, HospitalLocation)
+	if err != nil {
+		return ErrValidation
+	}
+	to, err := time.ParseInLocation("2006-01-02", l.ToDate, HospitalLocation)
+	if err != nil || to.Before(from) {
+		return ErrValidation
+	}
+	switch l.LeaveType {
+	case "casual", "annual", "emergency", "sick", "other":
+	default:
+		return ErrValidation
+	}
+	l.Reason = strings.TrimSpace(l.Reason)
+	if len([]rune(l.Reason)) < 1 || len([]rune(l.Reason)) > 1000 {
+		return ErrValidation
+	}
+	return nil
+}
+
+type LeaveApprovalInput struct {
+	Status        string `json:"status"`
+	ApproverNotes string `json:"approverNotes"`
+	Version       int    `json:"version"`
+}
+
+func (a *LeaveApprovalInput) Validate() error {
+	switch a.Status {
+	case "approved", "rejected", "cancelled":
+	default:
+		return ErrValidation
+	}
+	if a.Version < 1 {
+		return ErrValidation
+	}
+	a.ApproverNotes = strings.TrimSpace(a.ApproverNotes)
+	if len([]rune(a.ApproverNotes)) > 1000 {
+		return ErrValidation
+	}
+	return nil
+}
+
+type LeaveFilter struct {
+	StaffID  string
+	Status   string
+	Page     int
+	PageSize int
+}
+
+type StaffMember struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
 }
 
 type BreakRecord struct {

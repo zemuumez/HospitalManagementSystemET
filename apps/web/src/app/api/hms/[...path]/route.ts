@@ -119,6 +119,8 @@ function isAllowedPath(path: string[]): boolean {
         "check-out",
         "shifts",
         "assignments",
+        "leaves",
+        "staff",
         "today",
         "clock-in",
         "clock-out",
@@ -190,9 +192,10 @@ function isAllowedPath(path: string[]): boolean {
     if (path[0] === "attendance") {
       if (path[1] === "breaks" && ["start", "end"].includes(path[2]))
         return true;
-      if (path[1] === "records" && ["history", "approval"].includes(path[2]))
-        return true;
+      if (path[1] === "records") return true;
       if (path[1] === "shifts") return true;
+      if (path[1] === "assignments") return true;
+      if (path[1] === "leaves") return true;
     }
     if (
       path[0] === "doctor-departments" &&
@@ -207,6 +210,23 @@ function isAllowedPath(path: string[]): boolean {
       return true;
     }
     if (path[0] === "inventory" && ["categories", "items"].includes(path[1])) {
+      return true;
+    }
+  }
+
+  if (path.length === 4) {
+    if (
+      path[0] === "attendance" &&
+      path[1] === "records" &&
+      ["history", "approval"].includes(path[3])
+    ) {
+      return true;
+    }
+    if (
+      path[0] === "attendance" &&
+      path[1] === "leaves" &&
+      ["status"].includes(path[3])
+    ) {
       return true;
     }
   }

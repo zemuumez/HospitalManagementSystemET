@@ -16,7 +16,7 @@ func (s Store) ListShifts(ctx context.Context, actor domain.Actor) ([]domain.Shi
        AND COALESCE((SELECT a.shift_id FROM attendance_shift_assignment a JOIN attendance_shift assigned ON assigned.id=a.shift_id
            WHERE a.staff_id=staff.user_id AND a.effective_from<=(now() AT TIME ZONE 'Africa/Addis_Ababa')::date
            AND (a.effective_to IS NULL OR a.effective_to>=(now() AT TIME ZONE 'Africa/Addis_Ababa')::date)
-           AND assigned.active ORDER BY a.effective_from DESC,a.created_at DESC LIMIT 1),
+           AND assigned.active AND a.active ORDER BY a.effective_from DESC,a.created_at DESC LIMIT 1),
            (SELECT id FROM attendance_shift WHERE is_default AND active))=s.id)
       FROM attendance_shift s ORDER BY s.created_at,s.id`)
 	if err != nil {
@@ -118,7 +118,7 @@ func parseTimeOfDayHelper(s string) (int, int, error) {
 }
 
 func (s Store) ListShiftAssignments(ctx context.Context, actor domain.Actor, staffID string) ([]domain.ShiftAssignment, error) {
-	rows, err := s.DB.Query(ctx, `SELECT a.id, a.staff_id, u.name, a.shift_id, s.name, a.effective_from::text, a.effective_to::text, a.created_at FROM attendance_shift_assignment a JOIN "user" u ON u.id=a.staff_id JOIN attendance_shift s ON s.id=a.shift_id WHERE ($1 = '' OR a.staff_id = $1) ORDER BY a.effective_from DESC, a.created_at DESC`, staffID)
+	rows, err := s.DB.Query(ctx, `SELECT a.id, a.staff_id, u.name, a.shift_id, s.name, a.effective_from::text, a.effective_to::text, a.note, a.active, a.created_at FROM attendance_shift_assignment a JOIN "user" u ON u.id=a.staff_id JOIN attendance_shift s ON s.id=a.shift_id WHERE ($1 = '' OR a.staff_id = $1) ORDER BY a.effective_from DESC, a.created_at DESC`, staffID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (s Store) ListShiftAssignments(ctx context.Context, actor domain.Actor, sta
 	for rows.Next() {
 		var sa domain.ShiftAssignment
 		var effectiveTo *string
-		if err = rows.Scan(&sa.ID, &sa.StaffID, &sa.StaffName, &sa.ShiftID, &sa.ShiftName, &sa.EffectiveFrom, &effectiveTo, &sa.CreatedAt); err != nil {
+		if err = rows.Scan(&sa.ID, &sa.StaffID, &sa.StaffName, &sa.ShiftID, &sa.ShiftName, &sa.EffectiveFrom, &effectiveTo, &sa.Note, &sa.Active, &sa.CreatedAt); err != nil {
 			return nil, err
 		}
 		sa.EffectiveTo = effectiveTo
@@ -155,9 +155,13 @@ func (s Store) AssignShift(ctx context.Context, actor domain.Actor, input domain
 		return sa, domain.ErrValidation
 	}
 
-	err = tx.QueryRow(ctx, `INSERT INTO attendance_shift_assignment (staff_id, shift_id, effective_from, effective_to) VALUES ($1, $2, $3::date, NULLIF($4,'')::date) RETURNING id, staff_id, shift_id, effective_from::text, effective_to::text, created_at`,
-		input.StaffID, input.ShiftID, input.EffectiveFrom, pointerString(input.EffectiveTo)).
-		Scan(&sa.ID, &sa.StaffID, &sa.ShiftID, &sa.EffectiveFrom, &sa.EffectiveTo, &sa.CreatedAt)
+	active := true
+	if input.Active != nil {
+		active = *input.Active
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO attendance_shift_assignment (staff_id, shift_id, effective_from, effective_to, note, active) VALUES ($1, $2, $3::date, NULLIF($4,'')::date, $5, $6) RETURNING id, staff_id, shift_id, effective_from::text, effective_to::text, note, active, created_at`,
+		input.StaffID, input.ShiftID, input.EffectiveFrom, pointerString(input.EffectiveTo), input.Note, active).
+		Scan(&sa.ID, &sa.StaffID, &sa.ShiftID, &sa.EffectiveFrom, &sa.EffectiveTo, &sa.Note, &sa.Active, &sa.CreatedAt)
 	if err != nil {
 		return sa, err
 	}
@@ -190,7 +194,7 @@ func (s Store) resolveShift(ctx context.Context, q interface {
 		row = q.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default FROM attendance_shift WHERE id=$1 AND active=true`, requestedShiftID)
 	} else {
 		// Check explicit assignment
-		row = q.QueryRow(ctx, `SELECT s.id, s.name, to_char(s.start_time, 'HH24:MI:SS'), to_char(s.end_time, 'HH24:MI:SS'), s.grace_period_minutes, s.break_duration_minutes, s.half_day_minutes, s.full_day_minutes, s.is_overnight, s.active, s.version, s.created_at, s.updated_at, s.code, s.is_default FROM attendance_shift_assignment a JOIN attendance_shift s ON s.id=a.shift_id WHERE a.staff_id=$1 AND a.effective_from <= $2::date AND (a.effective_to IS NULL OR a.effective_to >= $2::date) AND s.active=true ORDER BY a.effective_from DESC, a.created_at DESC LIMIT 1`, staffID, workDate)
+		row = q.QueryRow(ctx, `SELECT s.id, s.name, to_char(s.start_time, 'HH24:MI:SS'), to_char(s.end_time, 'HH24:MI:SS'), s.grace_period_minutes, s.break_duration_minutes, s.half_day_minutes, s.full_day_minutes, s.is_overnight, s.active, s.version, s.created_at, s.updated_at, s.code, s.is_default FROM attendance_shift_assignment a JOIN attendance_shift s ON s.id=a.shift_id WHERE a.staff_id=$1 AND a.effective_from <= $2::date AND (a.effective_to IS NULL OR a.effective_to >= $2::date) AND s.active=true AND a.active=true ORDER BY a.effective_from DESC, a.created_at DESC LIMIT 1`, staffID, workDate)
 	}
 
 	err := row.Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt, &sh.Code, &sh.IsDefault)
@@ -813,3 +817,165 @@ func (s Store) GetAttendanceSummary(ctx context.Context, actor domain.Actor, dat
 		Scan(&sum.TotalCount, &sum.PresentCount, &sum.LateCount, &sum.HalfDayCount, &sum.AbsentCount, &sum.TotalWorkedMinutes, &sum.TotalOvertimeMinutes, &sum.PendingApprovalCount)
 	return sum, err
 }
+
+func (s Store) ListLeaveRequests(ctx context.Context, actor domain.Actor, filter domain.LeaveFilter) ([]domain.LeaveRequest, int, error) {
+	offset := (filter.Page - 1) * filter.PageSize
+
+	var total int
+	err := s.DB.QueryRow(ctx, `SELECT count(*) FROM attendance_leave_request l WHERE ($1 = '' OR l.staff_id = $1) AND ($2 = '' OR l.status = $2)`,
+		filter.StaffID, filter.Status).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.DB.Query(ctx, `SELECT l.id, l.staff_id, u.name, l.from_date::text, l.to_date::text, l.days, l.leave_type, l.reason, l.status,
+			l.approver_id, COALESCE(app.name, ''), l.approver_notes, l.actioned_at, l.version, l.created_at, l.updated_at
+		FROM attendance_leave_request l
+		JOIN "user" u ON u.id = l.staff_id
+		LEFT JOIN "user" app ON app.id = l.approver_id
+		WHERE ($1 = '' OR l.staff_id = $1) AND ($2 = '' OR l.status = $2)
+		ORDER BY l.created_at DESC
+		LIMIT $3 OFFSET $4`,
+		filter.StaffID, filter.Status, filter.PageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var leaves []domain.LeaveRequest
+	for rows.Next() {
+		var lr domain.LeaveRequest
+		var approverName string
+		if err = rows.Scan(&lr.ID, &lr.StaffID, &lr.StaffName, &lr.FromDate, &lr.ToDate, &lr.Days, &lr.LeaveType, &lr.Reason, &lr.Status,
+			&lr.ApproverID, &approverName, &lr.ApproverNotes, &lr.ActionedAt, &lr.Version, &lr.CreatedAt, &lr.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		if lr.ApproverID != nil && approverName != "" {
+			lr.ApproverName = &approverName
+		}
+		leaves = append(leaves, lr)
+	}
+	if leaves == nil {
+		leaves = []domain.LeaveRequest{}
+	}
+	return leaves, total, rows.Err()
+}
+
+func (s Store) CreateLeaveRequest(ctx context.Context, actor domain.Actor, input domain.LeaveRequestInput) (domain.LeaveRequest, error) {
+	var lr domain.LeaveRequest
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return lr, err
+	}
+	defer tx.Rollback(ctx)
+
+	var staffActive bool
+	if err = tx.QueryRow(ctx, `SELECT active FROM staff_access WHERE user_id=$1`, input.StaffID).Scan(&staffActive); err != nil || !staffActive {
+		return lr, domain.ErrValidation
+	}
+
+	fromT, _ := time.ParseInLocation("2006-01-02", input.FromDate, domain.HospitalLocation)
+	toT, _ := time.ParseInLocation("2006-01-02", input.ToDate, domain.HospitalLocation)
+	days := int(toT.Sub(fromT).Hours()/24) + 1
+	if days <= 0 {
+		return lr, domain.ErrValidation
+	}
+
+	err = tx.QueryRow(ctx, `INSERT INTO attendance_leave_request (staff_id, from_date, to_date, days, leave_type, reason, status)
+		VALUES ($1, $2::date, $3::date, $4, $5, $6, 'pending')
+		RETURNING id, staff_id, from_date::text, to_date::text, days, leave_type, reason, status, approver_id, approver_notes, actioned_at, version, created_at, updated_at`,
+		input.StaffID, input.FromDate, input.ToDate, days, input.LeaveType, input.Reason).
+		Scan(&lr.ID, &lr.StaffID, &lr.FromDate, &lr.ToDate, &lr.Days, &lr.LeaveType, &lr.Reason, &lr.Status,
+			&lr.ApproverID, &lr.ApproverNotes, &lr.ActionedAt, &lr.Version, &lr.CreatedAt, &lr.UpdatedAt)
+	if err != nil {
+		return lr, err
+	}
+
+	_ = tx.QueryRow(ctx, `SELECT name FROM "user" WHERE id=$1`, lr.StaffID).Scan(&lr.StaffName)
+
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'attendance.leave_requested', $2)`, actor.ID, lr.ID); err != nil {
+		return lr, err
+	}
+	return lr, tx.Commit(ctx)
+}
+
+func (s Store) UpdateLeaveStatus(ctx context.Context, actor domain.Actor, id string, input domain.LeaveApprovalInput) (domain.LeaveRequest, error) {
+	var lr domain.LeaveRequest
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return lr, err
+	}
+	defer tx.Rollback(ctx)
+
+	var currentStaffID, currentStatus string
+	var currentVer int
+	if err = tx.QueryRow(ctx, `SELECT staff_id, status, version FROM attendance_leave_request WHERE id=$1`, id).
+		Scan(&currentStaffID, &currentStatus, &currentVer); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return lr, domain.ErrNotFound
+		}
+		return lr, err
+	}
+	if currentVer != input.Version {
+		return lr, domain.ErrStale
+	}
+	if currentStatus != "pending" && input.Status != currentStatus {
+		return lr, domain.ErrValidation
+	}
+	if !actor.Can("attendance.manage") && currentStaffID != actor.ID {
+		return lr, domain.ErrForbidden
+	}
+
+	var approverID *string
+	if input.Status == "approved" || input.Status == "rejected" {
+		approverID = &actor.ID
+	}
+
+	err = tx.QueryRow(ctx, `UPDATE attendance_leave_request
+		SET status=$1, approver_id=$2, approver_notes=$3, actioned_at=now(), version=version+1, updated_at=now()
+		WHERE id=$4 AND version=$5
+		RETURNING id, staff_id, from_date::text, to_date::text, days, leave_type, reason, status, approver_id, approver_notes, actioned_at, version, created_at, updated_at`,
+		input.Status, approverID, input.ApproverNotes, id, input.Version).
+		Scan(&lr.ID, &lr.StaffID, &lr.FromDate, &lr.ToDate, &lr.Days, &lr.LeaveType, &lr.Reason, &lr.Status,
+			&lr.ApproverID, &lr.ApproverNotes, &lr.ActionedAt, &lr.Version, &lr.CreatedAt, &lr.UpdatedAt)
+	if err != nil {
+		return lr, err
+	}
+
+	_ = tx.QueryRow(ctx, `SELECT name FROM "user" WHERE id=$1`, lr.StaffID).Scan(&lr.StaffName)
+	if lr.ApproverID != nil {
+		var appName string
+		_ = tx.QueryRow(ctx, `SELECT name FROM "user" WHERE id=$1`, *lr.ApproverID).Scan(&appName)
+		if appName != "" {
+			lr.ApproverName = &appName
+		}
+	}
+
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'attendance.leave_status_updated', $2)`, actor.ID, lr.ID); err != nil {
+		return lr, err
+	}
+	return lr, tx.Commit(ctx)
+}
+
+func (s Store) ListStaff(ctx context.Context, actor domain.Actor) ([]domain.StaffMember, error) {
+	rows, err := s.DB.Query(ctx, `SELECT u.id, u.name, u.email, a.role FROM "user" u JOIN staff_access a ON a.user_id=u.id WHERE a.active AND a.role <> 'patient' ORDER BY u.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var staff []domain.StaffMember
+	for rows.Next() {
+		var sm domain.StaffMember
+		if err = rows.Scan(&sm.ID, &sm.Name, &sm.Email, &sm.Role); err != nil {
+			return nil, err
+		}
+		staff = append(staff, sm)
+	}
+	if staff == nil {
+		staff = []domain.StaffMember{}
+	}
+	return staff, rows.Err()
+}
+
+
