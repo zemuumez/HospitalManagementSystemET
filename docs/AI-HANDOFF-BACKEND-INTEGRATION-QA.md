@@ -2,6 +2,8 @@
 
 Prepared 2026-10-06. This document is the next agent's work order and evidence map. It does not claim that the entire source, live demo, schema, or every role has been verified. Development was paused; the user requested this handoff so another AI can continue.
 
+**Publication update:** The work described below as uncommitted was subsequently committed as `03feb14` (shift identity/default integration, manual QA harness, formatting configuration and this handoff). Preserve that commit rather than recreating it. The original snapshot below records the state at handoff preparation. The user has now authorized publishing these commits to `main`; verify current Git history when resuming. Database migration application and production deployment remain separate tasks.
+
 ## 1. Objective and non-negotiable requirements
 
 Finish the single-hospital system's remaining backend, connect every required frontend workflow, reproduce the original pages/features/UX closely, and demonstrate correctness through tests. Modernize visual design only after original parity is accepted.

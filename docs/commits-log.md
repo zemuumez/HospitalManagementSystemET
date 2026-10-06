@@ -460,3 +460,15 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 - Removed the global claim that every module is connected. Attendance identifies its remaining previews; unimplemented shift/assignment deletion and assignment saving no longer pretend to mutate hospital records.
 - Shift code/default editing is still a backend parity gap; no default shift is inferred from the active flag.
 - Verified: frontend typecheck, 8 unit tests (including create/edit and failure contracts), production build with local environment loaded only into the process. No browser persistence check is claimed for this step yet.
+
+## Integration verification — 2026-10-06, step 3
+
+Commit: `03feb14` — shift identity, unique codes, single default constraint and live staff counts.
+
+- Added migration 048 and Go domain/store support for shift codes and a default independent of display name. Default replacement is transactional, concurrent defaults are constrained, and invalid explicitly selected shifts do not silently fall back.
+- Restored persisted code/default controls and added current staff-count projection.
+- Verified isolated PostgreSQL regression including duplicate code, rename/default retention, stale version, inactive default rejection, rollback, concurrent default changes and staff-count reconciliation.
+- Browser QA created/reloaded/edited a shift and switched its default. A read-only database assertion confirmed one version-2 record and retained zero-minute values. Invalid default deactivation returned 422 with the editor open.
+- Typecheck, eight frontend unit tests, production build, formatting and Go suite passed at the documented checkpoints. The temporary QA schema/services were removed; the public development schema was not migrated.
+- Added the detailed next-agent execution plan in `docs/AI-HANDOFF-BACKEND-INTEGRATION-QA.md` and partial live-reference audit. Whole-demo parity and remaining integrations are explicitly unfinished.
+- User authorized publishing these verified commits to main. No production deployment is implied by publishing code.

@@ -676,8 +676,9 @@ Frontend client workspaces connected to the persistent Go/PostgreSQL backend ser
 - [x] Available-bed aggregate requires active/ready/unoccupied beds.
 - [x] Migration 047 applied successfully in the temporary PostgreSQL test schema. Public development database unchanged.
 - [x] Shift create/edit request contracts, versioned PATCH, server identity and failure handling verified by unit tests and typecheck/build.
-- [ ] Browser create/edit/reload verification of shifts against the isolated database.
-- [ ] Attendance default/code fields, assignments, leaves, correction requests, dashboard/report and manual attendance fully connected and verified. Preview behavior is not completion.
+- [x] Browser create/edit/reload verification of shifts against the isolated database; database assertion confirmed one version-2 record with persisted code/default and zero grace/break values. Invalid inactive-default save returned 422 and retained the editor.
+- [x] Shift code/default persistence, unique code and single active default constraints, configured-default resolution and staff-count projection (048, `03feb14`); isolated PostgreSQL tests covered stale edits, rollback and concurrent default selection.
+- [ ] Attendance assignments, leaves, correction requests, dashboard/report and manual attendance fully connected and verified. Preview behavior is not completion.
 - [ ] Implement original encounter-specific IPD/OPD detail tabs and their workflows; aliasing each tab to the register is not completion.
 - [ ] Advance-payment ledger operations and invoice allocation/refunds verified beyond table creation and dashboard totals.
 - [ ] Dashboard bill/payment amount definitions reconciled with actual issued bills and reversals.
