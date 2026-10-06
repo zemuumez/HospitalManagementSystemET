@@ -25,11 +25,7 @@ import { useLanguage } from "./language";
 import { Modal } from "./modal";
 
 export type FrontOfficeTab =
-  | "call-logs"
-  | "visitors"
-  | "postals"
-  | "enquiries"
-  | "complaints";
+  "call-logs" | "visitors" | "postals" | "enquiries" | "complaints";
 
 interface CallLogItem {
   id: string;
@@ -111,7 +107,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
   const [showAddPostal, setShowAddPostal] = useState(false);
   const [showAddEnquiry, setShowAddEnquiry] = useState(false);
   const [showAddComplaint, setShowAddComplaint] = useState(false);
-  const [resolveTarget, setResolveTarget] = useState<ComplaintItem | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<ComplaintItem | null>(
+    null,
+  );
 
   // Form states
   const [callLogForm, setCallLogForm] = useState({
@@ -262,13 +260,15 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
         title: "Wait time at pharmacy billing counter",
         description: "Waited 40 minutes to clear medicine bill.",
         status: 2,
-        response: "Added a second dedicated counter for cash and mobile payments.",
+        response:
+          "Added a second dedicated counter for cash and mobile payments.",
         created_at: "2026-10-04T11:00:00Z",
       },
       {
         id: "comp-2",
         title: "Air conditioning in Waiting Area B",
-        description: "Waiting area was uncomfortably hot during morning rounds.",
+        description:
+          "Waiting area was uncomfortably hot during morning rounds.",
         status: 0,
         response: "",
         created_at: "2026-10-05T08:45:00Z",
@@ -279,47 +279,68 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
   const fetchFrontOfficeData = async () => {
     setLoading(true);
     try {
-      const [resCalls, resVis, resPost, resEnq, resComp] = await Promise.allSettled([
-        fetch("/api/hms/call-logs"),
-        fetch("/api/hms/visitors"),
-        fetch("/api/hms/postals"),
-        fetch("/api/hms/enquiries"),
-        fetch("/api/hms/complaints"),
-      ]);
+      const [resCalls, resVis, resPost, resEnq, resComp] =
+        await Promise.allSettled([
+          fetch("/api/hms/call-logs"),
+          fetch("/api/hms/visitors"),
+          fetch("/api/hms/postals"),
+          fetch("/api/hms/enquiries"),
+          fetch("/api/hms/complaints"),
+        ]);
 
       let loadedCount = 0;
 
       if (resCalls.status === "fulfilled" && resCalls.value.ok) {
         const data = await resCalls.value.json();
-        if (data.call_logs && Array.isArray(data.call_logs) && data.call_logs.length > 0) {
+        if (
+          data.call_logs &&
+          Array.isArray(data.call_logs) &&
+          data.call_logs.length > 0
+        ) {
           setCallLogs(data.call_logs);
           loadedCount += data.call_logs.length;
         }
       }
       if (resVis.status === "fulfilled" && resVis.value.ok) {
         const data = await resVis.value.json();
-        if (data.visitors && Array.isArray(data.visitors) && data.visitors.length > 0) {
+        if (
+          data.visitors &&
+          Array.isArray(data.visitors) &&
+          data.visitors.length > 0
+        ) {
           setVisitors(data.visitors);
           loadedCount += data.visitors.length;
         }
       }
       if (resPost.status === "fulfilled" && resPost.value.ok) {
         const data = await resPost.value.json();
-        if (data.postals && Array.isArray(data.postals) && data.postals.length > 0) {
+        if (
+          data.postals &&
+          Array.isArray(data.postals) &&
+          data.postals.length > 0
+        ) {
           setPostals(data.postals);
           loadedCount += data.postals.length;
         }
       }
       if (resEnq.status === "fulfilled" && resEnq.value.ok) {
         const data = await resEnq.value.json();
-        if (data.enquiries && Array.isArray(data.enquiries) && data.enquiries.length > 0) {
+        if (
+          data.enquiries &&
+          Array.isArray(data.enquiries) &&
+          data.enquiries.length > 0
+        ) {
           setEnquiries(data.enquiries);
           loadedCount += data.enquiries.length;
         }
       }
       if (resComp.status === "fulfilled" && resComp.value.ok) {
         const data = await resComp.value.json();
-        if (data.complaints && Array.isArray(data.complaints) && data.complaints.length > 0) {
+        if (
+          data.complaints &&
+          Array.isArray(data.complaints) &&
+          data.complaints.length > 0
+        ) {
           setComplaints(data.complaints);
           loadedCount += data.complaints.length;
         }
@@ -346,7 +367,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
       name: callLogForm.name,
       phone: callLogForm.phone,
       date: callLogForm.date,
-      follow_up_date: callLogForm.follow_up_date ? callLogForm.follow_up_date : undefined,
+      follow_up_date: callLogForm.follow_up_date
+        ? callLogForm.follow_up_date
+        : undefined,
       note: callLogForm.note,
       call_type: Number(callLogForm.call_type),
     };
@@ -602,11 +625,31 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
   };
 
   const tabs = [
-    { id: "call-logs", label: t("Call Logs"), icon: PhoneCall, count: callLogs.length },
-    { id: "visitors", label: t("Visitors"), icon: Users, count: visitors.length },
+    {
+      id: "call-logs",
+      label: t("Call Logs"),
+      icon: PhoneCall,
+      count: callLogs.length,
+    },
+    {
+      id: "visitors",
+      label: t("Visitors"),
+      icon: Users,
+      count: visitors.length,
+    },
     { id: "postals", label: t("Postal"), icon: Mail, count: postals.length },
-    { id: "enquiries", label: t("Enquiries"), icon: HelpCircle, count: enquiries.length },
-    { id: "complaints", label: t("Complaints"), icon: AlertTriangle, count: complaints.length },
+    {
+      id: "enquiries",
+      label: t("Enquiries"),
+      icon: HelpCircle,
+      count: enquiries.length,
+    },
+    {
+      id: "complaints",
+      label: t("Complaints"),
+      icon: AlertTriangle,
+      count: complaints.length,
+    },
   ];
 
   return (
@@ -656,7 +699,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
           </span>
           <span className="text-muted-foreground hidden sm:inline">•</span>
           <span className="text-muted-foreground text-xs sm:text-sm">
-            {isLive ? t("Live Go / PostgreSQL Connected") : t("Dual-mode local preview")}
+            {isLive
+              ? t("Live Go / PostgreSQL Connected")
+              : t("Dual-mode local preview")}
           </span>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -665,7 +710,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
             disabled={loading}
             className="btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-border shadow-2xs hover:bg-muted"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+            />
             {t("Sync")}
           </button>
           {activeTab === "call-logs" && (
@@ -722,7 +769,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
       {activeTab === "call-logs" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Telephonic Call Logs")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Telephonic Call Logs")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -754,10 +803,17 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                       c.phone.includes(searchTerm),
                   )
                   .map((c) => (
-                    <tr key={c.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
+                    <tr
+                      key={c.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {c.name}
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs">{c.phone}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.date}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {c.date}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {c.follow_up_date || "-"}
                       </td>
@@ -771,11 +827,13 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                         >
                           {c.call_type === 1 ? (
                             <>
-                              <ArrowDownLeft className="w-3 h-3" /> {t("Incoming")}
+                              <ArrowDownLeft className="w-3 h-3" />{" "}
+                              {t("Incoming")}
                             </>
                           ) : (
                             <>
-                              <ArrowUpRight className="w-3 h-3" /> {t("Outgoing")}
+                              <ArrowUpRight className="w-3 h-3" />{" "}
+                              {t("Outgoing")}
                             </>
                           )}
                         </span>
@@ -795,7 +853,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
       {activeTab === "visitors" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Visitor Register")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Visitor Register")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -826,11 +886,18 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                   .filter(
                     (v) =>
                       v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      v.id_card.toLowerCase().includes(searchTerm.toLowerCase()),
+                      v.id_card
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()),
                   )
                   .map((v) => (
-                    <tr key={v.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground">{v.name}</td>
+                    <tr
+                      key={v.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {v.name}
+                      </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                           {v.purpose === 1
@@ -845,7 +912,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                         {v.id_card || "-"}
                       </td>
                       <td className="px-4 py-3">{v.no_of_person}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{v.date}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {v.date}
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {v.in_time} - {v.out_time}
                       </td>
@@ -894,12 +963,21 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 {postals
                   .filter(
                     (p) =>
-                      p.reference_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      p.from_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      p.to_title.toLowerCase().includes(searchTerm.toLowerCase()),
+                      p.reference_no
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      p.from_title
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      p.to_title
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()),
                   )
                   .map((p) => (
-                    <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={p.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -914,9 +992,15 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                       <td className="px-4 py-3 font-mono font-medium text-xs">
                         {p.reference_no}
                       </td>
-                      <td className="px-4 py-3 font-medium text-foreground">{p.from_title}</td>
-                      <td className="px-4 py-3 font-medium text-foreground">{p.to_title}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{p.date}</td>
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {p.from_title}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {p.to_title}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {p.date}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs max-w-xs truncate">
                         {p.address || "-"}
                       </td>
@@ -932,7 +1016,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
       {activeTab === "enquiries" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Public & Patient Enquiries")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Public & Patient Enquiries")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -960,16 +1046,29 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 {enquiries
                   .filter(
                     (e) =>
-                      e.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      e.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      e.message.toLowerCase().includes(searchTerm.toLowerCase()),
+                      e.full_name
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      e.email
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      e.message
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()),
                   )
                   .map((e) => (
-                    <tr key={e.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-medium text-foreground">{e.full_name}</td>
+                    <tr
+                      key={e.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {e.full_name}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="font-mono text-xs">{e.contact_no}</div>
-                        <div className="text-xs text-muted-foreground">{e.email}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {e.email}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
@@ -1018,7 +1117,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
       {activeTab === "complaints" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Complaints & Grievances")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Complaints & Grievances")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -1045,12 +1146,21 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 {complaints
                   .filter(
                     (c) =>
-                      c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      c.description.toLowerCase().includes(searchTerm.toLowerCase()),
+                      c.title
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      c.description
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()),
                   )
                   .map((c) => (
-                    <tr key={c.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-foreground">{c.title}</td>
+                    <tr
+                      key={c.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-semibold text-foreground">
+                        {c.title}
+                      </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground max-w-sm">
                         {c.description}
                       </td>
@@ -1104,10 +1214,15 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
 
       {/* 1. Add Call Log Modal */}
       {showAddCallLog && (
-        <Modal onClose={() => setShowAddCallLog(false)} titleId="add-call-log-title">
+        <Modal
+          onClose={() => setShowAddCallLog(false)}
+          titleId="add-call-log-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="add-call-log-title" className="font-semibold text-lg">{t("New Call Log")}</h3>
+              <h3 id="add-call-log-title" className="font-semibold text-lg">
+                {t("New Call Log")}
+              </h3>
               <button
                 onClick={() => setShowAddCallLog(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1117,32 +1232,45 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
             </div>
             <form onSubmit={handleSaveCallLog} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Caller Name")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Caller Name")} *
+                </label>
                 <input
                   type="text"
                   required
                   value={callLogForm.name}
-                  onChange={(e) => setCallLogForm({ ...callLogForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setCallLogForm({ ...callLogForm, name: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Phone")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Phone")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={callLogForm.phone}
-                    onChange={(e) => setCallLogForm({ ...callLogForm, phone: e.target.value })}
+                    onChange={(e) =>
+                      setCallLogForm({ ...callLogForm, phone: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Call Type")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Call Type")}
+                  </label>
                   <select
                     value={callLogForm.call_type}
                     onChange={(e) =>
-                      setCallLogForm({ ...callLogForm, call_type: Number(e.target.value) })
+                      setCallLogForm({
+                        ...callLogForm,
+                        call_type: Number(e.target.value),
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   >
@@ -1153,33 +1281,46 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Date")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Date")} *
+                  </label>
                   <input
                     type="date"
                     required
                     value={callLogForm.date}
-                    onChange={(e) => setCallLogForm({ ...callLogForm, date: e.target.value })}
+                    onChange={(e) =>
+                      setCallLogForm({ ...callLogForm, date: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Follow Up Date")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Follow Up Date")}
+                  </label>
                   <input
                     type="date"
                     value={callLogForm.follow_up_date}
                     onChange={(e) =>
-                      setCallLogForm({ ...callLogForm, follow_up_date: e.target.value })
+                      setCallLogForm({
+                        ...callLogForm,
+                        follow_up_date: e.target.value,
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Note")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Note")}
+                </label>
                 <textarea
                   rows={3}
                   value={callLogForm.note}
-                  onChange={(e) => setCallLogForm({ ...callLogForm, note: e.target.value })}
+                  onChange={(e) =>
+                    setCallLogForm({ ...callLogForm, note: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
@@ -1191,7 +1332,10 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Save Call Log")}
                 </button>
               </div>
@@ -1202,10 +1346,15 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
 
       {/* 2. Add Visitor Modal */}
       {showAddVisitor && (
-        <Modal onClose={() => setShowAddVisitor(false)} titleId="add-visitor-title">
+        <Modal
+          onClose={() => setShowAddVisitor(false)}
+          titleId="add-visitor-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="add-visitor-title" className="font-semibold text-lg">{t("New Visitor Entry")}</h3>
+              <h3 id="add-visitor-title" className="font-semibold text-lg">
+                {t("New Visitor Entry")}
+              </h3>
               <button
                 onClick={() => setShowAddVisitor(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1216,21 +1365,30 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
             <form onSubmit={handleSaveVisitor} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Visitor Name")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Visitor Name")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={visitorForm.name}
-                    onChange={(e) => setVisitorForm({ ...visitorForm, name: e.target.value })}
+                    onChange={(e) =>
+                      setVisitorForm({ ...visitorForm, name: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Purpose")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Purpose")}
+                  </label>
                   <select
                     value={visitorForm.purpose}
                     onChange={(e) =>
-                      setVisitorForm({ ...visitorForm, purpose: Number(e.target.value) })
+                      setVisitorForm({
+                        ...visitorForm,
+                        purpose: Number(e.target.value),
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   >
@@ -1242,63 +1400,97 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Phone")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Phone")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={visitorForm.phone}
-                    onChange={(e) => setVisitorForm({ ...visitorForm, phone: e.target.value })}
+                    onChange={(e) =>
+                      setVisitorForm({ ...visitorForm, phone: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("ID Card / Kebele No")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("ID Card / Kebele No")}
+                  </label>
                   <input
                     type="text"
                     value={visitorForm.id_card}
-                    onChange={(e) => setVisitorForm({ ...visitorForm, id_card: e.target.value })}
+                    onChange={(e) =>
+                      setVisitorForm({
+                        ...visitorForm,
+                        id_card: e.target.value,
+                      })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("No of Persons")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("No of Persons")}
+                  </label>
                   <input
                     type="number"
                     min={1}
                     value={visitorForm.no_of_person}
                     onChange={(e) =>
-                      setVisitorForm({ ...visitorForm, no_of_person: Number(e.target.value) })
+                      setVisitorForm({
+                        ...visitorForm,
+                        no_of_person: Number(e.target.value),
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("In Time")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("In Time")}
+                  </label>
                   <input
                     type="text"
                     value={visitorForm.in_time}
-                    onChange={(e) => setVisitorForm({ ...visitorForm, in_time: e.target.value })}
+                    onChange={(e) =>
+                      setVisitorForm({
+                        ...visitorForm,
+                        in_time: e.target.value,
+                      })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Out Time")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Out Time")}
+                  </label>
                   <input
                     type="text"
                     value={visitorForm.out_time}
-                    onChange={(e) => setVisitorForm({ ...visitorForm, out_time: e.target.value })}
+                    onChange={(e) =>
+                      setVisitorForm({
+                        ...visitorForm,
+                        out_time: e.target.value,
+                      })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg font-mono"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Note / Visiting Patient")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Note / Visiting Patient")}
+                </label>
                 <textarea
                   rows={2}
                   value={visitorForm.note}
-                  onChange={(e) => setVisitorForm({ ...visitorForm, note: e.target.value })}
+                  onChange={(e) =>
+                    setVisitorForm({ ...visitorForm, note: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
@@ -1310,7 +1502,10 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Save Visitor")}
                 </button>
               </div>
@@ -1321,10 +1516,15 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
 
       {/* 3. Add Postal Modal */}
       {showAddPostal && (
-        <Modal onClose={() => setShowAddPostal(false)} titleId="add-postal-title">
+        <Modal
+          onClose={() => setShowAddPostal(false)}
+          titleId="add-postal-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="add-postal-title" className="font-semibold text-lg">{t("New Postal Dispatch / Receive")}</h3>
+              <h3 id="add-postal-title" className="font-semibold text-lg">
+                {t("New Postal Dispatch / Receive")}
+              </h3>
               <button
                 onClick={() => setShowAddPostal(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1335,11 +1535,16 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
             <form onSubmit={handleSavePostal} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Postal Type")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Postal Type")}
+                  </label>
                   <select
                     value={postalForm.type}
                     onChange={(e) =>
-                      setPostalForm({ ...postalForm, type: Number(e.target.value) })
+                      setPostalForm({
+                        ...postalForm,
+                        type: Number(e.target.value),
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   >
@@ -1348,13 +1553,18 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Reference No")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Reference No")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={postalForm.reference_no}
                     onChange={(e) =>
-                      setPostalForm({ ...postalForm, reference_no: e.target.value })
+                      setPostalForm({
+                        ...postalForm,
+                        reference_no: e.target.value,
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg font-mono"
                   />
@@ -1362,44 +1572,61 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("From Title")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("From Title")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={postalForm.from_title}
                     onChange={(e) =>
-                      setPostalForm({ ...postalForm, from_title: e.target.value })
+                      setPostalForm({
+                        ...postalForm,
+                        from_title: e.target.value,
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("To Title")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("To Title")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={postalForm.to_title}
-                    onChange={(e) => setPostalForm({ ...postalForm, to_title: e.target.value })}
+                    onChange={(e) =>
+                      setPostalForm({ ...postalForm, to_title: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Date")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Date")} *
+                </label>
                 <input
                   type="date"
                   required
                   value={postalForm.date}
-                  onChange={(e) => setPostalForm({ ...postalForm, date: e.target.value })}
+                  onChange={(e) =>
+                    setPostalForm({ ...postalForm, date: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Address / Courier Notes")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Address / Courier Notes")}
+                </label>
                 <textarea
                   rows={2}
                   value={postalForm.address}
-                  onChange={(e) => setPostalForm({ ...postalForm, address: e.target.value })}
+                  onChange={(e) =>
+                    setPostalForm({ ...postalForm, address: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
@@ -1411,7 +1638,10 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Save Postal")}
                 </button>
               </div>
@@ -1422,10 +1652,15 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
 
       {/* 4. Add Enquiry Modal */}
       {showAddEnquiry && (
-        <Modal onClose={() => setShowAddEnquiry(false)} titleId="add-enquiry-title">
+        <Modal
+          onClose={() => setShowAddEnquiry(false)}
+          titleId="add-enquiry-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="add-enquiry-title" className="font-semibold text-lg">{t("New Patient Enquiry")}</h3>
+              <h3 id="add-enquiry-title" className="font-semibold text-lg">
+                {t("New Patient Enquiry")}
+              </h3>
               <button
                 onClick={() => setShowAddEnquiry(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1435,20 +1670,27 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
             </div>
             <form onSubmit={handleSaveEnquiry} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Full Name")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Full Name")} *
+                </label>
                 <input
                   type="text"
                   required
                   value={enquiryForm.full_name}
                   onChange={(e) =>
-                    setEnquiryForm({ ...enquiryForm, full_name: e.target.value })
+                    setEnquiryForm({
+                      ...enquiryForm,
+                      full_name: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Email")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Email")} *
+                  </label>
                   <input
                     type="email"
                     required
@@ -1460,24 +1702,34 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Phone / Mobile")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Phone / Mobile")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={enquiryForm.contact_no}
                     onChange={(e) =>
-                      setEnquiryForm({ ...enquiryForm, contact_no: e.target.value })
+                      setEnquiryForm({
+                        ...enquiryForm,
+                        contact_no: e.target.value,
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Category")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Category")}
+                </label>
                 <select
                   value={enquiryForm.type}
                   onChange={(e) =>
-                    setEnquiryForm({ ...enquiryForm, type: Number(e.target.value) })
+                    setEnquiryForm({
+                      ...enquiryForm,
+                      type: Number(e.target.value),
+                    })
                   }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 >
@@ -1488,7 +1740,9 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Message")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Message")} *
+                </label>
                 <textarea
                   rows={3}
                   required
@@ -1507,7 +1761,10 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Submit Enquiry")}
                 </button>
               </div>
@@ -1518,10 +1775,15 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
 
       {/* 5. Add Complaint Modal */}
       {showAddComplaint && (
-        <Modal onClose={() => setShowAddComplaint(false)} titleId="add-complaint-title">
+        <Modal
+          onClose={() => setShowAddComplaint(false)}
+          titleId="add-complaint-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="add-complaint-title" className="font-semibold text-lg">{t("File Patient Complaint")}</h3>
+              <h3 id="add-complaint-title" className="font-semibold text-lg">
+                {t("File Patient Complaint")}
+              </h3>
               <button
                 onClick={() => setShowAddComplaint(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1531,29 +1793,41 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
             </div>
             <form onSubmit={handleSaveComplaint} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Title")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Title")} *
+                </label>
                 <input
                   type="text"
                   required
                   value={complaintForm.title}
                   onChange={(e) =>
-                    setComplaintForm({ ...complaintForm, title: e.target.value })
+                    setComplaintForm({
+                      ...complaintForm,
+                      title: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   placeholder={t("Brief subject of the complaint")}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Detailed Description")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Detailed Description")} *
+                </label>
                 <textarea
                   rows={4}
                   required
                   value={complaintForm.description}
                   onChange={(e) =>
-                    setComplaintForm({ ...complaintForm, description: e.target.value })
+                    setComplaintForm({
+                      ...complaintForm,
+                      description: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  placeholder={t("Explain the occurrence, department, and relevant context...")}
+                  placeholder={t(
+                    "Explain the occurrence, department, and relevant context...",
+                  )}
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t border-border/80">
@@ -1564,7 +1838,10 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Submit Complaint")}
                 </button>
               </div>
@@ -1575,10 +1852,18 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
 
       {/* 6. Resolve Complaint Modal */}
       {resolveTarget && (
-        <Modal onClose={() => setResolveTarget(null)} titleId="resolve-complaint-title">
+        <Modal
+          onClose={() => setResolveTarget(null)}
+          titleId="resolve-complaint-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="resolve-complaint-title" className="font-semibold text-lg">{t("Resolve Complaint")}</h3>
+              <h3
+                id="resolve-complaint-title"
+                className="font-semibold text-lg"
+              >
+                {t("Resolve Complaint")}
+              </h3>
               <button
                 onClick={() => setResolveTarget(null)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1587,16 +1872,25 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
               </button>
             </div>
             <div className="bg-muted/50 p-3 rounded-lg text-xs space-y-1">
-              <div className="font-semibold text-foreground">{resolveTarget.title}</div>
-              <div className="text-muted-foreground">{resolveTarget.description}</div>
+              <div className="font-semibold text-foreground">
+                {resolveTarget.title}
+              </div>
+              <div className="text-muted-foreground">
+                {resolveTarget.description}
+              </div>
             </div>
             <form onSubmit={handleResolveComplaint} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Update Status")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Update Status")}
+                </label>
                 <select
                   value={resolveForm.status}
                   onChange={(e) =>
-                    setResolveForm({ ...resolveForm, status: Number(e.target.value) })
+                    setResolveForm({
+                      ...resolveForm,
+                      status: Number(e.target.value),
+                    })
                   }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 >
@@ -1627,7 +1921,10 @@ export function FrontOfficeWorkspace({ id = "call-logs" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Save Resolution")}
                 </button>
               </div>

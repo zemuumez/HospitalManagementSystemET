@@ -345,9 +345,17 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   // Subtabs
   const tabs = [
     { id: "doctors", label: "Doctors", href: "/modules/doctors" },
-    { id: "doctor-departments", label: "Doctor Departments", href: "/modules/doctor-departments" },
+    {
+      id: "doctor-departments",
+      label: "Doctor Departments",
+      href: "/modules/doctor-departments",
+    },
     { id: "schedules", label: "Schedules", href: "/modules/schedules" },
-    { id: "doctor-holidays", label: "Doctor Holidays", href: "/modules/doctor-holidays" },
+    {
+      id: "doctor-holidays",
+      label: "Doctor Holidays",
+      href: "/modules/doctor-holidays",
+    },
     { id: "breaks", label: "Breaks", href: "/modules/breaks" },
   ];
 
@@ -451,8 +459,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
             raw.map((a: any) => ({
               id: a.id,
               doctorName:
-                a.doctorName ||
-                `Dr. (${a.doctorId?.slice(0, 6) || "Staff"})`,
+                a.doctorName || `Dr. (${a.doctorId?.slice(0, 6) || "Staff"})`,
               date: a.date
                 ? new Date(a.date).toLocaleDateString("en-GB")
                 : "Today",
@@ -482,7 +489,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
     setIsSubmitting(true);
     const newDocId = `doc-${Date.now()}`;
     const cleanName = docName.startsWith("Dr.") ? docName : `Dr. ${docName}`;
-    const departmentName = docDept || departments[0]?.title || "General Medicine";
+    const departmentName =
+      docDept || departments[0]?.title || "General Medicine";
 
     try {
       const res = await fetch("/api/hms/doctors", {
@@ -526,7 +534,10 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         qualification: docQual || "MD",
         status: true,
         avatarColor: "#5b73e8",
-        initials: docName.replace(/^Dr\.\s*/, "").slice(0, 2).toUpperCase(),
+        initials: docName
+          .replace(/^Dr\.\s*/, "")
+          .slice(0, 2)
+          .toUpperCase(),
       },
       ...doctors,
     ]);
@@ -555,7 +566,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         setApiErrorBanner(err.error || t("Saved locally in preview mode."));
       }
     } catch {
-      setApiErrorBanner(t("Server offline. Department added to local preview."));
+      setApiErrorBanner(
+        t("Server offline. Department added to local preview."),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -577,7 +590,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
     if (!holidayDoc || !holidayReason.trim()) return;
 
     setIsSubmitting(true);
-    const selectedDoctor = doctors.find((d) => d.id === holidayDoc || d.name === holidayDoc);
+    const selectedDoctor = doctors.find(
+      (d) => d.id === holidayDoc || d.name === holidayDoc,
+    );
     const docId = selectedDoctor?.id || holidayDoc;
 
     try {
@@ -594,10 +609,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         setApiSuccessBanner(t("Holiday leave booked successfully!"));
       } else {
         const err = await res.json().catch(() => ({}));
-        setApiErrorBanner(err.error || t("Holiday preserved in local preview."));
+        setApiErrorBanner(
+          err.error || t("Holiday preserved in local preview."),
+        );
       }
     } catch {
-      setApiErrorBanner(t("Server offline. Holiday preserved in preview mode."));
+      setApiErrorBanner(
+        t("Server offline. Holiday preserved in preview mode."),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1058,7 +1077,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+          background: apiConnected
+            ? "rgba(16, 185, 129, 0.08)"
+            : "rgba(59, 130, 246, 0.08)",
           border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
           borderRadius: "8px",
           padding: "10px 16px",
@@ -1072,14 +1093,22 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           ) : (
             <AlertCircle size={16} color="#3b82f6" />
           )}
-          <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+          <span
+            style={{
+              fontWeight: 500,
+              color: apiConnected ? "#10b981" : "#60a5fa",
+            }}
+          >
             {apiConnected
-              ? t("Connected to PostgreSQL Backend (/v1/doctors & /v1/doctor-departments)")
+              ? t(
+                  "Connected to PostgreSQL Backend (/v1/doctors & /v1/doctor-departments)",
+                )
               : t("Local Clinical Preview Mode (Doctors Ready)")}
           </span>
           <span style={{ color: "#94a3b8" }}>•</span>
           <span style={{ color: "#cbd5e1" }}>
-            {doctors.length} {t("doctors")} | {departments.length} {t("departments")} | {holidays.length} {t("holidays")}
+            {doctors.length} {t("doctors")} | {departments.length}{" "}
+            {t("departments")} | {holidays.length} {t("holidays")}
           </span>
         </div>
 
@@ -1124,7 +1153,12 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           <span>{apiSuccessBanner}</span>
           <button
             onClick={() => setApiSuccessBanner("")}
-            style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#34d399",
+              cursor: "pointer",
+            }}
           >
             <X size={14} />
           </button>
@@ -1149,7 +1183,12 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           <span>{apiErrorBanner}</span>
           <button
             onClick={() => setApiErrorBanner("")}
-            style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#f87171",
+              cursor: "pointer",
+            }}
           >
             <X size={14} />
           </button>
@@ -1648,7 +1687,10 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreateDepartment} className="modal-body-custom">
+            <form
+              onSubmit={handleCreateDepartment}
+              className="modal-body-custom"
+            >
               <div
                 className="form-group-custom"
                 style={{ marginBottom: "20px" }}
@@ -1711,7 +1753,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
             <form onSubmit={handleCreateDoctor} className="modal-body-custom">
               <div style={{ marginBottom: "16px" }}>
                 <label className="form-label-custom">
-                  {t("Doctor Name")}: <span style={{ color: "#ef4444" }}>*</span>
+                  {t("Doctor Name")}:{" "}
+                  <span style={{ color: "#ef4444" }}>*</span>
                 </label>
                 <input
                   required
@@ -1741,7 +1784,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 </select>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "20px",
+                }}
+              >
                 <div>
                   <label className="form-label-custom">{t("Phone")}:</label>
                   <input
@@ -1752,7 +1802,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Qualification")}:</label>
+                  <label className="form-label-custom">
+                    {t("Qualification")}:
+                  </label>
                   <input
                     placeholder="MD, Specialist"
                     className="form-input-custom"

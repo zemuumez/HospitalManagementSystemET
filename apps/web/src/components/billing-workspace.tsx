@@ -795,17 +795,22 @@ export function BillingWorkspace({ id }: { id: string }) {
       if (invRes.ok) {
         const invData = await invRes.json();
         if (Array.isArray(invData.invoices) && invData.invoices.length > 0) {
-          const mappedInvoices: BillingRow[] = invData.invoices.map((inv: any) => ({
-            id: inv.id,
-            invoiceId: `HMS${inv.number || inv.id.slice(0, 4)}`,
-            patient: inv.patientName || "Patient",
-            email: "patient@hospital.et",
-            initial: (inv.patientName || "PT").slice(0, 2).toUpperCase(),
-            avatarBg: "#14b8a6",
-            date: inv.invoiceDate || "5th Oct, 2026",
-            amount: `$${((inv.totalMinor || 0) / 100).toFixed(2)}`,
-            status: (inv.paidMinor || 0) >= (inv.totalMinor || 0) ? "Paid" : "Pending",
-          }));
+          const mappedInvoices: BillingRow[] = invData.invoices.map(
+            (inv: any) => ({
+              id: inv.id,
+              invoiceId: `HMS${inv.number || inv.id.slice(0, 4)}`,
+              patient: inv.patientName || "Patient",
+              email: "patient@hospital.et",
+              initial: (inv.patientName || "PT").slice(0, 2).toUpperCase(),
+              avatarBg: "#14b8a6",
+              date: inv.invoiceDate || "5th Oct, 2026",
+              amount: `$${((inv.totalMinor || 0) / 100).toFixed(2)}`,
+              status:
+                (inv.paidMinor || 0) >= (inv.totalMinor || 0)
+                  ? "Paid"
+                  : "Pending",
+            }),
+          );
           setData((prev) => ({
             ...prev,
             invoices: mappedInvoices,
@@ -822,12 +827,14 @@ export function BillingWorkspace({ id }: { id: string }) {
         const accData = await accRes.json();
         if (Array.isArray(accData.accounts) && accData.accounts.length > 0) {
           setRemoteAccounts(accData.accounts);
-          const mappedAccounts: BillingRow[] = accData.accounts.map((acc: any) => ({
-            id: acc.id,
-            account: acc.name,
-            type: "Credit",
-            status: "Active",
-          }));
+          const mappedAccounts: BillingRow[] = accData.accounts.map(
+            (acc: any) => ({
+              id: acc.id,
+              account: acc.name,
+              type: "Credit",
+              status: "Active",
+            }),
+          );
           setData((prev) => ({ ...prev, accounts: mappedAccounts }));
         }
         connected = true;
@@ -836,19 +843,21 @@ export function BillingWorkspace({ id }: { id: string }) {
       if (payRes.ok) {
         const payData = await payRes.json();
         if (Array.isArray(payData.payrolls) && payData.payrolls.length > 0) {
-          const mappedPayrolls: BillingRow[] = payData.payrolls.map((p: any, idx: number) => ({
-            id: p.id,
-            srNo: idx + 1,
-            payrollId: `#EMP${p.id.slice(0, 4)}`,
-            patient: p.staffName || "Staff Member",
-            email: p.email || "staff@hospital.et",
-            initial: (p.staffName || "ST").slice(0, 2).toUpperCase(),
-            avatarBg: "#0284c7",
-            month: p.month || "October",
-            year: String(p.year || 2026),
-            netSalary: `$${((p.netSalaryMinor || 0) / 100).toFixed(2)}`,
-            status: p.status === 1 ? "Paid" : "Unpaid",
-          }));
+          const mappedPayrolls: BillingRow[] = payData.payrolls.map(
+            (p: any, idx: number) => ({
+              id: p.id,
+              srNo: idx + 1,
+              payrollId: `#EMP${p.id.slice(0, 4)}`,
+              patient: p.staffName || "Staff Member",
+              email: p.email || "staff@hospital.et",
+              initial: (p.staffName || "ST").slice(0, 2).toUpperCase(),
+              avatarBg: "#0284c7",
+              month: p.month || "October",
+              year: String(p.year || 2026),
+              netSalary: `$${((p.netSalaryMinor || 0) / 100).toFixed(2)}`,
+              status: p.status === 1 ? "Paid" : "Unpaid",
+            }),
+          );
           setData((prev) => ({ ...prev, "employee-payrolls": mappedPayrolls }));
         }
         connected = true;
@@ -1124,7 +1133,9 @@ export function BillingWorkspace({ id }: { id: string }) {
                 borderColor: "#3b82f6",
               }}
             >
-              {t("Invoices")}: {(data.invoices || []).length} | {t("Accounts")}: {(data.accounts || []).length} | {t("Payrolls")}: {(data["employee-payrolls"] || []).length}
+              {t("Invoices")}: {(data.invoices || []).length} | {t("Accounts")}:{" "}
+              {(data.accounts || []).length} | {t("Payrolls")}:{" "}
+              {(data["employee-payrolls"] || []).length}
             </span>
           </div>
           <button

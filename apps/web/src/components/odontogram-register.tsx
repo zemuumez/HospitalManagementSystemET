@@ -270,7 +270,11 @@ export function OdontogramRegister() {
     setErrorMessage("");
     try {
       const res = await api<{ patients: Patient[] }>("patients?page=1");
-      if (res?.patients && Array.isArray(res.patients) && res.patients.length > 0) {
+      if (
+        res?.patients &&
+        Array.isArray(res.patients) &&
+        res.patients.length > 0
+      ) {
         setRemotePatients(
           res.patients.map((p) => ({
             id: p.id,
@@ -306,7 +310,10 @@ export function OdontogramRegister() {
         }
         setEditing((prev) =>
           prev && prev.patientId === patientId
-            ? { ...prev, conditions: { ...prev.conditions, ...loadedConditions } }
+            ? {
+                ...prev,
+                conditions: { ...prev.conditions, ...loadedConditions },
+              }
             : prev,
         );
       }

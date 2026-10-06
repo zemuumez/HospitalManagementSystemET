@@ -201,8 +201,12 @@ export function LiveConsultationWorkspace({
   const [zoomSecret, setZoomSecret] = useState("");
 
   const [isLiveConnected, setIsLiveConnected] = useState(true);
-  const [doctorsList, setDoctorsList] = useState<Array<{ id: string; name: string }>>([]);
-  const [patientsList, setPatientsList] = useState<Array<{ id: string; name: string; mrn?: string }>>([]);
+  const [doctorsList, setDoctorsList] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [patientsList, setPatientsList] = useState<
+    Array<{ id: string; name: string; mrn?: string }>
+  >([]);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -210,18 +214,36 @@ export function LiveConsultationWorkspace({
     fetch("/api/hms/live-consultations", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.live_consultations && Array.isArray(data.live_consultations) && data.live_consultations.length > 0) {
-          const mapped: ConsultationRow[] = data.live_consultations.map((c: any) => ({
-            id: c.id,
-            title: c.consultation_title || "Consultation",
-            date: c.consultation_date ? new Date(c.consultation_date).toLocaleDateString() : "Today",
-            time: c.consultation_date ? new Date(c.consultation_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "12:00 PM",
-            createdBy: c.created_by || "Staff",
-            createdFor: c.doctor_id || "Doctor",
-            patient: c.patient_id || "Patient",
-            status: c.status === 1 ? "Finished" : c.status === 2 ? "Cancelled" : "Awaited",
-            meetingId: c.meeting_id || "123456",
-          }));
+        if (
+          data?.live_consultations &&
+          Array.isArray(data.live_consultations) &&
+          data.live_consultations.length > 0
+        ) {
+          const mapped: ConsultationRow[] = data.live_consultations.map(
+            (c: any) => ({
+              id: c.id,
+              title: c.consultation_title || "Consultation",
+              date: c.consultation_date
+                ? new Date(c.consultation_date).toLocaleDateString()
+                : "Today",
+              time: c.consultation_date
+                ? new Date(c.consultation_date).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "12:00 PM",
+              createdBy: c.created_by || "Staff",
+              createdFor: c.doctor_id || "Doctor",
+              patient: c.patient_id || "Patient",
+              status:
+                c.status === 1
+                  ? "Finished"
+                  : c.status === 2
+                    ? "Cancelled"
+                    : "Awaited",
+              meetingId: c.meeting_id || "123456",
+            }),
+          );
           setConsultations(mapped);
           setIsLiveConnected(true);
         }
@@ -232,14 +254,30 @@ export function LiveConsultationWorkspace({
     fetch("/api/hms/live-meetings", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.live_meetings && Array.isArray(data.live_meetings) && data.live_meetings.length > 0) {
+        if (
+          data?.live_meetings &&
+          Array.isArray(data.live_meetings) &&
+          data.live_meetings.length > 0
+        ) {
           const mapped: MeetingRow[] = data.live_meetings.map((m: any) => ({
             id: m.id,
             title: m.title || "Meeting",
-            date: m.meeting_date ? new Date(m.meeting_date).toLocaleDateString() : "Today",
-            time: m.meeting_date ? new Date(m.meeting_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "12:00 PM",
+            date: m.meeting_date
+              ? new Date(m.meeting_date).toLocaleDateString()
+              : "Today",
+            time: m.meeting_date
+              ? new Date(m.meeting_date).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "12:00 PM",
             createdBy: m.created_by || "Staff",
-            status: m.status === 1 ? "Finished" : m.status === 2 ? "Cancelled" : "Awaited",
+            status:
+              m.status === 1
+                ? "Finished"
+                : m.status === 2
+                  ? "Cancelled"
+                  : "Awaited",
             password: m.password || "123456",
           }));
           setMeetings(mapped);
@@ -269,7 +307,10 @@ export function LiveConsultationWorkspace({
           setPatientsList(
             data.patients.map((p: any) => ({
               id: p.id,
-              name: `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.name || "Patient",
+              name:
+                `${p.first_name || ""} ${p.last_name || ""}`.trim() ||
+                p.name ||
+                "Patient",
               mrn: p.mrn,
             })),
           );
@@ -377,11 +418,17 @@ export function LiveConsultationWorkspace({
     e.preventDefault();
     if (!cTitle) return;
     setIsSaving(true);
-    const docObj = doctorsList.find((d) => d.name === cDoctor || d.id === cDoctor);
-    const patObj = patientsList.find((p) => p.name === cPatient || p.id === cPatient);
+    const docObj = doctorsList.find(
+      (d) => d.name === cDoctor || d.id === cDoctor,
+    );
+    const patObj = patientsList.find(
+      (p) => p.name === cPatient || p.id === cPatient,
+    );
     const doctorId = docObj ? docObj.id : "doc-default";
     const patientId = patObj ? patObj.id : "pat-default";
-    const consultDate = cDate ? new Date(cDate).toISOString() : new Date().toISOString();
+    const consultDate = cDate
+      ? new Date(cDate).toISOString()
+      : new Date().toISOString();
 
     try {
       const res = await fetch("/api/hms/live-consultations", {
@@ -452,7 +499,9 @@ export function LiveConsultationWorkspace({
     e.preventDefault();
     if (!mTitle) return;
     setIsSaving(true);
-    const meetingDate = mDate ? new Date(mDate).toISOString() : new Date().toISOString();
+    const meetingDate = mDate
+      ? new Date(mDate).toISOString()
+      : new Date().toISOString();
 
     try {
       const res = await fetch("/api/hms/live-meetings", {

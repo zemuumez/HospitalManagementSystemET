@@ -143,12 +143,7 @@ export default async function ModulePage({
   )
     return <FrontOfficeWorkspace key={slug} id={slug} />;
   if (
-    [
-      "items",
-      "item-categories",
-      "item-stocks",
-      "issued-items",
-    ].includes(slug)
+    ["items", "item-categories", "item-stocks", "issued-items"].includes(slug)
   )
     return <InventoryWorkspace key={slug} id={slug} />;
   const screen = screens.find((s) => s.id === slug);
@@ -169,11 +164,7 @@ export default async function ModulePage({
   )
     return <EncounterRegister key={slug} kind="ipd" />;
   if (
-    [
-      "opd-patient-departments",
-      "opd-diagnosis",
-      "opd-timelines",
-    ].includes(slug)
+    ["opd-patient-departments", "opd-diagnosis", "opd-timelines"].includes(slug)
   )
     return <EncounterRegister key={slug} kind="opd" />;
   if (

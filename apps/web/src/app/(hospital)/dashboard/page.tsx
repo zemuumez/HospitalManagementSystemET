@@ -41,13 +41,29 @@ export default function Dashboard() {
     receptionists: "0",
   });
 
-  const [notices, setNotices] = useState<Array<{ id: string; title: string; date?: string }>>([
-    { id: "1", title: "Hospital Clinical Operations Normal", date: "October 6, 2026" },
-    { id: "2", title: "Monthly Staff & Departmental Review", date: "October 7, 2026" },
-    { id: "3", title: "Pharmacy & Blood Bank Inventory Audit", date: "October 8, 2026" },
+  const [notices, setNotices] = useState<
+    Array<{ id: string; title: string; date?: string }>
+  >([
+    {
+      id: "1",
+      title: "Hospital Clinical Operations Normal",
+      date: "October 6, 2026",
+    },
+    {
+      id: "2",
+      title: "Monthly Staff & Departmental Review",
+      date: "October 7, 2026",
+    },
+    {
+      id: "3",
+      title: "Pharmacy & Blood Bank Inventory Audit",
+      date: "October 8, 2026",
+    },
   ]);
 
-  const [enquiries, setEnquiries] = useState<Array<{ id: string; name: string; message: string }>>([]);
+  const [enquiries, setEnquiries] = useState<
+    Array<{ id: string; name: string; message: string }>
+  >([]);
 
   useEffect(() => {
     // Fetch live dashboard metrics from database APIs
@@ -59,78 +75,102 @@ export default function Dashboard() {
       fetch("/api/staff"),
       fetch("/api/hms/notices"),
       fetch("/api/hms/enquiries"),
-    ]).then(async ([resPat, resDoc, resBeds, resInv, resStaff, resNot, resEnq]) => {
-      const next = { ...counts };
+    ])
+      .then(
+        async ([resPat, resDoc, resBeds, resInv, resStaff, resNot, resEnq]) => {
+          const next = { ...counts };
 
-      if (resPat.status === "fulfilled" && resPat.value.ok) {
-        const data = await resPat.value.json();
-        if (Array.isArray(data.patients)) next.patients = String(data.patients.length);
-        else if (data.total !== undefined) next.patients = String(data.total);
-      }
+          if (resPat.status === "fulfilled" && resPat.value.ok) {
+            const data = await resPat.value.json();
+            if (Array.isArray(data.patients))
+              next.patients = String(data.patients.length);
+            else if (data.total !== undefined)
+              next.patients = String(data.total);
+          }
 
-      if (resDoc.status === "fulfilled" && resDoc.value.ok) {
-        const data = await resDoc.value.json();
-        if (Array.isArray(data.doctors)) next.doctors = String(data.doctors.length);
-      }
+          if (resDoc.status === "fulfilled" && resDoc.value.ok) {
+            const data = await resDoc.value.json();
+            if (Array.isArray(data.doctors))
+              next.doctors = String(data.doctors.length);
+          }
 
-      if (resBeds.status === "fulfilled" && resBeds.value.ok) {
-        const data = await resBeds.value.json();
-        if (Array.isArray(data.beds)) {
-          const avail = data.beds.filter((b: any) => b.available).length;
-          next.availableBeds = String(avail);
-        }
-      }
+          if (resBeds.status === "fulfilled" && resBeds.value.ok) {
+            const data = await resBeds.value.json();
+            if (Array.isArray(data.beds)) {
+              const avail = data.beds.filter((b: any) => b.available).length;
+              next.availableBeds = String(avail);
+            }
+          }
 
-      if (resInv.status === "fulfilled" && resInv.value.ok) {
-        const data = await resInv.value.json();
-        if (Array.isArray(data.invoices)) {
-          const totalMinor = data.invoices.reduce((acc: number, inv: any) => acc + (inv.totalMinor || 0), 0);
-          next.invoices = (totalMinor / 100).toLocaleString();
-        }
-      }
+          if (resInv.status === "fulfilled" && resInv.value.ok) {
+            const data = await resInv.value.json();
+            if (Array.isArray(data.invoices)) {
+              const totalMinor = data.invoices.reduce(
+                (acc: number, inv: any) => acc + (inv.totalMinor || 0),
+                0,
+              );
+              next.invoices = (totalMinor / 100).toLocaleString();
+            }
+          }
 
-      if (resStaff.status === "fulfilled" && resStaff.value.ok) {
-        const data = await resStaff.value.json();
-        if (Array.isArray(data.users)) {
-          const users = data.users;
-          next.admins = String(users.filter((u: any) => u.role === "admin").length || 1);
-          next.nurses = String(users.filter((u: any) => u.role === "nurse").length);
-          next.accountants = String(users.filter((u: any) => u.role === "accountant").length);
-          next.labTechnicians = String(users.filter((u: any) => u.role === "lab_technician").length);
-          next.pharmacists = String(users.filter((u: any) => u.role === "pharmacist").length);
-          next.receptionists = String(users.filter((u: any) => u.role === "receptionist").length);
-        }
-      }
+          if (resStaff.status === "fulfilled" && resStaff.value.ok) {
+            const data = await resStaff.value.json();
+            if (Array.isArray(data.users)) {
+              const users = data.users;
+              next.admins = String(
+                users.filter((u: any) => u.role === "admin").length || 1,
+              );
+              next.nurses = String(
+                users.filter((u: any) => u.role === "nurse").length,
+              );
+              next.accountants = String(
+                users.filter((u: any) => u.role === "accountant").length,
+              );
+              next.labTechnicians = String(
+                users.filter((u: any) => u.role === "lab_technician").length,
+              );
+              next.pharmacists = String(
+                users.filter((u: any) => u.role === "pharmacist").length,
+              );
+              next.receptionists = String(
+                users.filter((u: any) => u.role === "receptionist").length,
+              );
+            }
+          }
 
-      if (resNot.status === "fulfilled" && resNot.value.ok) {
-        const data = await resNot.value.json();
-        const list = data.notices || data.notice_boards;
-        if (Array.isArray(list) && list.length > 0) {
-          setNotices(
-            list.slice(0, 4).map((n: any) => ({
-              id: n.id,
-              title: n.title,
-              date: n.created_at ? new Date(n.created_at).toLocaleDateString() : "October 2026",
-            })),
-          );
-        }
-      }
+          if (resNot.status === "fulfilled" && resNot.value.ok) {
+            const data = await resNot.value.json();
+            const list = data.notices || data.notice_boards;
+            if (Array.isArray(list) && list.length > 0) {
+              setNotices(
+                list.slice(0, 4).map((n: any) => ({
+                  id: n.id,
+                  title: n.title,
+                  date: n.created_at
+                    ? new Date(n.created_at).toLocaleDateString()
+                    : "October 2026",
+                })),
+              );
+            }
+          }
 
-      if (resEnq.status === "fulfilled" && resEnq.value.ok) {
-        const data = await resEnq.value.json();
-        if (Array.isArray(data.enquiries)) {
-          setEnquiries(
-            data.enquiries.slice(0, 3).map((e: any) => ({
-              id: e.id,
-              name: e.full_name || e.name || "Enquiry",
-              message: e.message || "",
-            })),
-          );
-        }
-      }
+          if (resEnq.status === "fulfilled" && resEnq.value.ok) {
+            const data = await resEnq.value.json();
+            if (Array.isArray(data.enquiries)) {
+              setEnquiries(
+                data.enquiries.slice(0, 3).map((e: any) => ({
+                  id: e.id,
+                  name: e.full_name || e.name || "Enquiry",
+                  message: e.message || "",
+                })),
+              );
+            }
+          }
 
-      setCounts(next);
-    }).catch(() => {});
+          setCounts(next);
+        },
+      )
+      .catch(() => {});
   }, []);
 
   if (role !== "Admin") return <RoleDashboard />;
@@ -139,7 +179,12 @@ export default function Dashboard() {
     ["Invoice Amount", counts.invoices, "invoices", CreditCard],
     ["Bill Amount", counts.bills, "bills", FileText],
     ["Payment Amount", counts.payments, "payments", Banknote],
-    ["Advance Payment Amount", counts.advancePayments, "advanced-payments", Wallet],
+    [
+      "Advance Payment Amount",
+      counts.advancePayments,
+      "advanced-payments",
+      Wallet,
+    ],
     ["Available Beds", counts.availableBeds, "bed-status", BedDouble],
     ["Doctors", counts.doctors, "doctors", Stethoscope],
     ["Patients", counts.patients, "patients", Users],
@@ -288,9 +333,14 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-2 pt-2">
               {enquiries.map((e) => (
-                <div key={e.id} className="p-2.5 rounded-lg bg-muted/40 text-xs">
+                <div
+                  key={e.id}
+                  className="p-2.5 rounded-lg bg-muted/40 text-xs"
+                >
                   <div className="font-semibold">{e.name}</div>
-                  <div className="text-muted-foreground truncate">{e.message}</div>
+                  <div className="text-muted-foreground truncate">
+                    {e.message}
+                  </div>
                 </div>
               ))}
             </div>

@@ -166,8 +166,8 @@ export function PatientsWorkspace({ id = "patients" }: PatientsWorkspaceProps) {
           Array.isArray(encRes.encounters) &&
           encRes.encounters.length > 0
         ) {
-          const mappedAdmissions: PatientAdmissionRow[] =
-            encRes.encounters.map((enc, idx) => ({
+          const mappedAdmissions: PatientAdmissionRow[] = encRes.encounters.map(
+            (enc, idx) => ({
               id: enc.id,
               admissionId: `HMS${String(enc.number || idx + 10)}`,
               patientName: enc.patientName || "Patient",
@@ -185,7 +185,8 @@ export function PatientsWorkspace({ id = "patients" }: PatientsWorkspaceProps) {
               insuranceName: "N/A",
               policyNo: "N/A",
               status: enc.status === "admitted",
-            }));
+            }),
+          );
           setAdmissions(mappedAdmissions);
         }
       } catch {}
@@ -1890,7 +1891,10 @@ export function PatientsWorkspace({ id = "patients" }: PatientsWorkspaceProps) {
       </div>
 
       {/* Persistent Connection Status & Alerts (Section 4 Integration) */}
-      <div className="mb-3 d-flex flex-column gap-2" style={{ padding: "0 2px" }}>
+      <div
+        className="mb-3 d-flex flex-column gap-2"
+        style={{ padding: "0 2px" }}
+      >
         <div
           className="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-2 rounded border"
           style={{

@@ -89,12 +89,20 @@ export function ReviewWorkspace({ id = "review" }: ReviewWorkspaceProps) {
               id: r.id,
               patientName: r.patientName || r.patient_name || "Patient",
               patientEmail: r.patientEmail || r.patient_email || "",
-              patientInitials: (r.patientName || "PT").slice(0, 2).toUpperCase(),
+              patientInitials: (r.patientName || "PT")
+                .slice(0, 2)
+                .toUpperCase(),
               doctorName: r.doctorName || r.doctor_name || "Doctor",
               doctorEmail: r.doctorEmail || r.doctor_email || "",
-              doctorDepartment: r.doctorDepartment || r.department || "Clinical Care",
+              doctorDepartment:
+                r.doctorDepartment || r.department || "Clinical Care",
               rating: r.rating || 5,
-              status: r.status === 1 ? "Approved" : r.status === 2 ? "Rejected" : "Pending",
+              status:
+                r.status === 1
+                  ? "Approved"
+                  : r.status === 2
+                    ? "Rejected"
+                    : "Pending",
               comment: r.comment || r.review || "",
               createdAt: r.createdAt || r.created_at || "Recent",
             })),
@@ -120,8 +128,12 @@ export function ReviewWorkspace({ id = "review" }: ReviewWorkspaceProps) {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="font-medium text-foreground">{t("Reviews & Feedback Active")}</span>
-          <span className="text-muted-foreground">• {reviews.length} {t("records loaded")}</span>
+          <span className="font-medium text-foreground">
+            {t("Reviews & Feedback Active")}
+          </span>
+          <span className="text-muted-foreground">
+            • {reviews.length} {t("records loaded")}
+          </span>
         </div>
       </div>
 

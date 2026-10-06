@@ -991,7 +991,9 @@ export function BedManagementWorkspace({ id }: { id: string }) {
       }
 
       // 2. Fetch live bed types
-      const typesRes = await api<{ bedTypes: ApiBedType[] }>("bed-types?page=1");
+      const typesRes = await api<{ bedTypes: ApiBedType[] }>(
+        "bed-types?page=1",
+      );
       if (
         typesRes?.bedTypes &&
         Array.isArray(typesRes.bedTypes) &&
@@ -1124,9 +1126,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
             version: editingItem.version || 1,
           }),
         });
-        setApiSuccessBanner(
-          t("Bed Type updated and persisted successfully."),
-        );
+        setApiSuccessBanner(t("Bed Type updated and persisted successfully."));
       } else {
         const created = await api<ApiBedType>("bed-types", {
           method: "POST",
@@ -1496,7 +1496,10 @@ export function BedManagementWorkspace({ id }: { id: string }) {
   return (
     <div className="bed-workspace-container" data-ready="true">
       {/* Persistent Connection Status & Live Occupancy Report (Section 4 Integration) */}
-      <div className="mb-3 d-flex flex-column gap-2" style={{ padding: "0 4px" }}>
+      <div
+        className="mb-3 d-flex flex-column gap-2"
+        style={{ padding: "0 4px" }}
+      >
         <div
           className="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-2 rounded border"
           style={{

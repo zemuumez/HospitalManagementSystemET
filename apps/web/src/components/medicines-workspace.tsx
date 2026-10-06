@@ -533,7 +533,9 @@ export function MedicinesWorkspace({
               name: m.name,
               category: m.category || "General",
               brand: m.brand || "Standard",
-              buyingPrice: Math.round(((m.sellingPriceMinor || 0) / 100) * 0.7 * 100) / 100,
+              buyingPrice:
+                Math.round(((m.sellingPriceMinor || 0) / 100) * 0.7 * 100) /
+                100,
               sellingPrice: (m.sellingPriceMinor || 0) / 100,
               quantity: 100,
               status: true,
@@ -545,7 +547,10 @@ export function MedicinesWorkspace({
 
       if (catRes.ok) {
         const catData = await catRes.json();
-        if (Array.isArray(catData.categories) && catData.categories.length > 0) {
+        if (
+          Array.isArray(catData.categories) &&
+          catData.categories.length > 0
+        ) {
           setCategories(
             catData.categories.map((c: any) => ({
               id: c.id,
@@ -892,7 +897,9 @@ export function MedicinesWorkspace({
 
     // Find if selected patient matches a real remote patient ID
     const matchedPatient = remotePatients.find(
-      (p) => `${p.givenName} ${p.familyName}`.trim() === billPatient.trim() || p.id === billPatient,
+      (p) =>
+        `${p.givenName} ${p.familyName}`.trim() === billPatient.trim() ||
+        p.id === billPatient,
     );
 
     if (apiConnected && matchedPatient) {
@@ -904,7 +911,9 @@ export function MedicinesWorkspace({
           body: JSON.stringify({
             patientId: matchedPatient.id,
             invoiceDate: todayStr,
-            discountBasisPoints: Math.round((discountVal / (rawSubtotal || 1)) * 10000),
+            discountBasisPoints: Math.round(
+              (discountVal / (rawSubtotal || 1)) * 10000,
+            ),
             lines: billItems
               .filter((it) => it.quantity > 0)
               .map((it) => ({
@@ -932,7 +941,9 @@ export function MedicinesWorkspace({
             paymentStatus: billPaymentStatus ? "Paid" : "Unpaid",
           };
           setBills([newBillRecord, ...bills]);
-          setApiSuccessBanner(t("Medicine bill issued & saved to persistent accounting ledger"));
+          setApiSuccessBanner(
+            t("Medicine bill issued & saved to persistent accounting ledger"),
+          );
           setBillMode("list");
           return;
         }
@@ -1014,7 +1025,10 @@ export function MedicinesWorkspace({
                 >
                   <option value="">{t("Select Patient")}</option>
                   {remotePatients.map((p) => (
-                    <option key={p.id} value={`${p.givenName} ${p.familyName}`.trim()}>
+                    <option
+                      key={p.id}
+                      value={`${p.givenName} ${p.familyName}`.trim()}
+                    >
                       {p.givenName} {p.familyName} ({p.mrn})
                     </option>
                   ))}
@@ -1547,7 +1561,8 @@ export function MedicinesWorkspace({
                 borderColor: "#3b82f6",
               }}
             >
-              {t("Medicines")}: {medicines.length} | {t("Categories")}: {categories.length} | {t("Brands")}: {brands.length}
+              {t("Medicines")}: {medicines.length} | {t("Categories")}:{" "}
+              {categories.length} | {t("Brands")}: {brands.length}
             </span>
           </div>
           <button

@@ -132,7 +132,10 @@ function isAllowedPath(path: string[]): boolean {
       ["expenses", "incomes", "expense-heads", "income-heads"].includes(path[1])
     )
       return true;
-    if (path[0] === "cms" && ["testimonials", "notice-boards"].includes(path[1]))
+    if (
+      path[0] === "cms" &&
+      ["testimonials", "notice-boards"].includes(path[1])
+    )
       return true;
     if (path[0] === "care-team") return true;
     return allowedRoot.has(path[0]);
@@ -185,11 +188,16 @@ function isAllowedPath(path: string[]): boolean {
       return path[2] === "slip";
     }
     if (path[0] === "attendance") {
-      if (path[1] === "breaks" && ["start", "end"].includes(path[2])) return true;
-      if (path[1] === "records" && ["history", "approval"].includes(path[2])) return true;
+      if (path[1] === "breaks" && ["start", "end"].includes(path[2]))
+        return true;
+      if (path[1] === "records" && ["history", "approval"].includes(path[2]))
+        return true;
       if (path[1] === "shifts") return true;
     }
-    if (path[0] === "doctor-departments" && ["archive", "revisions"].includes(path[2])) {
+    if (
+      path[0] === "doctor-departments" &&
+      ["archive", "revisions"].includes(path[2])
+    ) {
       return true;
     }
     if (path[0] === "complaints" && path[2] === "resolve") {

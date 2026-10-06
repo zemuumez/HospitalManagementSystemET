@@ -220,14 +220,19 @@ export function PathologyWorkspace({
     let connected = false;
     try {
       const [catRes, unitRes, testRes] = await Promise.all([
-        fetch("/api/hms/diagnostic-categories?kind=pathology").catch(() => null),
+        fetch("/api/hms/diagnostic-categories?kind=pathology").catch(
+          () => null,
+        ),
         fetch("/api/hms/diagnostic-units").catch(() => null),
         fetch("/api/hms/diagnostic-tests").catch(() => null),
       ]);
 
       if (catRes && catRes.ok) {
         const catData = await catRes.json();
-        if (Array.isArray(catData.categories) && catData.categories.length > 0) {
+        if (
+          Array.isArray(catData.categories) &&
+          catData.categories.length > 0
+        ) {
           setCategories(
             catData.categories.map((c: any) => ({
               id: c.id,
@@ -1087,7 +1092,10 @@ export function PathologyWorkspace({
                   disabled={isSubmitting}
                 >
                   {isSubmitting && (
-                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                    <Loader2
+                      size={14}
+                      className="spinner-border spinner-border-sm"
+                    />
                   )}
                   <span>{t("Save")}</span>
                 </button>
@@ -1148,7 +1156,10 @@ export function PathologyWorkspace({
                   disabled={isSubmitting}
                 >
                   {isSubmitting && (
-                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                    <Loader2
+                      size={14}
+                      className="spinner-border spinner-border-sm"
+                    />
                   )}
                   <span>{t("Save")}</span>
                 </button>
@@ -1209,7 +1220,10 @@ export function PathologyWorkspace({
                   disabled={isSubmitting}
                 >
                   {isSubmitting && (
-                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                    <Loader2
+                      size={14}
+                      className="spinner-border spinner-border-sm"
+                    />
                   )}
                   <span>{t("Save")}</span>
                 </button>
@@ -1297,7 +1311,10 @@ export function PathologyWorkspace({
                   disabled={isSubmitting}
                 >
                   {isSubmitting && (
-                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                    <Loader2
+                      size={14}
+                      className="spinner-border spinner-border-sm"
+                    />
                   )}
                   <span>{t("Save")}</span>
                 </button>

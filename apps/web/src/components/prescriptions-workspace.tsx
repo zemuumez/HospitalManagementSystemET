@@ -287,24 +287,30 @@ export function PrescriptionsWorkspace() {
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
 
-  const [availableMedicines, setAvailableMedicines] = useState<string[]>(INITIAL_MEDICINES);
+  const [availableMedicines, setAvailableMedicines] =
+    useState<string[]>(INITIAL_MEDICINES);
   const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
   const [brands, setBrands] = useState<string[]>(INITIAL_BRANDS);
-  const [patientOptions, setPatientOptions] = useState<Array<{ id: string; name: string; mrn: string }>>([]);
-  const [doctorOptions, setDoctorOptions] = useState<Array<{ id: string; name: string; department?: string }>>([]);
+  const [patientOptions, setPatientOptions] = useState<
+    Array<{ id: string; name: string; mrn: string }>
+  >([]);
+  const [doctorOptions, setDoctorOptions] = useState<
+    Array<{ id: string; name: string; department?: string }>
+  >([]);
 
   const loadPrescriptionsData = useCallback(async () => {
     setIsSyncing(true);
     let connected = false;
     try {
-      const [rxRes, patRes, docRes, medRes, catRes, brandRes] = await Promise.all([
-        fetch("/api/hms/prescriptions").catch(() => null),
-        fetch("/api/hms/patients").catch(() => null),
-        fetch("/api/hms/doctors").catch(() => null),
-        fetch("/api/hms/medicines").catch(() => null),
-        fetch("/api/hms/medicine-categories").catch(() => null),
-        fetch("/api/hms/medicine-brands").catch(() => null),
-      ]);
+      const [rxRes, patRes, docRes, medRes, catRes, brandRes] =
+        await Promise.all([
+          fetch("/api/hms/prescriptions").catch(() => null),
+          fetch("/api/hms/patients").catch(() => null),
+          fetch("/api/hms/doctors").catch(() => null),
+          fetch("/api/hms/medicines").catch(() => null),
+          fetch("/api/hms/medicine-categories").catch(() => null),
+          fetch("/api/hms/medicine-brands").catch(() => null),
+        ]);
 
       let pats: Array<{ id: string; name: string; mrn: string }> = [];
       if (patRes && patRes.ok) {
@@ -313,7 +319,8 @@ export function PrescriptionsWorkspace() {
         if (raw.length > 0) {
           pats = raw.map((p: any) => ({
             id: p.id,
-            name: p.name || p.full_name || `Patient ${p.mrn || p.id.slice(0, 6)}`,
+            name:
+              p.name || p.full_name || `Patient ${p.mrn || p.id.slice(0, 6)}`,
             mrn: p.mrn || "",
           }));
           setPatientOptions(pats);
@@ -341,7 +348,9 @@ export function PrescriptionsWorkspace() {
         const raw = Array.isArray(data) ? data : data.medicines || [];
         if (raw.length > 0) {
           const names = raw.map((m: any) => m.name).filter(Boolean);
-          setAvailableMedicines((prev) => Array.from(new Set([...prev, ...names])));
+          setAvailableMedicines((prev) =>
+            Array.from(new Set([...prev, ...names])),
+          );
           connected = true;
         }
       }
@@ -371,8 +380,14 @@ export function PrescriptionsWorkspace() {
           const mapped: PrescriptionItem[] = raw.map((r: any) => {
             const pat = pats.find((p) => p.id === r.patient_id);
             const doc = docs.find((d) => d.id === r.doctor_id);
-            const patName = pat?.name || (r.patient_id ? `Patient (${r.patient_id.slice(0, 6)})` : "Patient");
-            const docName = doc?.name || (r.doctor_id ? `Dr. (${r.doctor_id.slice(0, 6)})` : "Doctor");
+            const patName =
+              pat?.name ||
+              (r.patient_id
+                ? `Patient (${r.patient_id.slice(0, 6)})`
+                : "Patient");
+            const docName =
+              doc?.name ||
+              (r.doctor_id ? `Dr. (${r.doctor_id.slice(0, 6)})` : "Doctor");
             return {
               id: r.id,
               patientId: r.patient_id,
@@ -607,7 +622,9 @@ export function PrescriptionsWorkspace() {
       return;
     }
 
-    const filteredMeds = formMedicines.filter((m) => m.medicine && m.medicine.trim().length > 0);
+    const filteredMeds = formMedicines.filter(
+      (m) => m.medicine && m.medicine.trim().length > 0,
+    );
     if (filteredMeds.length === 0) {
       alert("Please specify at least one medicine with dosage.");
       return;
@@ -624,8 +641,16 @@ export function PrescriptionsWorkspace() {
       (d) => d.id === formDoctor || d.name === formDoctor,
     );
 
-    const patientId = selectedPatient?.id || (formPatient.includes("-") ? formPatient : "00000000-0000-0000-0000-000000000001");
-    const doctorId = selectedDoctor?.id || (formDoctor.includes("-") ? formDoctor : "00000000-0000-0000-0000-000000000002");
+    const patientId =
+      selectedPatient?.id ||
+      (formPatient.includes("-")
+        ? formPatient
+        : "00000000-0000-0000-0000-000000000001");
+    const doctorId =
+      selectedDoctor?.id ||
+      (formDoctor.includes("-")
+        ? formDoctor
+        : "00000000-0000-0000-0000-000000000002");
 
     const payload = {
       patient_id: patientId,
@@ -675,12 +700,16 @@ export function PrescriptionsWorkspace() {
           patientId: created.patient_id,
           patientName: selectedPatient?.name || formPatient,
           patientEmail: `${(selectedPatient?.name || formPatient).toLowerCase().replace(/\s+/g, "")}@example.com`,
-          patientInitials: (selectedPatient?.name || formPatient).slice(0, 2).toUpperCase(),
+          patientInitials: (selectedPatient?.name || formPatient)
+            .slice(0, 2)
+            .toUpperCase(),
           patientColor: "#3b82f6",
           doctorId: created.doctor_id,
           doctorName: selectedDoctor?.name || formDoctor,
           doctorEmail: `${(selectedDoctor?.name || formDoctor).toLowerCase().replace(/\s+/g, "")}@hospital.local`,
-          doctorInitials: (selectedDoctor?.name || formDoctor).slice(0, 2).toUpperCase(),
+          doctorInitials: (selectedDoctor?.name || formDoctor)
+            .slice(0, 2)
+            .toUpperCase(),
           doctorColor: "#10b981",
           addedAt: new Date().toLocaleDateString("en-GB", {
             day: "2-digit",
@@ -697,13 +726,19 @@ export function PrescriptionsWorkspace() {
           advice: formAdvice,
           nextVisit: { value: nextVisitValue, unit: nextVisitUnit },
         };
-        setApiSuccessBanner(t("Prescription successfully created and committed to database!"));
+        setApiSuccessBanner(
+          t("Prescription successfully created and committed to database!"),
+        );
       } else {
         const err = await res.json().catch(() => ({}));
-        setApiErrorBanner(err.error || t("Prescription saved locally in preview mode."));
+        setApiErrorBanner(
+          err.error || t("Prescription saved locally in preview mode."),
+        );
       }
     } catch {
-      setApiErrorBanner(t("Server offline. Prescription recorded in preview mode."));
+      setApiErrorBanner(
+        t("Server offline. Prescription recorded in preview mode."),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -713,11 +748,15 @@ export function PrescriptionsWorkspace() {
         id: `rx-${Date.now()}`,
         patientName: selectedPatient?.name || formPatient,
         patientEmail: `${(selectedPatient?.name || formPatient).toLowerCase().replace(/\s+/g, "")}@example.com`,
-        patientInitials: (selectedPatient?.name || formPatient).slice(0, 2).toUpperCase(),
+        patientInitials: (selectedPatient?.name || formPatient)
+          .slice(0, 2)
+          .toUpperCase(),
         patientColor: "#3b82f6",
         doctorName: selectedDoctor?.name || formDoctor,
         doctorEmail: `${(selectedDoctor?.name || formDoctor).toLowerCase().replace(/\s+/g, "")}@hospital.local`,
-        doctorInitials: (selectedDoctor?.name || formDoctor).slice(0, 2).toUpperCase(),
+        doctorInitials: (selectedDoctor?.name || formDoctor)
+          .slice(0, 2)
+          .toUpperCase(),
         doctorColor: "#10b981",
         addedAt: new Date().toLocaleDateString("en-GB", {
           day: "2-digit",
@@ -751,8 +790,12 @@ export function PrescriptionsWorkspace() {
         body: JSON.stringify({
           name: newMedForm.medicine,
           salt_composition: newMedForm.saltComposition,
-          buying_price_minor: Math.round((parseFloat(newMedForm.buyingPrice) || 0) * 100),
-          selling_price_minor: Math.round((parseFloat(newMedForm.sellingPrice) || 0) * 100),
+          buying_price_minor: Math.round(
+            (parseFloat(newMedForm.buyingPrice) || 0) * 100,
+          ),
+          selling_price_minor: Math.round(
+            (parseFloat(newMedForm.sellingPrice) || 0) * 100,
+          ),
           side_effects: newMedForm.sideEffects,
           description: newMedForm.description,
         }),
@@ -761,7 +804,9 @@ export function PrescriptionsWorkspace() {
       // offline fallback
     }
 
-    setAvailableMedicines((prev) => Array.from(new Set([...prev, newMedForm.medicine])));
+    setAvailableMedicines((prev) =>
+      Array.from(new Set([...prev, newMedForm.medicine])),
+    );
     setShowNewMedicineModal(false);
     setNewMedForm({
       medicine: "",
@@ -986,7 +1031,6 @@ export function PrescriptionsWorkspace() {
       </div>
     );
   };
-
 
   // CREATE PRESCRIPTION SCREEN (Screenshots 174918 & 174945)
   if (mode === "create") {
@@ -1659,7 +1703,9 @@ export function PrescriptionsWorkspace() {
                   gap: "6px",
                 }}
               >
-                {isSubmitting && <RefreshCw size={14} className="animate-spin" />}
+                {isSubmitting && (
+                  <RefreshCw size={14} className="animate-spin" />
+                )}
                 {isSubmitting ? t("Saving...") : t("Save")}
               </button>
               <button
@@ -1687,7 +1733,9 @@ export function PrescriptionsWorkspace() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+          background: apiConnected
+            ? "rgba(16, 185, 129, 0.08)"
+            : "rgba(59, 130, 246, 0.08)",
           border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
           borderRadius: "8px",
           padding: "10px 16px",
@@ -1701,7 +1749,12 @@ export function PrescriptionsWorkspace() {
           ) : (
             <AlertCircle size={16} color="#3b82f6" />
           )}
-          <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+          <span
+            style={{
+              fontWeight: 500,
+              color: apiConnected ? "#10b981" : "#60a5fa",
+            }}
+          >
             {apiConnected
               ? t("Connected to PostgreSQL Backend (/v1/prescriptions)")
               : t("Local Clinical Preview Mode (Prescriptions Ready)")}
@@ -1753,7 +1806,12 @@ export function PrescriptionsWorkspace() {
           <span>{apiSuccessBanner}</span>
           <button
             onClick={() => setApiSuccessBanner("")}
-            style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#34d399",
+              cursor: "pointer",
+            }}
           >
             <X size={14} />
           </button>
@@ -1778,7 +1836,12 @@ export function PrescriptionsWorkspace() {
           <span>{apiErrorBanner}</span>
           <button
             onClick={() => setApiErrorBanner("")}
-            style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#f87171",
+              cursor: "pointer",
+            }}
           >
             <X size={14} />
           </button>

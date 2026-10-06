@@ -425,10 +425,26 @@ export function BloodBankWorkspace({ id }: { id: string }) {
   // Subtabs
   const tabs = [
     { id: "blood-banks", label: "Blood Banks", href: "/modules/blood-banks" },
-    { id: "blood-donors", label: "Blood Donors", href: "/modules/blood-donors" },
-    { id: "blood-donations", label: "Blood Donations", href: "/modules/blood-donations" },
-    { id: "blood-issues", label: "Blood Issues", href: "/modules/blood-issues" },
-    { id: "blood-donor-reports", label: "Blood Donor Reports", href: "/modules/blood-donor-reports" },
+    {
+      id: "blood-donors",
+      label: "Blood Donors",
+      href: "/modules/blood-donors",
+    },
+    {
+      id: "blood-donations",
+      label: "Blood Donations",
+      href: "/modules/blood-donations",
+    },
+    {
+      id: "blood-issues",
+      label: "Blood Issues",
+      href: "/modules/blood-issues",
+    },
+    {
+      id: "blood-donor-reports",
+      label: "Blood Donor Reports",
+      href: "/modules/blood-donor-reports",
+    },
   ];
 
   // Backend connection state
@@ -438,8 +454,12 @@ export function BloodBankWorkspace({ id }: { id: string }) {
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
 
-  const [patientOptions, setPatientOptions] = useState<Array<{ id: string; name: string; mrn: string }>>([]);
-  const [doctorOptions, setDoctorOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [patientOptions, setPatientOptions] = useState<
+    Array<{ id: string; name: string; mrn: string }>
+  >([]);
+  const [doctorOptions, setDoctorOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
 
   // New Donation form state
   const [donationDonorId, setDonationDonorId] = useState("");
@@ -463,14 +483,15 @@ export function BloodBankWorkspace({ id }: { id: string }) {
     setIsSyncing(true);
     let connected = false;
     try {
-      const [bankRes, donorRes, donationRes, issueRes, patientRes, doctorRes] = await Promise.all([
-        fetch("/api/hms/blood-bank").catch(() => null),
-        fetch("/api/hms/blood-donors").catch(() => null),
-        fetch("/api/hms/blood-donations").catch(() => null),
-        fetch("/api/hms/blood-issues").catch(() => null),
-        fetch("/api/hms/patients").catch(() => null),
-        fetch("/api/hms/doctors").catch(() => null),
-      ]);
+      const [bankRes, donorRes, donationRes, issueRes, patientRes, doctorRes] =
+        await Promise.all([
+          fetch("/api/hms/blood-bank").catch(() => null),
+          fetch("/api/hms/blood-donors").catch(() => null),
+          fetch("/api/hms/blood-donations").catch(() => null),
+          fetch("/api/hms/blood-issues").catch(() => null),
+          fetch("/api/hms/patients").catch(() => null),
+          fetch("/api/hms/doctors").catch(() => null),
+        ]);
 
       if (bankRes && bankRes.ok) {
         const data = await bankRes.json();
@@ -480,7 +501,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
               id: b.id,
               bloodGroup: b.blood_group,
               remainedBags: b.remained_bags,
-            }))
+            })),
           );
         }
         connected = true;
@@ -501,7 +522,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
               lastDonationDate: d.last_donate_date
                 ? new Date(d.last_donate_date).toLocaleDateString("en-GB")
                 : "Today",
-            }))
+            })),
           );
         }
         connected = true;
@@ -518,7 +539,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
               date: d.donation_date
                 ? new Date(d.donation_date).toLocaleDateString("en-GB")
                 : "Today",
-            }))
+            })),
           );
         }
         connected = true;
@@ -530,22 +551,28 @@ export function BloodBankWorkspace({ id }: { id: string }) {
           setIssues(
             data.issues.map((bi: any) => ({
               id: bi.id,
-              patientName: bi.patient_name || `Patient (${bi.patient_id?.slice(0, 6) || "P"})`,
+              patientName:
+                bi.patient_name ||
+                `Patient (${bi.patient_id?.slice(0, 6) || "P"})`,
               patientEmail: "patient@hospital.et",
               patientInitials: "PT",
               patientColor: "#0284c7",
-              doctorName: bi.doctor_name || `Dr. Staff (${bi.doctor_id?.slice(0, 6) || "D"})`,
+              doctorName:
+                bi.doctor_name ||
+                `Dr. Staff (${bi.doctor_id?.slice(0, 6) || "D"})`,
               doctorEmail: "doctor@hospital.et",
               doctorInitials: "DR",
               doctorColor: "#10b981",
-              donorName: bi.donor_id ? `Donor (${bi.donor_id.slice(0, 6)})` : "Direct Reserve",
+              donorName: bi.donor_id
+                ? `Donor (${bi.donor_id.slice(0, 6)})`
+                : "Direct Reserve",
               issueTime: "12:00 PM",
               issueDate: bi.issue_date
                 ? new Date(bi.issue_date).toLocaleDateString("en-GB")
                 : "Today",
               bloodGroup: bi.blood_group,
               amount: "$" + ((bi.amount_minor || 0) / 100).toFixed(2),
-            }))
+            })),
           );
         }
         connected = true;
@@ -559,7 +586,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
               id: p.id,
               name: p.name,
               mrn: p.mrn || p.id.slice(0, 8),
-            }))
+            })),
           );
         }
       }
@@ -571,7 +598,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
             dData.doctors.map((d: any) => ({
               id: d.id,
               name: d.name,
-            }))
+            })),
           );
         }
       }
@@ -706,7 +733,9 @@ export function BloodBankWorkspace({ id }: { id: string }) {
           },
           ...donors,
         ]);
-        setApiSuccessBanner(t(`Blood donor "${donorForm.name}" registered in PostgreSQL`));
+        setApiSuccessBanner(
+          t(`Blood donor "${donorForm.name}" registered in PostgreSQL`),
+        );
         setApiConnected(true);
         setShowAddDonor(false);
         setDonorForm({
@@ -780,7 +809,9 @@ export function BloodBankWorkspace({ id }: { id: string }) {
           },
           ...donations,
         ]);
-        setApiSuccessBanner(t(`Blood donation of ${bagsNum} bag(s) recorded in database`));
+        setApiSuccessBanner(
+          t(`Blood donation of ${bagsNum} bag(s) recorded in database`),
+        );
         setApiConnected(true);
         // Refresh inventory counts
         fetch("/api/hms/blood-bank")
@@ -792,7 +823,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   id: b.id,
                   bloodGroup: b.blood_group,
                   remainedBags: b.remained_bags,
-                }))
+                })),
               );
             }
           })
@@ -863,11 +894,15 @@ export function BloodBankWorkspace({ id }: { id: string }) {
             id: saved.id || `bi-${Date.now()}`,
             patientName: patientObj?.name || "Patient",
             patientEmail: "patient@hospital.et",
-            patientInitials: (patientObj?.name?.slice(0, 2) || "PT").toUpperCase(),
+            patientInitials: (
+              patientObj?.name?.slice(0, 2) || "PT"
+            ).toUpperCase(),
             patientColor: "#0284c7",
             doctorName: doctorObj?.name || "Doctor",
             doctorEmail: "doctor@hospital.et",
-            doctorInitials: (doctorObj?.name?.slice(0, 2) || "DR").toUpperCase(),
+            doctorInitials: (
+              doctorObj?.name?.slice(0, 2) || "DR"
+            ).toUpperCase(),
             doctorColor: "#10b981",
             donorName: donorObj?.name || "Direct Reserve",
             issueTime: "12:00 PM",
@@ -877,7 +912,9 @@ export function BloodBankWorkspace({ id }: { id: string }) {
           },
           ...issues,
         ]);
-        setApiSuccessBanner(t(`Blood issue of ${bagsNum} bag(s) recorded in ledger`));
+        setApiSuccessBanner(
+          t(`Blood issue of ${bagsNum} bag(s) recorded in ledger`),
+        );
         setApiConnected(true);
         // Refresh inventory counts
         fetch("/api/hms/blood-bank")
@@ -889,7 +926,7 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   id: b.id,
                   bloodGroup: b.blood_group,
                   remainedBags: b.remained_bags,
-                }))
+                })),
               );
             }
           })
@@ -946,7 +983,14 @@ export function BloodBankWorkspace({ id }: { id: string }) {
         copy[idx] = { ...copy[idx], remainedBags: count };
         return copy;
       }
-      return [{ id: `bb-${Date.now()}`, bloodGroup: bankBloodGroup, remainedBags: count }, ...prev];
+      return [
+        {
+          id: `bb-${Date.now()}`,
+          bloodGroup: bankBloodGroup,
+          remainedBags: count,
+        },
+        ...prev,
+      ];
     });
     setApiSuccessBanner(t(`Blood group ${bankBloodGroup} inventory updated`));
     setShowAddBank(false);
@@ -1049,8 +1093,9 @@ export function BloodBankWorkspace({ id }: { id: string }) {
               className="badge-available-stock fs-8 py-0 px-2"
               style={{ fontSize: "11px" }}
             >
-              {bloodBanks.length} {t("Groups")} · {donors.length} {t("Donors")} · {donations.length}{" "}
-              {t("Donations")} · {issues.length} {t("Issues")}
+              {bloodBanks.length} {t("Groups")} · {donors.length} {t("Donors")}{" "}
+              · {donations.length} {t("Donations")} · {issues.length}{" "}
+              {t("Issues")}
             </span>
           </div>
 
@@ -1904,7 +1949,10 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   disabled={isSubmitting}
                 >
                   {isSubmitting && (
-                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                    <Loader2
+                      size={14}
+                      className="spinner-border spinner-border-sm"
+                    />
                   )}
                   <span>{t("Save")}</span>
                 </button>
@@ -2215,7 +2263,9 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   value={issueDonorId}
                   onChange={(e) => setIssueDonorId(e.target.value)}
                 >
-                  <option value="">-- {t("Direct Supply / General Reserve")} --</option>
+                  <option value="">
+                    -- {t("Direct Supply / General Reserve")} --
+                  </option>
                   {donors.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name} ({d.bloodGroup})
@@ -2307,7 +2357,10 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   disabled={isSubmitting}
                 >
                   {isSubmitting && (
-                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                    <Loader2
+                      size={14}
+                      className="spinner-border spinner-border-sm"
+                    />
                   )}
                   <span>{t("Save")}</span>
                 </button>
@@ -2408,7 +2461,10 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                   disabled={isSubmitting}
                 >
                   {isSubmitting && (
-                    <Loader2 size={14} className="spinner-border spinner-border-sm" />
+                    <Loader2
+                      size={14}
+                      className="spinner-border spinner-border-sm"
+                    />
                   )}
                   <span>{t("Save")}</span>
                 </button>
@@ -2433,7 +2489,9 @@ export function BloodBankWorkspace({ id }: { id: string }) {
             style={{ maxWidth: "480px", width: "100%" }}
           >
             <div className="modal-header-custom">
-              <h3 className="modal-title-custom">{t("New Blood Group Stock")}</h3>
+              <h3 className="modal-title-custom">
+                {t("New Blood Group Stock")}
+              </h3>
               <button
                 className="modal-close-btn"
                 onClick={() => setShowAddBank(false)}
@@ -2447,7 +2505,8 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                 style={{ marginBottom: "16px" }}
               >
                 <label className="form-label-custom">
-                  {t("Blood Group")}: <span style={{ color: "#ef4444" }}>*</span>
+                  {t("Blood Group")}:{" "}
+                  <span style={{ color: "#ef4444" }}>*</span>
                 </label>
                 <select
                   className="form-select-custom"
@@ -2470,7 +2529,8 @@ export function BloodBankWorkspace({ id }: { id: string }) {
                 style={{ marginBottom: "24px" }}
               >
                 <label className="form-label-custom">
-                  {t("Remained Bags")}: <span style={{ color: "#ef4444" }}>*</span>
+                  {t("Remained Bags")}:{" "}
+                  <span style={{ color: "#ef4444" }}>*</span>
                 </label>
                 <input
                   type="number"

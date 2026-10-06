@@ -30,8 +30,11 @@ import { chromium } from "@playwright/test";
   await p.getByLabel("Password", { exact: false }).fill(password);
   await p.getByRole("button", { name: "Sign In", exact: true }).click();
   await p.waitForURL("**/dashboard");
-  const darkBtn = p.getByRole("button", { name: "Use dark theme", exact: true });
-  if (await darkBtn.count() > 0) {
+  const darkBtn = p.getByRole("button", {
+    name: "Use dark theme",
+    exact: true,
+  });
+  if ((await darkBtn.count()) > 0) {
     await darkBtn.click();
   }
   console.log("1. Logged in and ensured dark theme");

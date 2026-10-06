@@ -277,13 +277,41 @@ export function AttendanceWorkspace({ id }: { id: string }) {
   const { t } = useLanguage();
 
   const attendanceTabs = [
-    { id: "attendance", label: "Attendance Dashboard", href: "/modules/attendance" },
-    { id: "attendance-shifts", label: "Attendance Shifts", href: "/modules/attendance-shifts" },
-    { id: "attendance-assignments", label: "Duty Assignments", href: "/modules/attendance-assignments" },
-    { id: "attendance-leaves", label: "Leave Requests", href: "/modules/attendance-leaves" },
-    { id: "attendance-requests", label: "Attendance Requests", href: "/modules/attendance-requests" },
-    { id: "attendance-report", label: "Attendance Report", href: "/modules/attendance-report" },
-    { id: "manage-attendance", label: "Manage Attendance", href: "/modules/manage-attendance" },
+    {
+      id: "attendance",
+      label: "Attendance Dashboard",
+      href: "/modules/attendance",
+    },
+    {
+      id: "attendance-shifts",
+      label: "Attendance Shifts",
+      href: "/modules/attendance-shifts",
+    },
+    {
+      id: "attendance-assignments",
+      label: "Duty Assignments",
+      href: "/modules/attendance-assignments",
+    },
+    {
+      id: "attendance-leaves",
+      label: "Leave Requests",
+      href: "/modules/attendance-leaves",
+    },
+    {
+      id: "attendance-requests",
+      label: "Attendance Requests",
+      href: "/modules/attendance-requests",
+    },
+    {
+      id: "attendance-report",
+      label: "Attendance Report",
+      href: "/modules/attendance-report",
+    },
+    {
+      id: "manage-attendance",
+      label: "Manage Attendance",
+      href: "/modules/manage-attendance",
+    },
   ];
 
   const [data, setData] = useState(initial),
@@ -320,7 +348,12 @@ export function AttendanceWorkspace({ id }: { id: string }) {
           const mappedShifts: Row[] = raw.map((s: any) => ({
             id: s.id,
             name: s.name,
-            code: s.name.split(" ").map((w: string) => w[0]).join("").toUpperCase() || "SH",
+            code:
+              s.name
+                .split(" ")
+                .map((w: string) => w[0])
+                .join("")
+                .toUpperCase() || "SH",
             start: (s.startTime || "08:00:00").slice(0, 5),
             end: (s.endTime || "17:00:00").slice(0, 5),
             grace: String(s.gracePeriodMinutes ?? 10),
@@ -567,7 +600,9 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+            background: apiConnected
+              ? "rgba(16, 185, 129, 0.08)"
+              : "rgba(59, 130, 246, 0.08)",
             border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
             borderRadius: "8px",
             padding: "10px 16px",
@@ -581,14 +616,20 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             ) : (
               <AlertCircle size={16} color="#3b82f6" />
             )}
-            <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+            <span
+              style={{
+                fontWeight: 500,
+                color: apiConnected ? "#10b981" : "#60a5fa",
+              }}
+            >
               {apiConnected
                 ? t("Connected to PostgreSQL Backend (/v1/attendance)")
                 : t("Local Clinical Preview Mode (Attendance Ready)")}
             </span>
             <span style={{ color: "#94a3b8" }}>•</span>
             <span style={{ color: "#cbd5e1" }}>
-              {shifts.length} {t("shifts")} | {data["attendance-assignments"].length} {t("assignments")}
+              {shifts.length} {t("shifts")} |{" "}
+              {data["attendance-assignments"].length} {t("assignments")}
             </span>
           </div>
 
@@ -633,7 +674,12 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             <span>{apiSuccessBanner}</span>
             <button
               onClick={() => setApiSuccessBanner("")}
-              style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#34d399",
+                cursor: "pointer",
+              }}
             >
               <X size={14} />
             </button>
@@ -774,7 +820,9 @@ export function AttendanceWorkspace({ id }: { id: string }) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          background: apiConnected ? "rgba(16, 185, 129, 0.08)" : "rgba(59, 130, 246, 0.08)",
+          background: apiConnected
+            ? "rgba(16, 185, 129, 0.08)"
+            : "rgba(59, 130, 246, 0.08)",
           border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(59, 130, 246, 0.25)"}`,
           borderRadius: "8px",
           padding: "10px 16px",
@@ -788,14 +836,20 @@ export function AttendanceWorkspace({ id }: { id: string }) {
           ) : (
             <AlertCircle size={16} color="#3b82f6" />
           )}
-          <span style={{ fontWeight: 500, color: apiConnected ? "#10b981" : "#60a5fa" }}>
+          <span
+            style={{
+              fontWeight: 500,
+              color: apiConnected ? "#10b981" : "#60a5fa",
+            }}
+          >
             {apiConnected
               ? t("Connected to PostgreSQL Backend (/v1/attendance)")
               : t("Local Clinical Preview Mode (Attendance Ready)")}
           </span>
           <span style={{ color: "#94a3b8" }}>•</span>
           <span style={{ color: "#cbd5e1" }}>
-            {shifts.length} {t("shifts")} | {data["attendance-assignments"].length} {t("assignments")}
+            {shifts.length} {t("shifts")} |{" "}
+            {data["attendance-assignments"].length} {t("assignments")}
           </span>
         </div>
 
@@ -840,7 +894,12 @@ export function AttendanceWorkspace({ id }: { id: string }) {
           <span>{apiSuccessBanner}</span>
           <button
             onClick={() => setApiSuccessBanner("")}
-            style={{ background: "transparent", border: "none", color: "#34d399", cursor: "pointer" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#34d399",
+              cursor: "pointer",
+            }}
           >
             <X size={14} />
           </button>
@@ -1022,8 +1081,12 @@ export function AttendanceWorkspace({ id }: { id: string }) {
 
               if (id === "attendance-shifts") {
                 try {
-                  const startTime = (row.start || "08:00") + (row.start.split(":").length === 2 ? ":00" : "");
-                  const endTime = (row.end || "17:00") + (row.end.split(":").length === 2 ? ":00" : "");
+                  const startTime =
+                    (row.start || "08:00") +
+                    (row.start.split(":").length === 2 ? ":00" : "");
+                  const endTime =
+                    (row.end || "17:00") +
+                    (row.end.split(":").length === 2 ? ":00" : "");
                   const res = await fetch("/api/hms/attendance/shifts", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -1037,7 +1100,9 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                     }),
                   });
                   if (res.ok) {
-                    setApiSuccessBanner(t("Shift saved and committed to database!"));
+                    setApiSuccessBanner(
+                      t("Shift saved and committed to database!"),
+                    );
                   }
                 } catch {
                   // preview fallback

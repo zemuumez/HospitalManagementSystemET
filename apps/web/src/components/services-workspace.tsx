@@ -383,7 +383,10 @@ export function ServicesWorkspace({
 
       if (ambRes.ok) {
         const ambData = await ambRes.json();
-        if (Array.isArray(ambData.ambulances) && ambData.ambulances.length > 0) {
+        if (
+          Array.isArray(ambData.ambulances) &&
+          ambData.ambulances.length > 0
+        ) {
           setAmbulances(
             ambData.ambulances.map((a: any) => ({
               id: a.id,
@@ -392,7 +395,8 @@ export function ServicesWorkspace({
               yearMade: a.yearMade || a.year_made || 2023,
               driverName: a.driverName || a.driver_name || "Driver",
               driverLicense: a.driverLicense || a.driver_license || "DL-01",
-              driverContact: a.driverContact || a.driver_contact || "+251911000000",
+              driverContact:
+                a.driverContact || a.driver_contact || "+251911000000",
               vehicleType: a.vehicleType || a.vehicle_type || "Owned",
               status: a.isAvailable ?? true,
             })),
@@ -403,7 +407,10 @@ export function ServicesWorkspace({
 
       if (callRes.ok) {
         const callData = await callRes.json();
-        if (Array.isArray(callData.ambulance_calls) && callData.ambulance_calls.length > 0) {
+        if (
+          Array.isArray(callData.ambulance_calls) &&
+          callData.ambulance_calls.length > 0
+        ) {
           setAmbulanceCalls(
             callData.ambulance_calls.map((c: any) => ({
               id: c.id,
@@ -438,7 +445,10 @@ export function ServicesWorkspace({
 
       if (insRes.ok) {
         const insData = await insRes.json();
-        if (Array.isArray(insData.insurances) && insData.insurances.length > 0) {
+        if (
+          Array.isArray(insData.insurances) &&
+          insData.insurances.length > 0
+        ) {
           setInsurances(
             insData.insurances.map((i: any) => ({
               id: i.id,
@@ -728,7 +738,9 @@ export function ServicesWorkspace({
           discount: parseFloat(newDiscount) || 0,
           insuranceNo: newInsuranceNo.trim(),
           insuranceCode: newInsuranceCode.trim(),
-          hospitalRateMinor: Math.round((parseFloat(newHospitalRate) || 0) * 100),
+          hospitalRateMinor: Math.round(
+            (parseFloat(newHospitalRate) || 0) * 100,
+          ),
           remark: newRemark.trim(),
           status: newStatus ? 1 : 0,
         }),
@@ -1064,7 +1076,10 @@ export function ServicesWorkspace({
                 borderColor: "#3b82f6",
               }}
             >
-              {t("Services")}: {services.length} | {t("Ambulances")}: {ambulances.length} | {t("Calls")}: {ambulanceCalls.length} | {t("Packages")}: {packages.length} | {t("Insurances")}: {insurances.length}
+              {t("Services")}: {services.length} | {t("Ambulances")}:{" "}
+              {ambulances.length} | {t("Calls")}: {ambulanceCalls.length} |{" "}
+              {t("Packages")}: {packages.length} | {t("Insurances")}:{" "}
+              {insurances.length}
             </span>
           </div>
           <button

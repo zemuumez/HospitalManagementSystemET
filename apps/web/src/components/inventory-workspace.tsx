@@ -22,10 +22,7 @@ import { useLanguage } from "./language";
 import { Modal } from "./modal";
 
 export type InventoryTab =
-  | "items"
-  | "item-categories"
-  | "item-stocks"
-  | "issued-items";
+  "items" | "item-categories" | "item-stocks" | "issued-items";
 
 interface InventoryCategory {
   id: string;
@@ -230,7 +227,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
       if (resCat.status === "fulfilled" && resCat.value.ok) {
         const data = await resCat.value.json();
-        if (data.categories && Array.isArray(data.categories) && data.categories.length > 0) {
+        if (
+          data.categories &&
+          Array.isArray(data.categories) &&
+          data.categories.length > 0
+        ) {
           setCategories(data.categories);
         }
       }
@@ -242,7 +243,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       }
       if (resMov.status === "fulfilled" && resMov.value.ok) {
         const data = await resMov.value.json();
-        if (data.movements && Array.isArray(data.movements) && data.movements.length > 0) {
+        if (
+          data.movements &&
+          Array.isArray(data.movements) &&
+          data.movements.length > 0
+        ) {
           setMovements(data.movements);
         }
       }
@@ -300,7 +305,8 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    const categoryId = itemForm.categoryId || categories[0]?.id || "cat-1111-1111";
+    const categoryId =
+      itemForm.categoryId || categories[0]?.id || "cat-1111-1111";
     const payload = {
       categoryId,
       name: itemForm.name,
@@ -348,11 +354,14 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
   const handleSaveStockReceive = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedItem = items.find((i) => i.id === stockForm.itemId) || items[0];
+    const selectedItem =
+      items.find((i) => i.id === stockForm.itemId) || items[0];
     if (!selectedItem) return;
 
     const qtyMilli = Number(stockForm.quantity) * 1000;
-    const costMinor = Math.round(Number(stockForm.unitCost) * Number(stockForm.quantity) * 100);
+    const costMinor = Math.round(
+      Number(stockForm.unitCost) * Number(stockForm.quantity) * 100,
+    );
 
     const payload = {
       itemId: selectedItem.id,
@@ -421,7 +430,8 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
   const handleSaveIssue = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedItem = items.find((i) => i.id === issueForm.itemId) || items[0];
+    const selectedItem =
+      items.find((i) => i.id === issueForm.itemId) || items[0];
     if (!selectedItem) return;
 
     const qtyMilli = Number(issueForm.quantity) * 1000;
@@ -501,7 +511,12 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
   const tabs = [
     { id: "items", label: t("Items"), icon: Package, count: items.length },
-    { id: "item-categories", label: t("Item Categories"), icon: Layers, count: categories.length },
+    {
+      id: "item-categories",
+      label: t("Item Categories"),
+      icon: Layers,
+      count: categories.length,
+    },
     {
       id: "item-stocks",
       label: t("Item Stocks"),
@@ -563,7 +578,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           </span>
           <span className="text-muted-foreground hidden sm:inline">•</span>
           <span className="text-muted-foreground text-xs sm:text-sm">
-            {isLive ? t("Live Go / PostgreSQL Connected") : t("Dual-mode local preview")}
+            {isLive
+              ? t("Live Go / PostgreSQL Connected")
+              : t("Dual-mode local preview")}
           </span>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -572,7 +589,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             disabled={loading}
             className="btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-border shadow-2xs hover:bg-muted"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+            />
             {t("Sync")}
           </button>
           {activeTab === "items" && (
@@ -618,7 +637,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       {activeTab === "items" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Medical Inventory Items")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Medical Inventory Items")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -656,14 +677,21 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                     const reorder = item.reorderMilli / 1000;
                     const isLow = balance <= reorder;
                     return (
-                      <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 font-semibold text-foreground">{item.name}</td>
+                      <tr
+                        key={item.id}
+                        className="hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-4 py-3 font-semibold text-foreground">
+                          {item.name}
+                        </td>
                         <td className="px-4 py-3">
                           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                             {getCategoryName(item.categoryId)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs">{item.unit}</td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {item.unit}
+                        </td>
                         <td className="px-4 py-3 font-bold font-mono text-foreground">
                           {balance.toLocaleString()} {item.unit}
                         </td>
@@ -673,11 +701,13 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         <td className="px-4 py-3">
                           {isLow ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-400">
-                              <AlertTriangle className="w-3.5 h-3.5" /> {t("Low Stock")}
+                              <AlertTriangle className="w-3.5 h-3.5" />{" "}
+                              {t("Low Stock")}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> {t("In Stock")}
+                              <CheckCircle2 className="w-3.5 h-3.5" />{" "}
+                              {t("In Stock")}
                             </span>
                           )}
                         </td>
@@ -694,7 +724,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       {activeTab === "item-categories" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Inventory Categories")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Inventory Categories")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -718,16 +750,27 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {categories
-                  .filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                  .filter((c) =>
+                    c.name.toLowerCase().includes(searchTerm.toLowerCase()),
+                  )
                   .map((cat) => {
-                    const itemCount = items.filter((i) => i.categoryId === cat.id).length;
+                    const itemCount = items.filter(
+                      (i) => i.categoryId === cat.id,
+                    ).length;
                     return (
-                      <tr key={cat.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 font-semibold text-foreground">{cat.name}</td>
+                      <tr
+                        key={cat.id}
+                        className="hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-4 py-3 font-semibold text-foreground">
+                          {cat.name}
+                        </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
                           {cat.description || "-"}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs">{itemCount} items</td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {itemCount} items
+                        </td>
                         <td className="px-4 py-3">
                           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                             {t("Active")}
@@ -746,7 +789,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       {activeTab === "item-stocks" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Item Stocks Received")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Item Stocks Received")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -775,11 +820,18 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   .filter((m) => m.kind === "receive")
                   .filter(
                     (m) =>
-                      getItemName(m.itemId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      (m.reference || "").toLowerCase().includes(searchTerm.toLowerCase()),
+                      getItemName(m.itemId)
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      (m.reference || "")
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()),
                   )
                   .map((m) => (
-                    <tr key={m.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={m.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="px-4 py-3 font-semibold text-foreground">
                         {getItemName(m.itemId)}
                       </td>
@@ -787,13 +839,16 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         <div className="font-medium text-xs text-foreground">
                           {m.supplier || "-"}
                         </div>
-                        <div className="text-xs text-muted-foreground">{m.storeName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {m.storeName}
+                        </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs font-semibold">
                         {m.reference || "-"}
                       </td>
                       <td className="px-4 py-3 font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                        +{(m.quantityMilli / 1000).toLocaleString()} {getItemUnit(m.itemId)}
+                        +{(m.quantityMilli / 1000).toLocaleString()}{" "}
+                        {getItemUnit(m.itemId)}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {m.costMinor
@@ -817,7 +872,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       {activeTab === "issued-items" && (
         <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
           <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">{t("Issued Items & Consumables")}</h3>
+            <h3 className="font-semibold text-base text-foreground">
+              {t("Issued Items & Consumables")}
+            </h3>
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
               <input
@@ -845,11 +902,18 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   .filter((m) => m.kind === "issue")
                   .filter(
                     (m) =>
-                      getItemName(m.itemId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      (m.recipientId || "").toLowerCase().includes(searchTerm.toLowerCase()),
+                      getItemName(m.itemId)
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      (m.recipientId || "")
+                        .toLowerCase()
+                        .includes(searchTerm.toLowerCase()),
                   )
                   .map((m) => (
-                    <tr key={m.id} className="hover:bg-muted/30 transition-colors">
+                    <tr
+                      key={m.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       <td className="px-4 py-3 font-semibold text-foreground">
                         {getItemName(m.itemId)}
                       </td>
@@ -857,7 +921,8 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         {m.recipientId || "-"}
                       </td>
                       <td className="px-4 py-3 font-bold font-mono text-amber-600 dark:text-amber-400">
-                        -{(m.quantityMilli / 1000).toLocaleString()} {getItemUnit(m.itemId)}
+                        -{(m.quantityMilli / 1000).toLocaleString()}{" "}
+                        {getItemUnit(m.itemId)}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {m.reason || "-"}
@@ -880,7 +945,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
         <Modal onClose={() => setShowAddItem(false)} titleId="add-item-title">
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="add-item-title" className="font-semibold text-lg">{t("New Inventory Item")}</h3>
+              <h3 id="add-item-title" className="font-semibold text-lg">
+                {t("New Inventory Item")}
+              </h3>
               <button
                 onClick={() => setShowAddItem(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -890,22 +957,30 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             </div>
             <form onSubmit={handleSaveItem} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Item Name")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Item Name")} *
+                </label>
                 <input
                   type="text"
                   required
                   value={itemForm.name}
-                  onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setItemForm({ ...itemForm, name: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   placeholder="e.g. Sterile Syringes 5ml"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Category")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Category")} *
+                  </label>
                   <select
                     value={itemForm.categoryId}
-                    onChange={(e) => setItemForm({ ...itemForm, categoryId: e.target.value })}
+                    onChange={(e) =>
+                      setItemForm({ ...itemForm, categoryId: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   >
                     {categories.map((c) => (
@@ -916,35 +991,48 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Unit")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Unit")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={itemForm.unit}
-                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                    onChange={(e) =>
+                      setItemForm({ ...itemForm, unit: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                     placeholder="Piece, Box, Vial, Kit"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Reorder Alert Level")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Reorder Alert Level")}
+                </label>
                 <input
                   type="number"
                   min={1}
                   value={itemForm.reorderLevel}
                   onChange={(e) =>
-                    setItemForm({ ...itemForm, reorderLevel: Number(e.target.value) })
+                    setItemForm({
+                      ...itemForm,
+                      reorderLevel: Number(e.target.value),
+                    })
                   }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Description")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Description")}
+                </label>
                 <textarea
                   rows={3}
                   value={itemForm.description}
-                  onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+                  onChange={(e) =>
+                    setItemForm({ ...itemForm, description: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
@@ -956,7 +1044,10 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Save Item")}
                 </button>
               </div>
@@ -967,10 +1058,15 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
       {/* 2. New Category Modal */}
       {showAddCategory && (
-        <Modal onClose={() => setShowAddCategory(false)} titleId="add-category-title">
+        <Modal
+          onClose={() => setShowAddCategory(false)}
+          titleId="add-category-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="add-category-title" className="font-semibold text-lg">{t("New Item Category")}</h3>
+              <h3 id="add-category-title" className="font-semibold text-lg">
+                {t("New Item Category")}
+              </h3>
               <button
                 onClick={() => setShowAddCategory(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -980,23 +1076,32 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             </div>
             <form onSubmit={handleSaveCategory} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Category Name")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Category Name")} *
+                </label>
                 <input
                   type="text"
                   required
                   value={categoryForm.name}
-                  onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setCategoryForm({ ...categoryForm, name: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   placeholder="e.g. Diagnostics Consumables"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Description")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Description")}
+                </label>
                 <textarea
                   rows={3}
                   value={categoryForm.description}
                   onChange={(e) =>
-                    setCategoryForm({ ...categoryForm, description: e.target.value })
+                    setCategoryForm({
+                      ...categoryForm,
+                      description: e.target.value,
+                    })
                   }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
@@ -1009,7 +1114,10 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Save Category")}
                 </button>
               </div>
@@ -1020,10 +1128,15 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
       {/* 3. Receive Stock Modal */}
       {showAddStock && (
-        <Modal onClose={() => setShowAddStock(false)} titleId="receive-stock-title">
+        <Modal
+          onClose={() => setShowAddStock(false)}
+          titleId="receive-stock-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="receive-stock-title" className="font-semibold text-lg">{t("Receive New Stock")}</h3>
+              <h3 id="receive-stock-title" className="font-semibold text-lg">
+                {t("Receive New Stock")}
+              </h3>
               <button
                 onClick={() => setShowAddStock(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1033,10 +1146,14 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             </div>
             <form onSubmit={handleSaveStockReceive} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Item")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Item")} *
+                </label>
                 <select
                   value={stockForm.itemId || (items[0]?.id ?? "")}
-                  onChange={(e) => setStockForm({ ...stockForm, itemId: e.target.value })}
+                  onChange={(e) =>
+                    setStockForm({ ...stockForm, itemId: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 >
                   {items.map((i) => (
@@ -1048,27 +1165,37 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Quantity")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Quantity")} *
+                  </label>
                   <input
                     type="number"
                     min={1}
                     required
                     value={stockForm.quantity}
                     onChange={(e) =>
-                      setStockForm({ ...stockForm, quantity: Number(e.target.value) })
+                      setStockForm({
+                        ...stockForm,
+                        quantity: Number(e.target.value),
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Unit Cost (ETB)")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Unit Cost (ETB)")}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min={0}
                     value={stockForm.unitCost}
                     onChange={(e) =>
-                      setStockForm({ ...stockForm, unitCost: Number(e.target.value) })
+                      setStockForm({
+                        ...stockForm,
+                        unitCost: Number(e.target.value),
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
@@ -1076,31 +1203,43 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Supplier")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Supplier")}
+                  </label>
                   <input
                     type="text"
                     value={stockForm.supplier}
-                    onChange={(e) => setStockForm({ ...stockForm, supplier: e.target.value })}
+                    onChange={(e) =>
+                      setStockForm({ ...stockForm, supplier: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                     placeholder="Supplier name"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Store Name")}</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Store Name")}
+                  </label>
                   <input
                     type="text"
                     value={stockForm.storeName}
-                    onChange={(e) => setStockForm({ ...stockForm, storeName: e.target.value })}
+                    onChange={(e) =>
+                      setStockForm({ ...stockForm, storeName: e.target.value })
+                    }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Reference No")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Reference No")}
+                </label>
                 <input
                   type="text"
                   value={stockForm.reference}
-                  onChange={(e) => setStockForm({ ...stockForm, reference: e.target.value })}
+                  onChange={(e) =>
+                    setStockForm({ ...stockForm, reference: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg font-mono"
                 />
               </div>
@@ -1112,7 +1251,10 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Confirm Receive")}
                 </button>
               </div>
@@ -1123,10 +1265,15 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
       {/* 4. Issue Item Modal */}
       {showIssueItem && (
-        <Modal onClose={() => setShowIssueItem(false)} titleId="issue-item-title">
+        <Modal
+          onClose={() => setShowIssueItem(false)}
+          titleId="issue-item-title"
+        >
           <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
             <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="issue-item-title" className="font-semibold text-lg">{t("Issue Inventory Item")}</h3>
+              <h3 id="issue-item-title" className="font-semibold text-lg">
+                {t("Issue Inventory Item")}
+              </h3>
               <button
                 onClick={() => setShowIssueItem(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -1136,41 +1283,56 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             </div>
             <form onSubmit={handleSaveIssue} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Item")} *</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Item")} *
+                </label>
                 <select
                   value={issueForm.itemId || (items[0]?.id ?? "")}
-                  onChange={(e) => setIssueForm({ ...issueForm, itemId: e.target.value })}
+                  onChange={(e) =>
+                    setIssueForm({ ...issueForm, itemId: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 >
                   {items.map((i) => (
                     <option key={i.id} value={i.id}>
-                      {i.name} (Available: {(i.balanceMilli / 1000).toLocaleString()} {i.unit})
+                      {i.name} (Available:{" "}
+                      {(i.balanceMilli / 1000).toLocaleString()} {i.unit})
                     </option>
                   ))}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Quantity to Issue")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Quantity to Issue")} *
+                  </label>
                   <input
                     type="number"
                     min={1}
                     required
                     value={issueForm.quantity}
                     onChange={(e) =>
-                      setIssueForm({ ...issueForm, quantity: Number(e.target.value) })
+                      setIssueForm({
+                        ...issueForm,
+                        quantity: Number(e.target.value),
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("Recipient / Department")} *</label>
+                  <label className="block text-xs font-medium mb-1">
+                    {t("Recipient / Department")} *
+                  </label>
                   <input
                     type="text"
                     required
                     value={issueForm.recipientId}
                     onChange={(e) =>
-                      setIssueForm({ ...issueForm, recipientId: e.target.value })
+                      setIssueForm({
+                        ...issueForm,
+                        recipientId: e.target.value,
+                      })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                     placeholder="e.g. ICU, Emergency, OPD 3"
@@ -1178,11 +1340,15 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">{t("Reason / Clinical Notes")}</label>
+                <label className="block text-xs font-medium mb-1">
+                  {t("Reason / Clinical Notes")}
+                </label>
                 <textarea
                   rows={2}
                   value={issueForm.reason}
-                  onChange={(e) => setIssueForm({ ...issueForm, reason: e.target.value })}
+                  onChange={(e) =>
+                    setIssueForm({ ...issueForm, reason: e.target.value })
+                  }
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
                 />
               </div>
@@ -1194,7 +1360,10 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 >
                   {t("Cancel")}
                 </button>
-                <button type="submit" className="btn-primary px-4 py-2 text-xs rounded-lg">
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                >
                   {t("Confirm Issue")}
                 </button>
               </div>

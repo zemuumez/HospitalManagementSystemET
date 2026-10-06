@@ -1335,7 +1335,11 @@ async function downloadCard(card: CardRow, template: CardTemplate) {
   ctx.font = "bold 30px Arial";
   ctx.fillText("ULSHMS", 35, 60);
   ctx.font = "18px Arial";
-  ctx.fillText("Hospital Management System · Patient Smart Identity Card", 220, 60);
+  ctx.fillText(
+    "Hospital Management System · Patient Smart Identity Card",
+    220,
+    60,
+  );
   ctx.fillStyle = "#333";
   ctx.font = "24px Arial";
   const rows = [

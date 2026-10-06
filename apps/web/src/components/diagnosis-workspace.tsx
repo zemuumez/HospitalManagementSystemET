@@ -281,7 +281,11 @@ export function DiagnosisWorkspace({ id }: { id: string }) {
     fetch("/api/hms/diagnostic-categories", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.categories && Array.isArray(data.categories) && data.categories.length > 0) {
+        if (
+          data?.categories &&
+          Array.isArray(data.categories) &&
+          data.categories.length > 0
+        ) {
           const mapped = data.categories.map((c: any) => ({
             id: c.id || `cat-${c.name}`,
             name: c.name,
