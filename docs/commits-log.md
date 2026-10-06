@@ -404,7 +404,7 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
     - Allowed 3-segment subroute status transitions for `live-consultations/*/status` and `live-meetings/*/status`.
   - Verification: `npm run typecheck` passed (0 errors), all 5 unit test suites passed, Go backend tests passed.
 
-### 23. Commit `d48f6ca` — Database Schema Reconciliation, Enriched Projections & Operational Playwright Automation
+### 23. Commit `f585fcb` — Database Schema Reconciliation, Enriched Projections & Operational Playwright Automation
 - **Message**: `feat: reconcile database schema projections and add end-to-end operational test suite`
 - **Branch**: `main`
 - **Scope & Features**:
