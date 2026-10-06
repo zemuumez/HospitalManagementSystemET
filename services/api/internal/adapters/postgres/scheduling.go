@@ -16,12 +16,30 @@ type querier interface {
 
 func doctor(ctx context.Context, q querier, id string) (domain.Doctor, error) {
 	d := domain.Doctor{Hours: []domain.DoctorHours{}}
-	err := q.QueryRow(ctx, `SELECT d.user_id,u.name,d.department,d.slot_minutes,d.version FROM doctor_profile d JOIN "user" u ON u.id=d.user_id JOIN staff_access a ON a.user_id=d.user_id WHERE d.user_id=$1 AND a.active AND a.role='doctor'`, id).Scan(&d.ID, &d.Name, &d.Department, &d.SlotMinutes, &d.Version)
+	var deptID *string
+	var desc, photo string
+	var opdCharge, apptCharge float64
+	err := q.QueryRow(ctx, `SELECT d.user_id,u.name,COALESCE(u.email,''),d.department,d.department_id::text,COALESCE(d.description,''),COALESCE(d.photo_url,''),COALESCE(d.opd_charge::float8,0),COALESCE(d.appointment_charge::float8,0),d.slot_minutes,d.version
+		FROM doctor_profile d
+		JOIN "user" u ON u.id=d.user_id
+		JOIN staff_access a ON a.user_id=d.user_id
+		WHERE d.user_id=$1 AND a.active AND a.role='doctor'`, id).Scan(
+		&d.ID, &d.Name, &d.Email, &d.Department, &deptID, &desc, &photo, &opdCharge, &apptCharge, &d.SlotMinutes, &d.Version,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, domain.ErrNotFound
 	}
 	if err != nil {
 		return d, err
+	}
+	d.DepartmentID = deptID
+	d.PhotoURL = photo
+	d.OpdCharge = opdCharge
+	d.AppointmentCharge = apptCharge
+	if desc != "" {
+		d.Specialist = desc
+	} else {
+		d.Specialist = d.Department
 	}
 	rows, err := q.Query(ctx, `SELECT weekday,start_minute,end_minute FROM doctor_hours WHERE doctor_id=$1 ORDER BY weekday,start_minute`, id)
 	if err != nil {

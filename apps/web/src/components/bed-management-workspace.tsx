@@ -31,6 +31,7 @@ export interface ApiBed {
   name: string;
   type: string;
   typeId?: string;
+  wardName?: string;
   chargeMinor: number;
   available: boolean;
   state?: string;
@@ -976,9 +977,9 @@ export function BedManagementWorkspace({ id }: { id: string }) {
         }));
         setBeds(loadedBeds);
 
-        // Update ward cards with live bed availability
-        setWards((prevWards) =>
-          prevWards.map((w) => ({
+        // Update ward cards with live bed availability and dynamic grouping
+        setWards((prevWards) => {
+          const updated = prevWards.map((w) => ({
             ...w,
             beds: w.beds.map((wb) => {
               const matched = bedsRes.beds.find(
@@ -986,8 +987,32 @@ export function BedManagementWorkspace({ id }: { id: string }) {
               );
               return matched ? { ...wb, isAvailable: matched.available } : wb;
             }),
-          })),
-        );
+          }));
+
+          for (const b of bedsRes.beds) {
+            const wardTarget = (b.wardName || b.type || "")
+              .trim()
+              .toLowerCase();
+            const existingGroup = updated.find(
+              (w) =>
+                w.name.toLowerCase() === wardTarget ||
+                w.id.toLowerCase() === wardTarget.replace(/\s+/g, "-"),
+            );
+            if (existingGroup) {
+              const alreadyHas = existingGroup.beds.some(
+                (wb) => wb.name.toLowerCase() === b.name.toLowerCase(),
+              );
+              if (!alreadyHas) {
+                existingGroup.beds.push({
+                  id: b.id,
+                  name: b.name,
+                  isAvailable: b.available,
+                });
+              }
+            }
+          }
+          return updated;
+        });
       }
 
       // 2. Fetch live bed types
@@ -2062,6 +2087,15 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                 <Filter size={18} />
               </button>
 
+              <button
+                type="button"
+                className="btn-action-blue"
+                onClick={() => handleOpenNewBed()}
+              >
+                <Plus size={16} className="me-1 inline" />
+                {t("New Bed")}
+              </button>
+
               <div className="relative-actions-dropdown">
                 <button
                   type="button"
@@ -2159,14 +2193,16 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                           })}
                         </span>
                       </td>
-                      {/* Available Yes / No status badge */}
+                      {/* Available status badge */}
                       <td>
                         {row.available ? (
                           <span className="badge-available-yes">
-                            {t("Yes")}
+                            {t("Available")}
                           </span>
                         ) : (
-                          <span className="badge-available-no">{t("No")}</span>
+                          <span className="badge-available-no">
+                            {t("Occupied")}
+                          </span>
                         )}
                       </td>
                       {/* Actions */}
@@ -2543,6 +2579,9 @@ export function BedManagementWorkspace({ id }: { id: string }) {
       {bedModalOpen && (
         <div
           className="modal-backdrop-custom"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bed-modal-title"
           onClick={() => setBedModalOpen(false)}
         >
           <div
@@ -2565,10 +2604,12 @@ export function BedManagementWorkspace({ id }: { id: string }) {
 
             <form onSubmit={handleSaveBed} className="modal-form-custom">
               <div className="form-group-custom">
-                <label className="form-label-custom">
+                <label className="form-label-custom" htmlFor="bed-name-input">
                   {t("Bed")}: <span className="text-danger">*</span>
                 </label>
                 <input
+                  id="bed-name-input"
+                  aria-label="Name"
                   type="text"
                   required
                   placeholder={t("Bed")}
@@ -2579,30 +2620,36 @@ export function BedManagementWorkspace({ id }: { id: string }) {
               </div>
 
               <div className="form-group-custom">
-                <label className="form-label-custom">
+                <label className="form-label-custom" htmlFor="bed-type-input">
                   {t("Bed Type")}: <span className="text-danger">*</span>
                 </label>
-                <select
+                <input
+                  id="bed-type-input"
+                  aria-label="Bed Type"
+                  type="text"
                   required
-                  className="form-select-custom"
+                  list="bed-types-datalist"
+                  placeholder={t("Bed Type")}
+                  className="form-input-custom"
                   value={formBedTypeId}
                   onChange={(e) => setFormBedTypeId(e.target.value)}
-                >
+                />
+                <datalist id="bed-types-datalist">
                   {bedTypes.map((bt) => (
-                    <option key={bt.id} value={bt.title}>
-                      {bt.title}
-                    </option>
+                    <option key={bt.id} value={bt.title} />
                   ))}
-                </select>
+                </datalist>
               </div>
 
               <div className="form-group-custom">
-                <label className="form-label-custom">
+                <label className="form-label-custom" htmlFor="bed-charge-input">
                   {t("Charge")}: <span className="text-danger">*</span>
                 </label>
                 <input
-                  type="number"
-                  step="0.01"
+                  id="bed-charge-input"
+                  aria-label="Charge (ETB)"
+                  type="text"
+                  inputMode="decimal"
                   required
                   placeholder={t("Charge")}
                   className="form-input-custom"

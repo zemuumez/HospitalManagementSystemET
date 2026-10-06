@@ -3,9 +3,14 @@ import { AttendanceWorkspace } from "@/components/attendance-workspace";
 import { OdontogramRegister } from "@/components/odontogram-register";
 import {
   ConnectedUsers,
+  ConnectedSchedules,
   ConnectedAppointments,
 } from "@/components/connected-scheduling";
 import { ConnectedClinical } from "@/components/connected-clinical";
+import {
+  ConnectedAccounts,
+  ConnectedInvoices,
+} from "@/components/connected-billing";
 import { BillingWorkspace } from "@/components/billing-workspace";
 import { BedManagementWorkspace } from "@/components/bed-management-workspace";
 import { BloodBankWorkspace } from "@/components/blood-bank-workspace";
@@ -30,6 +35,8 @@ export default async function ModulePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  if (slug === "accounts") return <ConnectedAccounts key={slug} />;
+  if (slug === "invoices") return <ConnectedInvoices key={slug} />;
   if (
     [
       "insurances",
@@ -49,14 +56,7 @@ export default async function ModulePage({
     ].includes(slug)
   )
     return <PathologyWorkspace key={slug} id={slug} />;
-  if (
-    [
-      "patients",
-      "patient-cases",
-      "case-handlers",
-      "patient-admissions",
-    ].includes(slug)
-  )
+  if (["patients", "case-handlers", "patient-admissions"].includes(slug))
     return <PatientsWorkspace key={slug} id={slug} />;
   if (
     [
@@ -93,7 +93,6 @@ export default async function ModulePage({
     [
       "doctors",
       "doctor-departments",
-      "schedules",
       "doctor-holidays",
       "holidays",
       "breaks",
@@ -113,8 +112,6 @@ export default async function ModulePage({
       "advanced-payments",
       "payment-reports",
       "payments",
-      "invoices",
-      "accounts",
       "employee-payrolls",
       "bills",
       "expenses",
@@ -185,6 +182,7 @@ export default async function ModulePage({
         roleFilter={slug === "users" ? undefined : slug}
       />
     );
+  if (slug === "schedules") return <ConnectedSchedules key={slug} />;
   if (slug === "appointments") return <ConnectedAppointments />;
   if (
     [

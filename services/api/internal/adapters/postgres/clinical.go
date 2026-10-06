@@ -20,7 +20,7 @@ func clinicalError(err error) error {
 	return err
 }
 func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
-	rows, e := s.DB.Query(ctx, `SELECT b.id,b.name,t.name,b.type_id,b.charge_minor,b.state,b.version,b.state='ready' AND NOT EXISTS(SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active') FROM hospital_bed b JOIN bed_type t ON t.id=b.type_id WHERE b.active ORDER BY b.name,b.id LIMIT 25 OFFSET $1`, (page-1)*25)
+	rows, e := s.DB.Query(ctx, `SELECT b.id,b.name,t.name,b.type_id,b.charge_minor,b.state,b.version,b.state='ready' AND NOT EXISTS(SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active'),COALESCE(b.ward_name, 'General Ward') FROM hospital_bed b JOIN bed_type t ON t.id=b.type_id WHERE b.active ORDER BY b.name,b.id LIMIT 25 OFFSET $1`, (page-1)*25)
 	if e != nil {
 		return nil, e
 	}
@@ -28,7 +28,7 @@ func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
 	out := []domain.Bed{}
 	for rows.Next() {
 		var b domain.Bed
-		if e = rows.Scan(&b.ID, &b.Name, &b.Type, &b.TypeID, &b.ChargeMinor, &b.State, &b.Version, &b.Available); e != nil {
+		if e = rows.Scan(&b.ID, &b.Name, &b.Type, &b.TypeID, &b.ChargeMinor, &b.State, &b.Version, &b.Available, &b.WardName); e != nil {
 			return nil, e
 		}
 		out = append(out, b)
@@ -36,6 +36,9 @@ func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
 	return out, rows.Err()
 }
 func (s Store) CreateBed(ctx context.Context, a domain.Actor, i domain.BedInput) (domain.Bed, error) {
+	if i.WardName == "" {
+		i.WardName = "General Ward"
+	}
 	b := domain.Bed{BedInput: i, Available: true, State: "ready", Version: 1}
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
@@ -53,7 +56,7 @@ func (s Store) CreateBed(ctx context.Context, a domain.Actor, i domain.BedInput)
 	if e != nil {
 		return b, clinicalError(e)
 	}
-	e = tx.QueryRow(ctx, `INSERT INTO hospital_bed(name,bed_type,charge_minor,created_by,type_id) VALUES($1,$2,$3,$4,$5) RETURNING id`, i.Name, b.Type, i.ChargeMinor, a.ID, b.TypeID).Scan(&b.ID)
+	e = tx.QueryRow(ctx, `INSERT INTO hospital_bed(name,bed_type,charge_minor,created_by,type_id,ward_name) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, i.Name, b.Type, i.ChargeMinor, a.ID, b.TypeID, i.WardName).Scan(&b.ID)
 	if e != nil {
 		return b, clinicalError(e)
 	}

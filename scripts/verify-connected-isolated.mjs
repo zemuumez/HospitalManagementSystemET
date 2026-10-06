@@ -18,6 +18,7 @@ import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.cwd();
+const operationalMode = process.argv.includes("--operational");
 const firebaseMode = process.argv.includes("--firebase");
 const invitationsMode = process.argv.includes("--invitations");
 const integrationMode = process.argv.includes("--integration");
@@ -246,15 +247,17 @@ try {
     const test = spawn(
       process.execPath,
       [
-        invitationsMode
-          ? "scripts/verify-invitations.mjs"
-          : integrationMode
-            ? "scripts/integration.mjs"
-            : firebaseMode
-              ? "scripts/verify-firebase.mjs"
-              : recoveryMode
-                ? "scripts/verify-recovery.mjs"
-                : "scripts/verify-connected.mjs",
+        operationalMode
+          ? "scripts/verify-all-operational-workspaces.mjs"
+          : invitationsMode
+            ? "scripts/verify-invitations.mjs"
+            : integrationMode
+              ? "scripts/integration.mjs"
+              : firebaseMode
+                ? "scripts/verify-firebase.mjs"
+                : recoveryMode
+                  ? "scripts/verify-recovery.mjs"
+                  : "scripts/verify-connected.mjs",
       ],
       {
         cwd: root,

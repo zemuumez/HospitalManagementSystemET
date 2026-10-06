@@ -26,7 +26,24 @@ func (s Store) Patients(ctx context.Context, a domain.Actor, search string, page
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, `SELECT id,medical_record_number,given_name,family_name,COALESCE(date_of_birth::text,''),phone,created_at,COALESCE(patient_portal_owner(id),''),COALESCE(clinician_user_id,'') FROM patient WHERE canonical_patient_id(id)=id AND `+scope+` AND ($3='' OR strpos(lower(given_name || ' ' || family_name),lower($3))>0 OR medical_record_number::text=$3) ORDER BY created_at DESC,id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
+	rows, err := tx.Query(ctx, `SELECT 
+		patient.id,
+		patient.medical_record_number,
+		patient.given_name,
+		patient.family_name,
+		COALESCE(patient.date_of_birth::text,''),
+		patient.phone,
+		patient.created_at,
+		COALESCE(patient_portal_owner(patient.id),''),
+		COALESCE(patient.clinician_user_id,''),
+		COALESCE(pp.email,''),
+		COALESCE(pp.gender,'unknown'),
+		COALESCE(pp.blood_group,''),
+		COALESCE(pp.father_name,''),
+		COALESCE(pp.active, true)
+	FROM patient
+	LEFT JOIN patient_profile pp ON pp.patient_id = patient.id
+	WHERE canonical_patient_id(patient.id)=patient.id AND `+scope+` AND ($3='' OR strpos(lower(patient.given_name || ' ' || patient.family_name),lower($3))>0 OR patient.medical_record_number::text=$3) ORDER BY patient.created_at DESC,patient.id LIMIT 25 OFFSET $4`, a.Role, a.ID, search, (page-1)*25)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +51,22 @@ func (s Store) Patients(ctx context.Context, a domain.Actor, search string, page
 	for rows.Next() {
 		var p domain.Patient
 		var mrn int64
-		if err = rows.Scan(&p.ID, &mrn, &p.GivenName, &p.FamilyName, &p.DateOfBirth, &p.Phone, &p.CreatedAt, &p.UserID, &p.ClinicianID); err != nil {
+		if err = rows.Scan(
+			&p.ID,
+			&mrn,
+			&p.GivenName,
+			&p.FamilyName,
+			&p.DateOfBirth,
+			&p.Phone,
+			&p.CreatedAt,
+			&p.UserID,
+			&p.ClinicianID,
+			&p.Email,
+			&p.Gender,
+			&p.BloodGroup,
+			&p.FatherName,
+			&p.Active,
+		); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -72,7 +104,43 @@ func (s Store) RegisterPatient(ctx context.Context, a domain.Actor, in domain.Pa
 }
 func (s Store) Overview(ctx context.Context, a domain.Actor) (domain.Overview, error) {
 	var o domain.Overview
-	err := s.DB.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE created_at::date=CURRENT_DATE) FROM patient WHERE canonical_patient_id(id)=id AND `+scope, a.Role, a.ID).Scan(&o.PatientCount, &o.RegisteredToday)
+	err := s.DB.QueryRow(ctx, `SELECT 
+		count(*),
+		count(*) FILTER(WHERE created_at::date=CURRENT_DATE),
+		COALESCE((SELECT SUM(total_minor) FROM invoice), 0),
+		COALESCE((SELECT SUM(bed_charge_minor) FROM encounter WHERE status='active'), 0),
+		COALESCE((SELECT SUM(amount_minor) FROM invoice_payment WHERE direction='payment'), 0),
+		COALESCE((SELECT SUM(amount_minor) FROM patient_advance_payment), 0),
+		COALESCE((SELECT COUNT(*) FROM hospital_bed WHERE active=true), 0),
+		COALESCE((SELECT COUNT(*) FROM hospital_bed b WHERE b.active=true AND NOT EXISTS (SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active')), 0),
+		COALESCE((SELECT COUNT(*) FROM encounter WHERE status='active' AND bed_id IS NOT NULL), 0),
+		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='doctor' AND active=true), 0),
+		COALESCE((SELECT COUNT(*) FROM patient WHERE canonical_patient_id(id)=id), 0),
+		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='nurse' AND active=true), 0),
+		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='admin' AND active=true), 0),
+		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='accountant' AND active=true), 0),
+		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='lab_technician' AND active=true), 0),
+		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='pharmacist' AND active=true), 0),
+		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='receptionist' AND active=true), 0)
+	FROM patient WHERE canonical_patient_id(id)=id AND `+scope, a.Role, a.ID).Scan(
+		&o.PatientCount,
+		&o.RegisteredToday,
+		&o.InvoicesMinor,
+		&o.BillsMinor,
+		&o.PaymentsMinor,
+		&o.AdvancePaymentsMinor,
+		&o.TotalBeds,
+		&o.AvailableBeds,
+		&o.OccupiedBeds,
+		&o.Doctors,
+		&o.Patients,
+		&o.Nurses,
+		&o.Admins,
+		&o.Accountants,
+		&o.LabTechnicians,
+		&o.Pharmacists,
+		&o.Receptionists,
+	)
 	return o, err
 }
 func (s Store) Enqueue(ctx context.Context, a domain.Actor, in domain.MessageInput, key string) (domain.Message, error) {

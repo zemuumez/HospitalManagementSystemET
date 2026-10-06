@@ -68,6 +68,7 @@ export default function Dashboard() {
   useEffect(() => {
     // Fetch live dashboard metrics from database APIs
     Promise.allSettled([
+      fetch("/api/hms/overview"),
       fetch("/api/hms/patients"),
       fetch("/api/hms/doctors"),
       fetch("/api/hms/beds"),
@@ -77,8 +78,45 @@ export default function Dashboard() {
       fetch("/api/hms/enquiries"),
     ])
       .then(
-        async ([resPat, resDoc, resBeds, resInv, resStaff, resNot, resEnq]) => {
+        async ([
+          resOver,
+          resPat,
+          resDoc,
+          resBeds,
+          resInv,
+          resStaff,
+          resNot,
+          resEnq,
+        ]) => {
           const next = { ...counts };
+
+          if (resOver.status === "fulfilled" && resOver.value.ok) {
+            const ov = await resOver.value.json();
+            if (ov.invoicesMinor !== undefined)
+              next.invoices = (ov.invoicesMinor / 100).toLocaleString();
+            if (ov.billsMinor !== undefined)
+              next.bills = (ov.billsMinor / 100).toLocaleString();
+            if (ov.paymentsMinor !== undefined)
+              next.payments = (ov.paymentsMinor / 100).toLocaleString();
+            if (ov.advancePaymentsMinor !== undefined)
+              next.advancePayments = (
+                ov.advancePaymentsMinor / 100
+              ).toLocaleString();
+            if (ov.availableBeds !== undefined)
+              next.availableBeds = String(ov.availableBeds);
+            if (ov.doctors !== undefined) next.doctors = String(ov.doctors);
+            if (ov.patients !== undefined) next.patients = String(ov.patients);
+            if (ov.nurses !== undefined) next.nurses = String(ov.nurses);
+            if (ov.admins !== undefined) next.admins = String(ov.admins);
+            if (ov.accountants !== undefined)
+              next.accountants = String(ov.accountants);
+            if (ov.labTechnicians !== undefined)
+              next.labTechnicians = String(ov.labTechnicians);
+            if (ov.pharmacists !== undefined)
+              next.pharmacists = String(ov.pharmacists);
+            if (ov.receptionists !== undefined)
+              next.receptionists = String(ov.receptionists);
+          }
 
           if (resPat.status === "fulfilled" && resPat.value.ok) {
             const data = await resPat.value.json();

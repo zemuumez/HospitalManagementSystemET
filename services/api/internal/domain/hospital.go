@@ -186,15 +186,35 @@ type Patient struct {
 	ID          string `json:"id"`
 	MRN         string `json:"mrn"`
 	PatientInput
-	CreatedAt time.Time `json:"createdAt"`
+	Email       string    `json:"email,omitempty"`
+	Gender      string    `json:"gender,omitempty"`
+	BloodGroup  string    `json:"bloodGroup,omitempty"`
+	FatherName  string    `json:"fatherName,omitempty"`
+	Active      bool      `json:"active"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 type PatientAccess struct {
 	UserID      string `json:"userId"`
 	ClinicianID string `json:"clinicianId"`
 }
 type Overview struct {
-	PatientCount    int `json:"patientCount"`
-	RegisteredToday int `json:"registeredToday"`
+	PatientCount         int   `json:"patientCount"`
+	RegisteredToday      int   `json:"registeredToday"`
+	InvoicesMinor        int64 `json:"invoicesMinor"`
+	BillsMinor           int64 `json:"billsMinor"`
+	PaymentsMinor        int64 `json:"paymentsMinor"`
+	AdvancePaymentsMinor int64 `json:"advancePaymentsMinor"`
+	TotalBeds            int   `json:"totalBeds"`
+	AvailableBeds        int   `json:"availableBeds"`
+	OccupiedBeds         int   `json:"occupiedBeds"`
+	Doctors              int   `json:"doctors"`
+	Patients             int   `json:"patients"`
+	Nurses               int   `json:"nurses"`
+	Admins               int   `json:"admins"`
+	Accountants          int   `json:"accountants"`
+	LabTechnicians       int   `json:"labTechnicians"`
+	Pharmacists          int   `json:"pharmacists"`
+	Receptionists        int   `json:"receptionists"`
 }
 type MessageInput struct {
 	Channel   string `json:"channel"`

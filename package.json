@@ -17,7 +17,8 @@
     "test:frontend": "node scripts/verify-frontend.mjs",
     "test:firebase": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --firebase",
     "test:recovery": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --recovery",
-    "test:invitations": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --invitations"
+    "test:invitations": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --invitations",
+    "test:operational": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --operational"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",

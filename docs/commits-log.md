@@ -404,5 +404,41 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
     - Allowed 3-segment subroute status transitions for `live-consultations/*/status` and `live-meetings/*/status`.
   - Verification: `npm run typecheck` passed (0 errors), all 5 unit test suites passed, Go backend tests passed.
 
+### 23. Commit `d48f6ca` — Database Schema Reconciliation, Enriched Projections & Operational Playwright Automation
+- **Message**: `feat: reconcile database schema projections and add end-to-end operational test suite`
+- **Branch**: `main`
+- **Scope & Features**:
+  - **Database Migration 047** (`db/migrations/047_bed_ward_enhancement.sql`):
+    - Added `ward_name text NOT NULL DEFAULT 'General Ward'` column and index to `hospital_bed` for multi-ward inpatient visualization.
+    - Added `patient_advance_payment` table with serial `receipt_number`, `amount_minor`, `payment_method`, and index for patient advance billing ledgers.
+  - **Realistic Ethiopian Operational Seed** (`db/seeds/001_operational_baseline.sql`):
+    - Created comprehensive seed data for local evaluation: 12 staff across all 9 roles, 6 doctors with hours and departments, 8 Ethiopian patients with complete demographic profiles, 12 hospital beds across 5 wards, 2 active IPD admissions, 3 invoices, 2 advance payments, shifts, attendance, and blood bank stock.
+  - **Go Backend Projections & Aggregations**:
+    - `services/api/internal/domain/hospital.go`: Enriched `Patient` with `Email`, `Gender`, `BloodGroup`, `FatherName`, `Active`. Enriched `Overview` with all 12 operational counters (`invoicesMinor`, `billsMinor`, `paymentsMinor`, `advancePaymentsMinor`, `totalBeds`, `availableBeds`, `occupiedBeds`, `doctors`, `patients`, `nurses`, `admins`, `accountants`, `labTechnicians`, `pharmacists`, `receptionists`).
+    - `services/api/internal/domain/scheduling.go`: Enriched `Doctor` with `Email`, `DepartmentID`, `Specialist`, `PhotoURL`, `OpdCharge`, and `AppointmentCharge`.
+    - `services/api/internal/domain/clinical.go`: Added `WardName` to `BedInput` and validation.
+    - `services/api/internal/adapters/postgres/store.go`: `Patients()` LEFT JOINs `patient_profile` to deliver full demographics; `Overview()` single-pass SQL aggregates all 12 counters.
+    - `services/api/internal/adapters/postgres/clinical.go`: `Beds()` selects `COALESCE(b.ward_name, 'General Ward')`; `CreateBed()` persists `ward_name`.
+    - `services/api/internal/adapters/postgres/scheduling.go`: `doctor()` query scans `u.email`, `department_id`, `description`, `photo_url`, `opd_charge`, `appointment_charge`.
+  - **Frontend Synchronization**:
+    - `apps/web/src/app/(hospital)/dashboard/page.tsx`: Connected to `/api/hms/overview` to populate all 12 widgets directly from PostgreSQL aggregations.
+    - `apps/web/src/components/bed-management-workspace.tsx`: Added `wardName` to `ApiBed`, dynamically groups beds by ward, added direct `New Bed` button to toolbar and exact accessible form inputs with `role="dialog"`.
+    - `apps/web/src/app/(hospital)/modules/[slug]/page.tsx`: Ensured correct routing for `schedules` -> `ConnectedSchedules`, `patient-cases` -> `ConnectedClinical mode="cases"`, `invoices`/`accounts` -> `ConnectedInvoices`/`ConnectedAccounts`.
+    - `apps/web/src/app/(hospital)/patients/page.tsx`: Restored `export { default } from "../live-patients/page"` for patient registration and directory while `/modules/patients` serves the 4-tab module workspace.
+  - **End-to-End Operational Playwright Automation**:
+    - Authored `scripts/verify-all-operational-workspaces.mjs` verifying all 15 operational modules with 100% pass rate.
+    - Added `--operational` mode to `scripts/verify-connected-isolated.mjs` and registered `"test:operational"` in `package.json`.
+  - **Verification**:
+    - `npm run test:operational` passed (0 errors, 15 operational workspaces verified).
+    - `npm run test:connected` passed (0 errors).
+    - `npm run test:integration` passed (0 errors).
+    - `npm run test:invitations` passed (0 errors).
+    - `npm run test:recovery` passed (0 errors).
+    - `npm run test:firebase` passed (0 errors).
+    - `npm run typecheck` passed (0 errors).
+    - `npm test` passed (5/5 suites).
+    - `go test ./...` passed (all packages).
+    - `npm run format:check` passed cleanly.
+
 
 

@@ -9,13 +9,18 @@ type BedInput struct {
 	TypeID      string `json:"typeId"`
 	Name        string `json:"name"`
 	Type        string `json:"type"`
+	WardName    string `json:"wardName,omitempty"`
 	ChargeMinor int64  `json:"chargeMinor"`
 }
 
 func (b *BedInput) Validate() error {
 	b.Name = strings.TrimSpace(b.Name)
 	b.Type = strings.TrimSpace(b.Type)
-	if len([]rune(b.Name)) < 1 || len([]rune(b.Name)) > 80 || (b.TypeID == "" && len([]rune(b.Type)) < 1) || (b.TypeID != "" && !UUIDPattern.MatchString(b.TypeID)) || len([]rune(b.Type)) > 80 || b.ChargeMinor < 0 || b.ChargeMinor > 1000000000 {
+	b.WardName = strings.TrimSpace(b.WardName)
+	if b.WardName == "" {
+		b.WardName = "General Ward"
+	}
+	if len([]rune(b.Name)) < 1 || len([]rune(b.Name)) > 80 || len([]rune(b.WardName)) > 80 || (b.TypeID == "" && len([]rune(b.Type)) < 1) || (b.TypeID != "" && !UUIDPattern.MatchString(b.TypeID)) || len([]rune(b.Type)) > 80 || b.ChargeMinor < 0 || b.ChargeMinor > 1000000000 {
 		return ErrValidation
 	}
 	return nil

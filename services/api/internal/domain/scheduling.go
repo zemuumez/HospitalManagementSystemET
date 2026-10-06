@@ -19,12 +19,18 @@ type DoctorHours struct {
 	EndMinute   int `json:"endMinute"`
 }
 type Doctor struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Department  string        `json:"department"`
-	SlotMinutes int           `json:"slotMinutes"`
-	Version     int           `json:"version"`
-	Hours       []DoctorHours `json:"hours"`
+	ID                string        `json:"id"`
+	Name              string        `json:"name"`
+	Email             string        `json:"email,omitempty"`
+	Department        string        `json:"department"`
+	DepartmentID      *string       `json:"departmentId,omitempty"`
+	Specialist        string        `json:"specialist,omitempty"`
+	PhotoURL          string        `json:"photoUrl,omitempty"`
+	OpdCharge         float64       `json:"opdCharge,omitempty"`
+	AppointmentCharge float64       `json:"appointmentCharge,omitempty"`
+	SlotMinutes       int           `json:"slotMinutes"`
+	Version           int           `json:"version"`
+	Hours             []DoctorHours `json:"hours"`
 }
 
 func (d *Doctor) Validate() error {
