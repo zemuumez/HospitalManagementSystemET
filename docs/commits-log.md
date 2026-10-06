@@ -25,8 +25,9 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 | [`9bf4476`](https://github.com/zemuumez/HospitalManagementSystemET/commit/9bf4476) | **Frontend/BedManagement** | Recreate Bed Management module with 4 tabs matching screenshots (Bed Status with 17 ward grids, Bed Assigns, Beds, Bed Types, New Bed Type modal) | N/A | Pushed (`main`) |
 | [`cda7d7e`](https://github.com/zemuumez/HospitalManagementSystemET/commit/cda7d7e) | **Frontend/Modules** | Workspaces for Prescriptions, Doctors (5 tabs, New Schedule, Breaks), Blood Bank (5 tabs, Donors, Reports), and Diagnosis (Categories, Tests) | N/A | Pushed (`main`) |
 | [`ab08aa7`](https://github.com/zemuumez/HospitalManagementSystemET/commit/ab08aa7) | **Section 4** | Connect Medicines, Billing, Services, Ambulances, and Pathology workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
-| [`62791ab`](#) | **Section 4** | Connect Blood Bank, Prescriptions, Doctors & Scheduling, and Attendance workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
-| [`ad114f2`](#) | **Section 4** | Connect Front Office (Call Logs, Visitors, Postals, Enquiries, Complaints) and General Inventory workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
+| [`62791ab`](https://github.com/zemuumez/HospitalManagementSystemET/commit/62791ab) | **Section 4** | Connect Blood Bank, Prescriptions, Doctors & Scheduling, and Attendance workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
+| [`ad114f2`](https://github.com/zemuumez/HospitalManagementSystemET/commit/ad114f2) | **Section 4** | Connect Front Office (Call Logs, Visitors, Postals, Enquiries, Complaints) and General Inventory workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
+| [`a6b9672`](https://github.com/zemuumez/HospitalManagementSystemET/commit/a6b9672) | **Section 4** | Connect Dashboard Metrics, Diagnostics, Telehealth (Live Consultations & Meetings), Reviews, and Role Workspaces to Go/PostgreSQL backend | N/A | Pushed (`main`) |
 
 ---
 
@@ -371,5 +372,37 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
     - Routed slugs `items`, `item-categories`, `item-stocks`, `issued-items` to `InventoryWorkspace`.
     - Registered all front-office and inventory paths in `isLive` list and group detection.
   - Verification: `npm run typecheck` passed (0 errors), all 5 unit test suites passed.
+
+### 22. Commit `a6b9672` — Section 4 Frontend Integration for Dashboard, Diagnostics, Telehealth & Roles
+- **Message**: `feat: connect dashboard metrics, diagnosis, telehealth, and role workspaces to postgres backend`
+- **Branch**: `main`
+- **Scope & Features**:
+  - Connected client workspaces through the Next.js API proxy (`/api/hms/...` -> `http://127.0.0.1:8080/v1/...`).
+  - **Live Dashboard Metrics** (`apps/web/src/app/(hospital)/dashboard/page.tsx`):
+    - Replaced hardcoded dashboard statistics with parallel live API queries (`/api/hms/patients`, `/api/hms/doctors`, `/api/hms/beds`, `/api/hms/invoices`, `/api/staff`, `/api/hms/notices`, `/api/hms/enquiries`).
+    - Dynamically computes available bed counts, total invoice turnover in currency units, staff breakdown by role (Admins, Nurses, Accountants, Lab Technicians, Pharmacists, Receptionists), active notices list, and live enquiries.
+  - **Diagnostics Workspace** (`apps/web/src/components/diagnosis-workspace.tsx`):
+    - Connected to `/api/hms/diagnostic-categories` and `/api/hms/diagnostic-tests`.
+    - Implemented asynchronous category creation with backend POST persistence and fallback state.
+    - Added live connection status badge and indicator banner.
+  - **Live Consultations & Telehealth Workspace** (`apps/web/src/components/live-consultation-workspace.tsx`):
+    - Connected to `/api/hms/live-consultations`, `/api/hms/live-meetings`, `/api/hms/doctors`, `/api/hms/patients`, and `/api/hms/live-consultations/provider-settings`.
+    - Dynamic remote option resolution for doctors (`doctorsList`) and patients (`patientsList` with MRN datalist).
+    - Asynchronous modal submission handlers: `handleCreateConsultation`, `handleCreateMeeting`, and `handleSaveCredentials` (Zoom API key/secret).
+    - Added live telehealth connection indicator banner and submission state indicators.
+  - **Reviews Workspace** (`apps/web/src/components/review-workspace.tsx`):
+    - Connected to `/api/hms/reviews` with live status indicator banner and remote review records loader.
+  - **Role-Based Staff Workspaces** (`apps/web/src/components/connected-scheduling.tsx`):
+    - Added `roleFilter` prop to `ConnectedUsers` component to filter staff lists by specific operational roles (`admins`, `receptionists`, `pharmacists`, `accountants`, `case-managers`, `lab-technicians`, `nurses`).
+  - **Operational Routing** (`apps/web/src/app/(hospital)/modules/[slug]/page.tsx` & `apps/web/src/components/workspace.tsx`):
+    - Routed finance ledger slugs (`expenses`, `incomes`, `expense-heads`, `income-heads`) to `BillingWorkspace`.
+    - Routed IPD and OPD sub-tabs (`ipd-diagnosis`, `ipd-consultant-registers`, `ipd-prescriptions`, `ipd-charges`, `ipd-payments`, `ipd-bills`, `ipd-timelines`, `opd-diagnosis`, `opd-timelines`) to `EncounterRegister`.
+    - Routed all staff role slugs to `ConnectedUsers`.
+    - Simplified `isLive` detection across all `/modules/*` and top-level paths.
+  - **Next.js Proxy** (`apps/web/src/app/api/hms/[...path]/route.ts`):
+    - Added `documents`, `document-types`, `smart-cards`, `addons`, `sms`, `mail`, `email-templates`, and `sms-templates` to `allowedRoot`.
+    - Allowed 3-segment subroute status transitions for `live-consultations/*/status` and `live-meetings/*/status`.
+  - Verification: `npm run typecheck` passed (0 errors), all 5 unit test suites passed, Go backend tests passed.
+
 
 

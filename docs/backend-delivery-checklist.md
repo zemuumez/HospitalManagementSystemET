@@ -631,9 +631,41 @@ Frontend client workspaces connected to the persistent Go/PostgreSQL backend ser
 - [x] **Pathology & Diagnostic Catalog (`apps/web/src/components/pathology-workspace.tsx`)**:
   - Connected to `/api/hms/diagnostic-categories?kind=pathology`, `/api/hms/diagnostic-units`, `/api/hms/diagnostic-tests`.
   - Modal creation for categories, units, tests, and parameters with async submit handlers, submission spinners, and live sync banner.
+- [x] **Blood Bank & Donor Register (`apps/web/src/components/blood-bank-workspace.tsx`)**:
+  - Connected to `/api/hms/blood-bank`, `/api/hms/blood-donors`, `/api/hms/blood-donations`, `/api/hms/blood-issues`, `/api/hms/patients`, `/api/hms/doctors`.
+  - Subtab switching across 5 views, live connection indicator banner, and persistent async handlers.
+- [x] **Prescriptions Workspace (`apps/web/src/components/prescriptions-workspace.tsx`)**:
+  - Connected to `/api/hms/prescriptions`, `/api/hms/patients`, `/api/hms/doctors`, `/api/hms/medicines`, `/api/hms/medicine-categories`, `/api/hms/medicine-brands`.
+  - Dynamic dose/frequency builder, status toggles, and inline medicine creation modal.
+- [x] **Doctors & Scheduling Workspace (`apps/web/src/components/doctors-workspace.tsx`)**:
+  - Connected to `/api/hms/doctors`, `/api/hms/doctor-departments`, and `/api/hms/doctor-absences`.
+  - Subtab switcher (Doctors, Departments, Schedules, Holidays, Breaks), persistent modals for doctors and holidays.
+- [x] **Attendance Workspace (`apps/web/src/components/attendance-workspace.tsx`)**:
+  - Connected to `/api/hms/attendance/shifts` and `/api/hms/attendance/assignments`.
+  - Shift creation with integer minute conversion and live sync banner.
+- [x] **Front Office Workspace (`apps/web/src/components/front-office-workspace.tsx`)**:
+  - Connected to `/api/hms/call-logs`, `/api/hms/visitors`, `/api/hms/postals`, `/api/hms/enquiries`, and `/api/hms/complaints`.
+  - 5 operational views with interactive modals and complaint resolution workflow.
+- [x] **General Inventory Workspace (`apps/web/src/components/inventory-workspace.tsx`)**:
+  - Connected to `/api/hms/inventory/items`, `/api/hms/inventory/categories`, and `/api/hms/inventory/movements`.
+  - Real-time stock balance, low-stock alerts, integer milli conversions, and departmental issuance.
+- [x] **Dashboard Live Statistics (`apps/web/src/app/(hospital)/dashboard/page.tsx`)**:
+  - Connected to `/api/hms/patients`, `/api/hms/doctors`, `/api/hms/beds`, `/api/hms/invoices`, `/api/staff`, `/api/hms/notices`, `/api/hms/enquiries`.
+  - Dynamic widgets, role breakdown counters, live notices, and active enquiries.
+- [x] **Laboratory & Diagnostics Workspace (`apps/web/src/components/diagnosis-workspace.tsx`)**:
+  - Connected to `/api/hms/diagnostic-categories` and `/api/hms/diagnostic-tests` with async category creation.
+- [x] **Telehealth & Live Consultations / Meetings (`apps/web/src/components/live-consultation-workspace.tsx`)**:
+  - Connected to `/api/hms/live-consultations`, `/api/hms/live-meetings`, `/api/hms/doctors`, `/api/hms/patients`, and `/api/hms/live-consultations/provider-settings`.
+  - Async consultation and meeting creation modals with remote doctor/patient dropdowns.
+- [x] **Reviews Workspace (`apps/web/src/components/review-workspace.tsx`)**:
+  - Connected to `/api/hms/reviews` with live indicator banner.
+- [x] **Role-Based Staff Workspaces (`apps/web/src/components/connected-scheduling.tsx`)**:
+  - Role-filtered user management (`admins`, `receptionists`, `pharmacists`, `accountants`, `case-managers`, `lab-technicians`, `nurses`).
 - [x] **Workspace Navigation & Live Routes Register (`apps/web/src/components/workspace.tsx`)**:
-  - Registered all connected operational module routes in `isLive` array for active live header status and breadcrumb routing.
+  - Dynamic `isLive` route matching across all `/modules/*` and top-level clinical views.
 - [x] **Verification**:
   - Zero TypeScript errors (`npm run typecheck` PASS).
   - All unit/regression tests passed including Amharic label translations (`npm test` PASS).
+  - Go backend test suite passed (`go test ./...` PASS).
+
 
