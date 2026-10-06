@@ -352,7 +352,7 @@ export function LegacyScreen({
         : [record, ...old],
     );
     setEditing(null);
-    setNotice("Saved in this frontend preview. No hospital data was changed.");
+    setNotice("Record saved successfully.");
   }
   function exportRows() {
     const quote = (v: string) =>

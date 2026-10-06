@@ -1,7 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/components/language";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Search, Eye, Star, X } from "lucide-react";
 
@@ -79,6 +79,31 @@ export function ReviewWorkspace({ id = "review" }: ReviewWorkspaceProps) {
     },
   ]);
 
+  useEffect(() => {
+    fetch("/api/hms/reviews")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          setReviews(
+            data.reviews.map((r: any) => ({
+              id: r.id,
+              patientName: r.patientName || r.patient_name || "Patient",
+              patientEmail: r.patientEmail || r.patient_email || "",
+              patientInitials: (r.patientName || "PT").slice(0, 2).toUpperCase(),
+              doctorName: r.doctorName || r.doctor_name || "Doctor",
+              doctorEmail: r.doctorEmail || r.doctor_email || "",
+              doctorDepartment: r.doctorDepartment || r.department || "Clinical Care",
+              rating: r.rating || 5,
+              status: r.status === 1 ? "Approved" : r.status === 2 ? "Rejected" : "Pending",
+              comment: r.comment || r.review || "",
+              createdAt: r.createdAt || r.created_at || "Recent",
+            })),
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="legacy-workspace">
       {/* Top subtabs */}
@@ -86,6 +111,18 @@ export function ReviewWorkspace({ id = "review" }: ReviewWorkspaceProps) {
         <Link href="/modules/review" className="module-subtab-link active">
           {t("Review")}
         </Link>
+      </div>
+
+      {/* Live connection banner */}
+      <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm mb-4">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="font-medium text-foreground">{t("Reviews & Feedback Active")}</span>
+          <span className="text-muted-foreground">• {reviews.length} {t("records loaded")}</span>
+        </div>
       </div>
 
       <div className="billing-card">

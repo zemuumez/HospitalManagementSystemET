@@ -198,9 +198,15 @@ export function Input({
   );
 }
 
-export function ConnectedUsers() {
+export function ConnectedUsers({ roleFilter }: { roleFilter?: string } = {}) {
   const { t } = useLanguage(),
     identity = useIdentity();
+  const normalizedRole = roleFilter
+    ? roleFilter.replace(/s$/, "").replaceAll("-", "_")
+    : "";
+  const roleTitle = roleFilter
+    ? roleFilter.replaceAll("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Users";
   const [page, setPage] = useState(1),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
@@ -208,11 +214,20 @@ export function ConnectedUsers() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const load = useCallback(
-    () =>
-      staffRequest<{ users: Staff[] }>(
+    async () => {
+      const res = await staffRequest<{ users: Staff[] }>(
         `?page=${page}&search=${encodeURIComponent(query)}`,
-      ),
-    [page, query],
+      );
+      if (normalizedRole) {
+        return {
+          users: res.users.filter(
+            (u) => u.role.toLowerCase() === normalizedRole.toLowerCase(),
+          ),
+        };
+      }
+      return res;
+    },
+    [page, query, normalizedRole],
   );
   const resource = useResource(load);
   async function create(e: React.FormEvent<HTMLFormElement>) {
@@ -250,7 +265,7 @@ export function ConnectedUsers() {
   return (
     <>
       <div className="page-heading">
-        <h1>{t("Users")}</h1>
+        <h1>{t(roleTitle)}</h1>
         {identity?.permissions.includes("staff.manage") && (
           <button
             className="primary"

@@ -117,6 +117,10 @@ export default async function ModulePage({
       "accounts",
       "employee-payrolls",
       "bills",
+      "expenses",
+      "incomes",
+      "expense-heads",
+      "income-heads",
     ].includes(slug)
   )
     return <BillingWorkspace key={slug} id={slug} />;
@@ -151,11 +155,45 @@ export default async function ModulePage({
   if (!screen) notFound();
   if (slug === "odontogram") return <OdontogramRegister />;
   if (slug === "patient-cases") return <ConnectedClinical mode="cases" />;
-  if (slug === "ipd-patient-departments")
-    return <EncounterRegister kind="ipd" />;
-  if (slug === "opd-patient-departments")
-    return <EncounterRegister kind="opd" />;
-  if (slug === "users") return <ConnectedUsers />;
+  if (
+    [
+      "ipd-patient-departments",
+      "ipd-diagnosis",
+      "ipd-consultant-registers",
+      "ipd-prescriptions",
+      "ipd-charges",
+      "ipd-payments",
+      "ipd-bills",
+      "ipd-timelines",
+    ].includes(slug)
+  )
+    return <EncounterRegister key={slug} kind="ipd" />;
+  if (
+    [
+      "opd-patient-departments",
+      "opd-diagnosis",
+      "opd-timelines",
+    ].includes(slug)
+  )
+    return <EncounterRegister key={slug} kind="opd" />;
+  if (
+    [
+      "users",
+      "admins",
+      "receptionists",
+      "pharmacists",
+      "accountants",
+      "case-managers",
+      "lab-technicians",
+      "nurses",
+    ].includes(slug)
+  )
+    return (
+      <ConnectedUsers
+        key={slug}
+        roleFilter={slug === "users" ? undefined : slug}
+      />
+    );
   if (slug === "appointments") return <ConnectedAppointments />;
   if (
     [

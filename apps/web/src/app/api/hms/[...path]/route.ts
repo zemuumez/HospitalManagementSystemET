@@ -88,6 +88,14 @@ const allowedRoot = new Set([
   "vaccines",
   "vital-reports",
   "patient-queues",
+  "documents",
+  "document-types",
+  "smart-cards",
+  "addons",
+  "sms",
+  "mail",
+  "email-templates",
+  "sms-templates",
 ]);
 
 function isAllowedPath(path: string[]): boolean {
@@ -159,7 +167,12 @@ function isAllowedPath(path: string[]): boolean {
     if (path[0] === "medication-orders" && path[2] === "cancel") {
       return true;
     }
-    if (path[0] === "prescriptions" && path[2] === "status") {
+    if (
+      (path[0] === "prescriptions" ||
+        path[0] === "live-consultations" ||
+        path[0] === "live-meetings") &&
+      path[2] === "status"
+    ) {
       return true;
     }
     if (
