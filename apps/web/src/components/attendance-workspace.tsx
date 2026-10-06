@@ -21,6 +21,7 @@ import {
 import { useLanguage } from "./language";
 import { Modal } from "./modal";
 import { people } from "@/lib/legacy";
+import { shiftRow, saveAttendanceShift } from "@/lib/attendance-shifts";
 type Row = { id: string; [key: string]: string };
 type Field = {
   key: string;
@@ -31,16 +32,12 @@ type Field = {
 };
 const shiftFields: Field[] = [
   { key: "name", label: "Name", required: true },
-  { key: "code", label: "Code", required: true },
   { key: "start", label: "Start Time", type: "time", required: true },
   { key: "end", label: "End Time", type: "time", required: true },
   { key: "grace", label: "Grace Minutes", type: "number" },
   { key: "break", label: "Break Minutes", type: "number" },
-  {
-    key: "default",
-    label: "Is Default",
-    options: ["Not Default", "Is Default"],
-  },
+  { key: "halfDay", label: "Half Day Minutes", type: "number", required: true },
+  { key: "fullDay", label: "Full Day Minutes", type: "number", required: true },
   { key: "status", label: "Status", options: ["Active", "Inactive"] },
 ];
 const staff: Field = {
@@ -314,8 +311,11 @@ export function AttendanceWorkspace({ id }: { id: string }) {
     },
   ];
 
-  const [data, setData] = useState(initial),
-    [ready, setReady] = useState(false),
+  const [data, setData] = useState<Record<string, Row[]>>({
+      ...initial,
+      "attendance-shifts": [] as Row[],
+      "attendance-assignments": [] as Row[],
+    }),
     [search, setSearch] = useState(""),
     [filters, setFilters] = useState(false),
     [status, setStatus] = useState("All"),
@@ -331,10 +331,11 @@ export function AttendanceWorkspace({ id }: { id: string }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const loadAttendanceData = useCallback(async () => {
     setIsSyncing(true);
-    let connected = false;
+    setApiErrorBanner("");
     try {
       const [shiftsRes, assignRes] = await Promise.all([
         fetch("/api/hms/attendance/shifts").catch(() => null),
@@ -344,36 +345,19 @@ export function AttendanceWorkspace({ id }: { id: string }) {
       if (shiftsRes && shiftsRes.ok) {
         const d = await shiftsRes.json();
         const raw = Array.isArray(d) ? d : d.shifts || [];
-        if (raw.length > 0) {
-          const mappedShifts: Row[] = raw.map((s: any) => ({
-            id: s.id,
-            name: s.name,
-            code:
-              s.name
-                .split(" ")
-                .map((w: string) => w[0])
-                .join("")
-                .toUpperCase() || "SH",
-            start: (s.startTime || "08:00:00").slice(0, 5),
-            end: (s.endTime || "17:00:00").slice(0, 5),
-            grace: String(s.gracePeriodMinutes ?? 10),
-            break: String(s.breakDurationMinutes ?? 45),
-            default: s.active ? "Is Default" : "Not Default",
-            status: s.active ? "Active" : "Inactive",
-            staffCount: "0",
-          }));
+        if (Array.isArray(raw)) {
+          const mappedShifts: Row[] = raw.map(shiftRow);
           setData((prev) => ({
             ...prev,
             "attendance-shifts": mappedShifts,
           }));
-          connected = true;
         }
       }
 
       if (assignRes && assignRes.ok) {
         const d = await assignRes.json();
         const raw = Array.isArray(d) ? d : d.assignments || [];
-        if (raw.length > 0) {
+        if (Array.isArray(raw)) {
           const mappedAssigns: Row[] = raw.map((a: any) => ({
             id: a.id,
             staff: a.staffName || a.staffId || "Staff Member",
@@ -387,13 +371,18 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             ...prev,
             "attendance-assignments": mappedAssigns,
           }));
-          connected = true;
         }
       }
 
+      const connected = Boolean(shiftsRes?.ok && assignRes?.ok);
       setApiConnected(connected);
+      if (!connected)
+        setApiErrorBanner(
+          "Some attendance data could not be loaded. Retry before making changes.",
+        );
     } catch {
       setApiConnected(false);
+      setApiErrorBanner("Attendance data could not be loaded. Please retry.");
     } finally {
       setIsSyncing(false);
     }
@@ -403,23 +392,6 @@ export function AttendanceWorkspace({ id }: { id: string }) {
     loadAttendanceData();
   }, [loadAttendanceData]);
 
-  useEffect(() => {
-    try {
-      setData(
-        JSON.parse(
-          sessionStorage.getItem("hms-attendance-workspace-preview") || "null",
-        ) || initial,
-      );
-    } catch {}
-    setReady(true);
-  }, []);
-  useEffect(() => {
-    if (ready)
-      sessionStorage.setItem(
-        "hms-attendance-workspace-preview",
-        JSON.stringify(data),
-      );
-  }, [data, ready]);
   const source = id === "attendance-report" ? "manage-attendance" : id;
   const config = configs[id];
   const shifts = data["attendance-shifts"] || [];
@@ -506,6 +478,13 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                     id === "attendance-assignments" ? (
                       <button
                         aria-label={`Delete ${row.name || row.staff}`}
+                        disabled={
+                          id === "attendance-shifts" ||
+                          id === "attendance-assignments"
+                        }
+                        title={t(
+                          "Deletion is not connected yet. No hospital record will be removed.",
+                        )}
                         onClick={() => {
                           if (window.confirm(t("Delete this record?")))
                             setData({
@@ -578,6 +557,11 @@ export function AttendanceWorkspace({ id }: { id: string }) {
   if (id === "attendance")
     return (
       <section>
+        {apiErrorBanner && (
+          <p className="error" role="alert">
+            {t(apiErrorBanner)}
+          </p>
+        )}
         {/* Subtabs Navigation */}
         <div className="module-subtabs-nav" style={{ marginBottom: "20px" }}>
           {attendanceTabs.map((tab) => {
@@ -623,8 +607,12 @@ export function AttendanceWorkspace({ id }: { id: string }) {
               }}
             >
               {apiConnected
-                ? t("Connected to PostgreSQL Backend (/v1/attendance)")
-                : t("Local Clinical Preview Mode (Attendance Ready)")}
+                ? t(
+                    "Shifts and assignments loaded. Other attendance screens remain previews.",
+                  )
+                : t(
+                    "Attendance data unavailable. Preview actions are not saved to the hospital.",
+                  )}
             </span>
             <span style={{ color: "#94a3b8" }}>•</span>
             <span style={{ color: "#cbd5e1" }}>
@@ -798,6 +786,11 @@ export function AttendanceWorkspace({ id }: { id: string }) {
     );
   return (
     <section>
+      {apiErrorBanner && (
+        <p className="error" role="alert">
+          {t(apiErrorBanner)}
+        </p>
+      )}
       {/* Subtabs Navigation */}
       <div className="module-subtabs-nav" style={{ marginBottom: "20px" }}>
         {attendanceTabs.map((tab) => {
@@ -843,8 +836,12 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             }}
           >
             {apiConnected
-              ? t("Connected to PostgreSQL Backend (/v1/attendance)")
-              : t("Local Clinical Preview Mode (Attendance Ready)")}
+              ? t(
+                  "Shifts and assignments loaded. Other attendance screens remain previews.",
+                )
+              : t(
+                  "Attendance data unavailable. Preview actions are not saved to the hospital.",
+                )}
           </span>
           <span style={{ color: "#94a3b8" }}>•</span>
           <span style={{ color: "#cbd5e1" }}>
@@ -945,6 +942,8 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                   default: "Not Default",
                   grace: "10",
                   break: "45",
+                  halfDay: "240",
+                  fullDay: "480",
                 });
               }}
             >
@@ -1065,8 +1064,15 @@ export function AttendanceWorkspace({ id }: { id: string }) {
             className="p-6"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (saving) return;
               if (editing.to && editing.from && editing.to < editing.from) {
                 setError("End date must be on or after the start date.");
+                return;
+              }
+              if (id === "attendance-assignments") {
+                setError(
+                  "Duty assignment saving is not connected yet. No hospital record was changed.",
+                );
                 return;
               }
               let row = { ...editing };
@@ -1080,33 +1086,27 @@ export function AttendanceWorkspace({ id }: { id: string }) {
               }
 
               if (id === "attendance-shifts") {
+                setSaving(true);
                 try {
-                  const startTime =
-                    (row.start || "08:00") +
-                    (row.start.split(":").length === 2 ? ":00" : "");
-                  const endTime =
-                    (row.end || "17:00") +
-                    (row.end.split(":").length === 2 ? ":00" : "");
-                  const res = await fetch("/api/hms/attendance/shifts", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      name: row.name,
-                      startTime,
-                      endTime,
-                      gracePeriodMinutes: Number(row.grace || 10),
-                      breakDurationMinutes: Number(row.break || 45),
-                      active: row.status !== "Inactive",
-                    }),
-                  });
-                  if (res.ok) {
-                    setApiSuccessBanner(
-                      t("Shift saved and committed to database!"),
-                    );
-                  }
-                } catch {
-                  // preview fallback
+                  const saved = await saveAttendanceShift(row);
+                  setData((old) => ({
+                    ...old,
+                    [source]: row.version
+                      ? old[source].map((r) => (r.id === row.id ? saved : r))
+                      : [saved, ...old[source]],
+                  }));
+                  setApiSuccessBanner(t("Shift saved."));
+                  setEditing(null);
+                } catch (failure) {
+                  setError(
+                    failure instanceof Error
+                      ? failure.message
+                      : "Shift was not saved. Please retry.",
+                  );
+                } finally {
+                  setSaving(false);
                 }
+                return;
               }
 
               setData((old) => ({
@@ -1189,7 +1189,9 @@ export function AttendanceWorkspace({ id }: { id: string }) {
               ))}
             </div>
             <footer className="modal-footer">
-              <button className="primary">{t("Save")}</button>
+              <button className="primary" disabled={saving}>
+                {t(saving ? "Saving..." : "Save")}
+              </button>
               <button
                 type="button"
                 className="secondary"

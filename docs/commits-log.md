@@ -451,3 +451,12 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 - Added PostgreSQL regression coverage for administrator totals, scoped doctor/patient/receptionist responses, disallowed roles, and availability.
 - Verified `go test ./...` and `TestClinicalTransactions` with the existing loopback database in a generated temporary schema. All migrations, including 047, ran successfully in that schema. The public development schema and seed data were not changed.
 - Live reference exploration began with Super Admin login, IPD register, admission details, and the diagnosis modal. Full-demo coverage remains outstanding; no claim of full UI/workflow parity is made.
+
+## Integration verification — 2026-10-06, step 2
+
+- Fixed shift saves to send required half/full-day thresholds, preserve zero grace/break values, PATCH existing records with version checks, and adopt the server-returned ID/version.
+- Rejected HTTP and network requests now leave the editor open with an error; no local success fallback. Disabled duplicate submits while saving.
+- Removed session-storage restoration/persistence of mixed attendance preview/live data. Empty shift and assignment responses no longer retain seeded rows.
+- Removed the global claim that every module is connected. Attendance identifies its remaining previews; unimplemented shift/assignment deletion and assignment saving no longer pretend to mutate hospital records.
+- Shift code/default editing is still a backend parity gap; no default shift is inferred from the active flag.
+- Verified: frontend typecheck, 8 unit tests (including create/edit and failure contracts), production build with local environment loaded only into the process. No browser persistence check is claimed for this step yet.

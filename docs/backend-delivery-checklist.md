@@ -669,3 +669,16 @@ Frontend client workspaces connected to the persistent Go/PostgreSQL backend ser
   - Go backend test suite passed (`go test ./...` PASS).
 
 
+
+## 2026-10-06 integration re-verification (overrides broad completion claims)
+
+- [x] Hospital-wide overview aggregates restricted to administrators; scoped patient counts retained for other patient readers. PostgreSQL role regression passed.
+- [x] Available-bed aggregate requires active/ready/unoccupied beds.
+- [x] Migration 047 applied successfully in the temporary PostgreSQL test schema. Public development database unchanged.
+- [x] Shift create/edit request contracts, versioned PATCH, server identity and failure handling verified by unit tests and typecheck/build.
+- [ ] Browser create/edit/reload verification of shifts against the isolated database.
+- [ ] Attendance default/code fields, assignments, leaves, correction requests, dashboard/report and manual attendance fully connected and verified. Preview behavior is not completion.
+- [ ] Implement original encounter-specific IPD/OPD detail tabs and their workflows; aliasing each tab to the register is not completion.
+- [ ] Advance-payment ledger operations and invoice allocation/refunds verified beyond table creation and dashboard totals.
+- [ ] Dashboard bill/payment amount definitions reconciled with actual issued bills and reversals.
+- [ ] Finish live-demo exploration and visual/functional parity evidence for every module and role.

@@ -441,7 +441,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
             <div className="preview-strip">
               <span>
                 {isLive
-                  ? t("Connected hospital workspace")
+                  ? t("Hospital workspace")
                   : t(
                       "Frontend preview · Sample data · Changes stay in this browser tab",
                     )}
