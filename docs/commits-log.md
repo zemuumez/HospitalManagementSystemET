@@ -481,3 +481,10 @@ Commit: `03feb14` — shift identity, unique codes, single default constraint an
 - Added reproducible extractor, complete schema/dictionary, FK list, per-table PostgreSQL candidate mapping, field contract register and detailed schema parity plan under `docs/legacy-schema/`.
 - Documented confirmed semantic gaps: chart-level odontogram history, card-template master, package/insurance catalogs, IPD/OPD child records, distinct finance documents, pharmacy purchase documents and supporting catalogs/integrations.
 - Validated table-map coverage, target table existence, source column line references, FK endpoint columns, absence of row DML in exported schema and reproducible extraction. Existing application code and databases were not modified; no frontend/backend completion boxes were checked.
+
+## Module audit — 2026-10-06, source evidence
+
+- Added reproducible ZIP action/guard/workflow index: 855 route declarations, 463 classes and 2,218 methods, with original model validation/state declarations.
+- Indexed current Go authorization/test entry points and 38 frontend files, including local persistence and API failure signals. Static extraction is a navigation aid, not full semantic/runtime verification.
+- Added module-family acceptance obligations and the current named-role policy register. Identified CMS permission-advertising omissions and duplicate message permission advertising.
+- Regenerated the source indexes successfully and checked staged whitespace. No application code, schema or external credentials changed.

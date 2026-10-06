@@ -1,0 +1,327 @@
+{
+  "limitation": "Static Can switch extraction; row ownership, direct Role checks and effective HTTP authorization remain separate.",
+  "permission_roles": {
+    "diagnostics.catalog": [
+      "admin",
+      "doctor",
+      "lab_technician"
+    ],
+    "diagnostics.read": [
+      "admin",
+      "doctor",
+      "lab_technician",
+      "patient"
+    ],
+    "pharmacy.catalog": [
+      "admin",
+      "pharmacist",
+      "doctor"
+    ],
+    "pharmacy.manage": [
+      "admin",
+      "pharmacist"
+    ],
+    "medication.read": [
+      "admin",
+      "pharmacist",
+      "doctor",
+      "patient"
+    ],
+    "billing.read": [
+      "admin",
+      "accountant",
+      "patient"
+    ],
+    "billing.manage": [
+      "admin",
+      "accountant"
+    ],
+    "finance.read": [
+      "admin",
+      "accountant"
+    ],
+    "finance.manage": [
+      "admin",
+      "accountant"
+    ],
+    "payroll.read": [
+      "admin",
+      "accountant"
+    ],
+    "payroll.manage": [
+      "admin",
+      "accountant"
+    ],
+    "payroll.read_own": [
+      "admin",
+      "doctor",
+      "nurse",
+      "receptionist",
+      "pharmacist",
+      "accountant",
+      "case_manager",
+      "lab_technician"
+    ],
+    "beds.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "nurse"
+    ],
+    "clinical.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "patient"
+    ],
+    "clinical.admit": [
+      "admin",
+      "receptionist",
+      "doctor"
+    ],
+    "attendance.clock": [
+      "admin",
+      "doctor",
+      "nurse",
+      "receptionist",
+      "pharmacist",
+      "accountant",
+      "case_manager",
+      "lab_technician"
+    ],
+    "attendance.read_own": [
+      "admin",
+      "doctor",
+      "nurse",
+      "receptionist",
+      "pharmacist",
+      "accountant",
+      "case_manager",
+      "lab_technician"
+    ],
+    "attendance.manage": [
+      "admin"
+    ],
+    "ambulance.manage": [
+      "admin",
+      "case_manager",
+      "receptionist"
+    ],
+    "ambulance_call.manage": [
+      "admin",
+      "case_manager",
+      "receptionist"
+    ],
+    "ambulance.read": [
+      "admin",
+      "case_manager",
+      "receptionist",
+      "doctor",
+      "nurse"
+    ],
+    "ambulance_call.read": [
+      "admin",
+      "case_manager",
+      "receptionist",
+      "doctor",
+      "nurse",
+      "accountant",
+      "patient"
+    ],
+    "services.manage": [
+      "admin",
+      "accountant"
+    ],
+    "services.read": [
+      "admin",
+      "accountant",
+      "doctor",
+      "nurse",
+      "receptionist"
+    ],
+    "operations.manage": [
+      "admin",
+      "doctor"
+    ],
+    "operations.read": [
+      "admin",
+      "doctor",
+      "nurse",
+      "receptionist"
+    ],
+    "settings.manage": [
+      "admin"
+    ],
+    "settings.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "nurse",
+      "pharmacist",
+      "accountant",
+      "case_manager",
+      "lab_technician"
+    ],
+    "cms.manage": [
+      "admin"
+    ],
+    "cms.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "nurse",
+      "pharmacist",
+      "accountant",
+      "case_manager",
+      "lab_technician",
+      "patient"
+    ],
+    "front_office.manage": [
+      "admin",
+      "receptionist"
+    ],
+    "front_office.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "nurse",
+      "case_manager",
+      "accountant"
+    ],
+    "complaints.manage": [
+      "admin",
+      "receptionist",
+      "case_manager"
+    ],
+    "complaints.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "nurse",
+      "case_manager",
+      "patient"
+    ],
+    "complaints.create": [
+      "admin",
+      "receptionist",
+      "patient"
+    ],
+    "notices.manage": [
+      "admin"
+    ],
+    "notices.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "nurse",
+      "pharmacist",
+      "accountant",
+      "case_manager",
+      "lab_technician",
+      "patient"
+    ],
+    "live_consultations.manage": [
+      "admin",
+      "doctor"
+    ],
+    "live_consultations.read": [
+      "admin",
+      "doctor",
+      "nurse",
+      "patient"
+    ],
+    "live_meetings.manage": [
+      "admin",
+      "doctor"
+    ],
+    "live_meetings.read": [
+      "admin",
+      "doctor",
+      "nurse",
+      "pharmacist",
+      "receptionist",
+      "accountant",
+      "case_manager",
+      "lab_technician"
+    ],
+    "blood_bank.manage": [
+      "admin",
+      "lab_technician",
+      "doctor"
+    ],
+    "blood_bank.read": [
+      "admin",
+      "doctor",
+      "nurse",
+      "lab_technician",
+      "pharmacist",
+      "receptionist",
+      "patient"
+    ],
+    "prescriptions.manage": [
+      "admin",
+      "doctor"
+    ],
+    "prescriptions.read": [
+      "admin",
+      "doctor",
+      "nurse",
+      "pharmacist",
+      "patient"
+    ],
+    "appointments.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "patient"
+    ],
+    "appointments.book": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "patient"
+    ],
+    "staff.manage": [
+      "admin"
+    ],
+    "patients.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "patient"
+    ],
+    "patients.create": [
+      "admin",
+      "receptionist"
+    ],
+    "messages.manage": [
+      "admin",
+      "receptionist"
+    ],
+    "enquiries.manage": [
+      "admin",
+      "receptionist"
+    ],
+    "enquiries.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "nurse",
+      "case_manager"
+    ],
+    "scheduling.manage": [
+      "admin",
+      "doctor"
+    ],
+    "doctor_dept.manage": [
+      "admin"
+    ]
+  },
+  "not_advertised": [
+    "cms.manage",
+    "cms.read"
+  ],
+  "duplicate_advertisements": [
+    "messages.manage"
+  ]
+}
