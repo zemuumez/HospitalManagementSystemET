@@ -12,6 +12,7 @@ import {
   readdirSync,
   readFileSync,
   writeFileSync,
+  rmSync,
 } from "node:fs";
 import { resolve } from "node:path";
 import { createServer } from "node:net";
@@ -320,6 +321,12 @@ try {
     }
   }
   for (const fd of logs) closeSync(fd);
+  try {
+    rmSync(resolve(root, `.local/qa-${token}`), {
+      recursive: true,
+      force: true,
+    });
+  } catch {}
   await isolated?.end();
   if (created && /^hms_browser_[a-f0-9]{24}$/.test(schema))
     await admin.query(`DROP SCHEMA ${schema} CASCADE`);
