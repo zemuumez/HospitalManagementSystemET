@@ -8,6 +8,9 @@ import (
 )
 
 type Shift struct {
+	StaffCount           int       `json:"staffCount"`
+	Code                 string    `json:"code"`
+	IsDefault            bool      `json:"isDefault"`
 	ID                   string    `json:"id"`
 	Name                 string    `json:"name"`
 	StartTime            string    `json:"startTime"`
@@ -24,6 +27,8 @@ type Shift struct {
 }
 
 type ShiftInput struct {
+	Code                 string `json:"code"`
+	IsDefault            bool   `json:"isDefault"`
 	Name                 string `json:"name"`
 	StartTime            string `json:"startTime"`
 	EndTime              string `json:"endTime"`
@@ -51,6 +56,15 @@ func parseTimeOfDay(s string) (int, int, error) {
 }
 
 func (s *ShiftInput) Validate() error {
+	s.Code = strings.ToUpper(strings.TrimSpace(s.Code))
+	if len(s.Code) > 32 || (s.IsDefault && !s.Active) {
+		return ErrValidation
+	}
+	for i, c := range s.Code {
+		if !(c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || i > 0 && (c == '_' || c == '-')) {
+			return ErrValidation
+		}
+	}
 	s.Name = strings.TrimSpace(s.Name)
 	if len([]rune(s.Name)) < 1 || len([]rune(s.Name)) > 100 {
 		return ErrValidation
@@ -82,14 +96,14 @@ func (s *ShiftInput) Validate() error {
 }
 
 type ShiftAssignment struct {
-	ID            string     `json:"id"`
-	StaffID       string     `json:"staffId"`
-	StaffName     string     `json:"staffName"`
-	ShiftID       string     `json:"shiftId"`
-	ShiftName     string     `json:"shiftName"`
-	EffectiveFrom string     `json:"effectiveFrom"`
-	EffectiveTo   *string    `json:"effectiveTo"`
-	CreatedAt     time.Time  `json:"createdAt"`
+	ID            string    `json:"id"`
+	StaffID       string    `json:"staffId"`
+	StaffName     string    `json:"staffName"`
+	ShiftID       string    `json:"shiftId"`
+	ShiftName     string    `json:"shiftName"`
+	EffectiveFrom string    `json:"effectiveFrom"`
+	EffectiveTo   *string   `json:"effectiveTo"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 type ShiftAssignmentInput struct {
@@ -131,38 +145,38 @@ type BreakRecord struct {
 }
 
 type AttendanceRecord struct {
-	ID                 string        `json:"id"`
-	StaffID            string        `json:"staffId"`
-	StaffName          string        `json:"staffName"`
-	WorkDate           string        `json:"workDate"`
-	ShiftID            string        `json:"shiftId"`
-	ShiftName          string        `json:"shiftName"`
-	CheckInAt          time.Time     `json:"checkInAt"`
-	CheckOutAt         *time.Time    `json:"checkOutAt"`
-	Status             string        `json:"status"`
-	ApprovalStatus     string        `json:"approvalStatus"`
-	TotalBreakMinutes  int           `json:"totalBreakMinutes"`
-	WorkedMinutes      int           `json:"workedMinutes"`
-	LateMinutes        int           `json:"lateMinutes"`
-	EarlyOutMinutes    int           `json:"earlyOutMinutes"`
-	OvertimeMinutes    int           `json:"overtimeMinutes"`
-	Source             string        `json:"source"`
-	AdminNotes         string        `json:"adminNotes"`
-	Breaks             []BreakRecord `json:"breaks"`
-	Version            int           `json:"version"`
-	CreatedAt          time.Time     `json:"createdAt"`
-	UpdatedAt          time.Time     `json:"updatedAt"`
+	ID                string        `json:"id"`
+	StaffID           string        `json:"staffId"`
+	StaffName         string        `json:"staffName"`
+	WorkDate          string        `json:"workDate"`
+	ShiftID           string        `json:"shiftId"`
+	ShiftName         string        `json:"shiftName"`
+	CheckInAt         time.Time     `json:"checkInAt"`
+	CheckOutAt        *time.Time    `json:"checkOutAt"`
+	Status            string        `json:"status"`
+	ApprovalStatus    string        `json:"approvalStatus"`
+	TotalBreakMinutes int           `json:"totalBreakMinutes"`
+	WorkedMinutes     int           `json:"workedMinutes"`
+	LateMinutes       int           `json:"lateMinutes"`
+	EarlyOutMinutes   int           `json:"earlyOutMinutes"`
+	OvertimeMinutes   int           `json:"overtimeMinutes"`
+	Source            string        `json:"source"`
+	AdminNotes        string        `json:"adminNotes"`
+	Breaks            []BreakRecord `json:"breaks"`
+	Version           int           `json:"version"`
+	CreatedAt         time.Time     `json:"createdAt"`
+	UpdatedAt         time.Time     `json:"updatedAt"`
 }
 
 type AttendanceCorrection struct {
-	ID                 string                 `json:"id"`
-	AttendanceRecordID string                 `json:"attendanceRecordId"`
-	ActorID            string                 `json:"actorId"`
-	ActorName          string                 `json:"actorName"`
-	Reason             string                 `json:"reason"`
-	BeforeSnapshot     map[string]any         `json:"beforeSnapshot"`
-	AfterSnapshot      map[string]any         `json:"afterSnapshot"`
-	CreatedAt          time.Time              `json:"createdAt"`
+	ID                 string         `json:"id"`
+	AttendanceRecordID string         `json:"attendanceRecordId"`
+	ActorID            string         `json:"actorId"`
+	ActorName          string         `json:"actorName"`
+	Reason             string         `json:"reason"`
+	BeforeSnapshot     map[string]any `json:"beforeSnapshot"`
+	AfterSnapshot      map[string]any `json:"afterSnapshot"`
+	CreatedAt          time.Time      `json:"createdAt"`
 }
 
 type AttendanceApprovalEvent struct {

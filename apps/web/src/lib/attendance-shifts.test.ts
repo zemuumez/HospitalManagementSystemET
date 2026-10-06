@@ -5,6 +5,8 @@ import { saveAttendanceShift } from "./attendance-shifts.ts";
 const row = {
   id: "local-draft",
   name: "Day",
+  code: "DAY",
+  default: "Is Default",
   start: "08:00",
   end: "17:00",
   grace: "0",
@@ -16,6 +18,8 @@ const row = {
 const saved = {
   id: "server-id",
   name: "Day",
+  code: "DAY",
+  isDefault: true,
   startTime: "08:00:00",
   endTime: "17:00:00",
   gracePeriodMinutes: 0,
@@ -30,6 +34,8 @@ test("new shift preserves zero values and adopts server identity", async () => {
     assert.equal(url, "/api/hms/attendance/shifts");
     assert.equal(options?.method, "POST");
     const body = JSON.parse(String(options?.body));
+    assert.equal(body.code, "DAY");
+    assert.equal(body.isDefault, true);
     assert.equal(body.halfDayMinutes, 240);
     assert.equal(body.fullDayMinutes, 480);
     assert.equal(body.gracePeriodMinutes, 0);
@@ -38,6 +44,8 @@ test("new shift preserves zero values and adopts server identity", async () => {
   }) as typeof fetch);
   assert.equal(result.id, "server-id");
   assert.equal(result.version, "1");
+  assert.equal(result.code, "DAY");
+  assert.equal(result.default, "Is Default");
 });
 test("editing uses PATCH with the concurrency version", async () => {
   await saveAttendanceShift({ ...row, id: "server-id", version: "3" }, (async (

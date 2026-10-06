@@ -32,6 +32,12 @@ type Field = {
 };
 const shiftFields: Field[] = [
   { key: "name", label: "Name", required: true },
+  { key: "code", label: "Code", required: true },
+  {
+    key: "default",
+    label: "Is Default",
+    options: ["Not Default", "Is Default"],
+  },
   { key: "start", label: "Start Time", type: "time", required: true },
   { key: "end", label: "End Time", type: "time", required: true },
   { key: "grace", label: "Grace Minutes", type: "number" },
@@ -1095,6 +1101,7 @@ export function AttendanceWorkspace({ id }: { id: string }) {
                       ? old[source].map((r) => (r.id === row.id ? saved : r))
                       : [saved, ...old[source]],
                   }));
+                  await loadAttendanceData();
                   setApiSuccessBanner(t("Shift saved."));
                   setEditing(null);
                 } catch (failure) {

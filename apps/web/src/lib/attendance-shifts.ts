@@ -4,11 +4,7 @@ export function shiftRow(s: Record<string, any>): AttendanceRow {
   return {
     id: s.id,
     name: s.name,
-    code: s.name
-      .split(" ")
-      .map((w: string) => w[0])
-      .join("")
-      .toUpperCase(),
+    code: s.code,
     start: s.startTime.slice(0, 5),
     end: s.endTime.slice(0, 5),
     grace: String(s.gracePeriodMinutes),
@@ -16,9 +12,9 @@ export function shiftRow(s: Record<string, any>): AttendanceRow {
     halfDay: String(s.halfDayMinutes),
     fullDay: String(s.fullDayMinutes),
     version: String(s.version),
-    default: "N/A",
+    default: s.isDefault ? "Is Default" : "Not Default",
     status: s.active ? "Active" : "Inactive",
-    staffCount: "0",
+    staffCount: String(s.staffCount ?? 0),
   };
 }
 
@@ -34,6 +30,8 @@ export async function saveAttendanceShift(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: row.name,
+        code: row.code,
+        isDefault: row.default === "Is Default",
         startTime: row.start,
         endTime: row.end,
         gracePeriodMinutes: Number(row.grace || 0),

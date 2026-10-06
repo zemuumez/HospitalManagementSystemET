@@ -18,6 +18,7 @@ import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.cwd();
+const manualMode = process.argv.includes("--manual");
 const operationalMode = process.argv.includes("--operational");
 const firebaseMode = process.argv.includes("--firebase");
 const invitationsMode = process.argv.includes("--invitations");
@@ -243,37 +244,67 @@ try {
     ready(env.GO_API_URL + "/readyz", api),
     ready(env.BETTER_AUTH_URL + "/login", web),
   ]);
-  await new Promise((ok, fail) => {
-    const test = spawn(
-      process.execPath,
-      [
-        operationalMode
-          ? "scripts/verify-all-operational-workspaces.mjs"
-          : invitationsMode
-            ? "scripts/verify-invitations.mjs"
-            : integrationMode
-              ? "scripts/integration.mjs"
-              : firebaseMode
-                ? "scripts/verify-firebase.mjs"
-                : recoveryMode
-                  ? "scripts/verify-recovery.mjs"
-                  : "scripts/verify-connected.mjs",
-      ],
-      {
-        cwd: root,
-        env,
-        stdio: "inherit",
-        windowsHide: true,
-      },
+  if (manualMode) {
+    const { hashPassword } = await import("better-auth/crypto");
+    const email = `manual-${token}@example.test`;
+    const password = randomBytes(24).toString("hex") + "Aa1!";
+    await isolated.query('INSERT INTO "user"(id,name,email) VALUES($1,$2,$3)', [
+      token,
+      "Isolated QA admin",
+      email,
+    ]);
+    await isolated.query(
+      `INSERT INTO account(id,"accountId","providerId","userId",password) VALUES($1,$2,'credential',$2,$3)`,
+      [token + "-account", token, await hashPassword(password)],
     );
-    children.push(test);
-    test.once("error", fail);
-    test.once("exit", (code) =>
-      code === 0
-        ? ok()
-        : fail(Error("Isolated integration verification failed")),
+    await isolated.query(
+      "INSERT INTO staff_access(user_id,role) VALUES($1,'admin')",
+      [token],
     );
-  });
+    console.log(
+      JSON.stringify({ url: env.BETTER_AUTH_URL, email, password, schema }),
+    );
+    console.log(
+      "Manual QA ready. Press Enter to stop services and remove this isolated schema.",
+    );
+    await new Promise((done) => {
+      process.stdin.resume();
+      process.stdin.once("data", done);
+    });
+    process.stdin.pause();
+  } else {
+    await new Promise((ok, fail) => {
+      const test = spawn(
+        process.execPath,
+        [
+          operationalMode
+            ? "scripts/verify-all-operational-workspaces.mjs"
+            : invitationsMode
+              ? "scripts/verify-invitations.mjs"
+              : integrationMode
+                ? "scripts/integration.mjs"
+                : firebaseMode
+                  ? "scripts/verify-firebase.mjs"
+                  : recoveryMode
+                    ? "scripts/verify-recovery.mjs"
+                    : "scripts/verify-connected.mjs",
+        ],
+        {
+          cwd: root,
+          env,
+          stdio: "inherit",
+          windowsHide: true,
+        },
+      );
+      children.push(test);
+      test.once("error", fail);
+      test.once("exit", (code) =>
+        code === 0
+          ? ok()
+          : fail(Error("Isolated integration verification failed")),
+      );
+    });
+  }
 } finally {
   for (const child of children.reverse()) {
     if (!child.pid || child.exitCode !== null) continue;

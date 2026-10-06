@@ -11,7 +11,14 @@ import (
 )
 
 func (s Store) ListShifts(ctx context.Context, actor domain.Actor) ([]domain.Shift, error) {
-	rows, err := s.DB.Query(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at FROM attendance_shift ORDER BY name`)
+	rows, err := s.DB.Query(ctx, `SELECT s.id, s.name, to_char(s.start_time, 'HH24:MI:SS'), to_char(s.end_time, 'HH24:MI:SS'), s.grace_period_minutes, s.break_duration_minutes, s.half_day_minutes, s.full_day_minutes, s.is_overnight, s.active, s.version, s.created_at, s.updated_at, s.code, s.is_default,
+      (SELECT count(*) FROM staff_access staff WHERE staff.active AND staff.role<>'patient'
+       AND COALESCE((SELECT a.shift_id FROM attendance_shift_assignment a JOIN attendance_shift assigned ON assigned.id=a.shift_id
+           WHERE a.staff_id=staff.user_id AND a.effective_from<=(now() AT TIME ZONE 'Africa/Addis_Ababa')::date
+           AND (a.effective_to IS NULL OR a.effective_to>=(now() AT TIME ZONE 'Africa/Addis_Ababa')::date)
+           AND assigned.active ORDER BY a.effective_from DESC,a.created_at DESC LIMIT 1),
+           (SELECT id FROM attendance_shift WHERE is_default AND active))=s.id)
+      FROM attendance_shift s ORDER BY s.created_at,s.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +27,7 @@ func (s Store) ListShifts(ctx context.Context, actor domain.Actor) ([]domain.Shi
 	var shifts []domain.Shift
 	for rows.Next() {
 		var sh domain.Shift
-		if err = rows.Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt); err != nil {
+		if err = rows.Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt, &sh.Code, &sh.IsDefault, &sh.StaffCount); err != nil {
 			return nil, err
 		}
 		shifts = append(shifts, sh)
@@ -39,10 +46,18 @@ func (s Store) CreateShift(ctx context.Context, actor domain.Actor, input domain
 		return sh, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `LOCK TABLE attendance_shift IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return sh, err
+	}
+	if input.IsDefault {
+		if _, err = tx.Exec(ctx, `UPDATE attendance_shift SET is_default=false, version=version+1, updated_at=now() WHERE is_default AND id<>$1::uuid`, "00000000-0000-0000-0000-000000000000"); err != nil {
+			return sh, err
+		}
+	}
 
-	err = tx.QueryRow(ctx, `INSERT INTO attendance_shift (name, start_time, end_time, grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active) VALUES ($1, $2::time, $3::time, $4, $5, $6, $7, $8, $9) RETURNING id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at`,
-		input.Name, input.StartTime, input.EndTime, input.GracePeriodMinutes, input.BreakDurationMinutes, input.HalfDayMinutes, input.FullDayMinutes, isOvernight, input.Active).
-		Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO attendance_shift (name, start_time, end_time, grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, code, is_default) VALUES ($1, $2::time, $3::time, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10,''),'SHIFT-' || upper(substr(replace(gen_random_uuid()::text,'-',''),1,26))), $11) RETURNING id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default`,
+		input.Name, input.StartTime, input.EndTime, input.GracePeriodMinutes, input.BreakDurationMinutes, input.HalfDayMinutes, input.FullDayMinutes, isOvernight, input.Active, input.Code, input.IsDefault).
+		Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt, &sh.Code, &sh.IsDefault)
 	if err != nil {
 		return sh, err
 	}
@@ -64,10 +79,18 @@ func (s Store) UpdateShift(ctx context.Context, actor domain.Actor, id string, i
 		return sh, err
 	}
 	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `LOCK TABLE attendance_shift IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return sh, err
+	}
+	if input.IsDefault {
+		if _, err = tx.Exec(ctx, `UPDATE attendance_shift SET is_default=false, version=version+1, updated_at=now() WHERE is_default AND id<>$1::uuid`, id); err != nil {
+			return sh, err
+		}
+	}
 
-	err = tx.QueryRow(ctx, `UPDATE attendance_shift SET name=$1, start_time=$2::time, end_time=$3::time, grace_period_minutes=$4, break_duration_minutes=$5, half_day_minutes=$6, full_day_minutes=$7, is_overnight=$8, active=$9, version=version+1, updated_at=now() WHERE id=$10 AND version=$11 RETURNING id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at`,
-		input.Name, input.StartTime, input.EndTime, input.GracePeriodMinutes, input.BreakDurationMinutes, input.HalfDayMinutes, input.FullDayMinutes, isOvernight, input.Active, id, version).
-		Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt)
+	err = tx.QueryRow(ctx, `UPDATE attendance_shift SET name=$1, start_time=$2::time, end_time=$3::time, grace_period_minutes=$4, break_duration_minutes=$5, half_day_minutes=$6, full_day_minutes=$7, is_overnight=$8, active=$9, code=COALESCE(NULLIF($12,''),code), is_default=$13, version=version+1, updated_at=now() WHERE id=$10 AND version=$11 RETURNING id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default`,
+		input.Name, input.StartTime, input.EndTime, input.GracePeriodMinutes, input.BreakDurationMinutes, input.HalfDayMinutes, input.FullDayMinutes, isOvernight, input.Active, id, version, input.Code, input.IsDefault).
+		Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt, &sh.Code, &sh.IsDefault)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var currentVer int
 		if e := tx.QueryRow(ctx, `SELECT version FROM attendance_shift WHERE id=$1`, id).Scan(&currentVer); e == nil {
@@ -164,20 +187,23 @@ func (s Store) resolveShift(ctx context.Context, q interface {
 	var sh domain.Shift
 	var row pgx.Row
 	if requestedShiftID != "" {
-		row = q.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at FROM attendance_shift WHERE id=$1 AND active=true`, requestedShiftID)
+		row = q.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default FROM attendance_shift WHERE id=$1 AND active=true`, requestedShiftID)
 	} else {
 		// Check explicit assignment
-		row = q.QueryRow(ctx, `SELECT s.id, s.name, to_char(s.start_time, 'HH24:MI:SS'), to_char(s.end_time, 'HH24:MI:SS'), s.grace_period_minutes, s.break_duration_minutes, s.half_day_minutes, s.full_day_minutes, s.is_overnight, s.active, s.version, s.created_at, s.updated_at FROM attendance_shift_assignment a JOIN attendance_shift s ON s.id=a.shift_id WHERE a.staff_id=$1 AND a.effective_from <= $2::date AND (a.effective_to IS NULL OR a.effective_to >= $2::date) AND s.active=true ORDER BY a.effective_from DESC, a.created_at DESC LIMIT 1`, staffID, workDate)
+		row = q.QueryRow(ctx, `SELECT s.id, s.name, to_char(s.start_time, 'HH24:MI:SS'), to_char(s.end_time, 'HH24:MI:SS'), s.grace_period_minutes, s.break_duration_minutes, s.half_day_minutes, s.full_day_minutes, s.is_overnight, s.active, s.version, s.created_at, s.updated_at, s.code, s.is_default FROM attendance_shift_assignment a JOIN attendance_shift s ON s.id=a.shift_id WHERE a.staff_id=$1 AND a.effective_from <= $2::date AND (a.effective_to IS NULL OR a.effective_to >= $2::date) AND s.active=true ORDER BY a.effective_from DESC, a.created_at DESC LIMIT 1`, staffID, workDate)
 	}
 
-	err := row.Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt)
+	err := row.Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt, &sh.Code, &sh.IsDefault)
 	if err == nil {
 		return sh, nil
 	}
 
-	// Fallback to default Day Shift
-	err = q.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at FROM attendance_shift WHERE name='Day Shift' AND active=true`).
-		Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt)
+	if requestedShiftID != "" || !errors.Is(err, pgx.ErrNoRows) {
+		return sh, err
+	}
+	// Resolve the configured default rather than relying on a mutable display name.
+	err = q.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default FROM attendance_shift WHERE is_default AND active=true`).
+		Scan(&sh.ID, &sh.Name, &sh.StartTime, &sh.EndTime, &sh.GracePeriodMinutes, &sh.BreakDurationMinutes, &sh.HalfDayMinutes, &sh.FullDayMinutes, &sh.IsOvernight, &sh.Active, &sh.Version, &sh.CreatedAt, &sh.UpdatedAt, &sh.Code, &sh.IsDefault)
 	return sh, err
 }
 
@@ -320,8 +346,8 @@ func (s Store) ClockOut(ctx context.Context, actor domain.Actor, staffID string,
 
 	// Load shift
 	var shift domain.Shift
-	err = tx.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at FROM attendance_shift WHERE id=$1`, shiftID).
-		Scan(&shift.ID, &shift.Name, &shift.StartTime, &shift.EndTime, &shift.GracePeriodMinutes, &shift.BreakDurationMinutes, &shift.HalfDayMinutes, &shift.FullDayMinutes, &shift.IsOvernight, &shift.Active, &shift.Version, &shift.CreatedAt, &shift.UpdatedAt)
+	err = tx.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default FROM attendance_shift WHERE id=$1`, shiftID).
+		Scan(&shift.ID, &shift.Name, &shift.StartTime, &shift.EndTime, &shift.GracePeriodMinutes, &shift.BreakDurationMinutes, &shift.HalfDayMinutes, &shift.FullDayMinutes, &shift.IsOvernight, &shift.Active, &shift.Version, &shift.CreatedAt, &shift.UpdatedAt, &shift.Code, &shift.IsDefault)
 	if err != nil {
 		return rec, err
 	}
@@ -616,8 +642,8 @@ func (s Store) AdminCreateRecord(ctx context.Context, actor domain.Actor, input 
 	}
 
 	var shift domain.Shift
-	err = tx.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at FROM attendance_shift WHERE id=$1`, input.ShiftID).
-		Scan(&shift.ID, &shift.Name, &shift.StartTime, &shift.EndTime, &shift.GracePeriodMinutes, &shift.BreakDurationMinutes, &shift.HalfDayMinutes, &shift.FullDayMinutes, &shift.IsOvernight, &shift.Active, &shift.Version, &shift.CreatedAt, &shift.UpdatedAt)
+	err = tx.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default FROM attendance_shift WHERE id=$1`, input.ShiftID).
+		Scan(&shift.ID, &shift.Name, &shift.StartTime, &shift.EndTime, &shift.GracePeriodMinutes, &shift.BreakDurationMinutes, &shift.HalfDayMinutes, &shift.FullDayMinutes, &shift.IsOvernight, &shift.Active, &shift.Version, &shift.CreatedAt, &shift.UpdatedAt, &shift.Code, &shift.IsDefault)
 	if err != nil {
 		return rec, err
 	}
@@ -675,8 +701,8 @@ func (s Store) AdminCorrectRecord(ctx context.Context, actor domain.Actor, id st
 
 	// Load shift
 	var shift domain.Shift
-	err = tx.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at FROM attendance_shift WHERE id=$1`, input.ShiftID).
-		Scan(&shift.ID, &shift.Name, &shift.StartTime, &shift.EndTime, &shift.GracePeriodMinutes, &shift.BreakDurationMinutes, &shift.HalfDayMinutes, &shift.FullDayMinutes, &shift.IsOvernight, &shift.Active, &shift.Version, &shift.CreatedAt, &shift.UpdatedAt)
+	err = tx.QueryRow(ctx, `SELECT id, name, to_char(start_time, 'HH24:MI:SS'), to_char(end_time, 'HH24:MI:SS'), grace_period_minutes, break_duration_minutes, half_day_minutes, full_day_minutes, is_overnight, active, version, created_at, updated_at, code, is_default FROM attendance_shift WHERE id=$1`, input.ShiftID).
+		Scan(&shift.ID, &shift.Name, &shift.StartTime, &shift.EndTime, &shift.GracePeriodMinutes, &shift.BreakDurationMinutes, &shift.HalfDayMinutes, &shift.FullDayMinutes, &shift.IsOvernight, &shift.Active, &shift.Version, &shift.CreatedAt, &shift.UpdatedAt, &shift.Code, &shift.IsDefault)
 	if err != nil {
 		return rec, err
 	}
