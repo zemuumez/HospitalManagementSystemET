@@ -54,7 +54,7 @@ func (h Hospital) Register(ctx context.Context, a domain.Actor, p domain.Patient
 }
 func (h Hospital) Overview(ctx context.Context, a domain.Actor) (domain.Overview, error) {
 	if !a.Can("patients.read") {
-		return domain.Overview{}, nil
+		return domain.Overview{}, domain.ErrForbidden
 	}
 	return h.Store.Overview(ctx, a)
 }
