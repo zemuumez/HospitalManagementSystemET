@@ -19,6 +19,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const root = process.cwd();
 const manualMode = process.argv.includes("--manual");
+const moduleAuditMode = process.argv.includes("--module-audit");
+const moduleUiAuditMode = process.argv.includes("--module-ui-audit");
 const operationalMode = process.argv.includes("--operational");
 const firebaseMode = process.argv.includes("--firebase");
 const invitationsMode = process.argv.includes("--invitations");
@@ -204,7 +206,7 @@ try {
   );
   const binary = resolve(
     root,
-    `services/api/bin/qa-api${process.platform === "win32" ? ".exe" : ""}`,
+    `services/api/bin/qa-api-${token}${process.platform === "win32" ? ".exe" : ""}`,
   );
   execFileSync("go", ["build", "-o", binary, "./cmd/api"], {
     cwd: resolve(root, "services/api"),
@@ -216,7 +218,7 @@ try {
   if (integrationMode || invitationsMode) {
     const workerBinary = resolve(
       root,
-      `services/api/bin/qa-worker${process.platform === "win32" ? ".exe" : ""}`,
+      `services/api/bin/qa-worker-${token}${process.platform === "win32" ? ".exe" : ""}`,
     );
     execFileSync("go", ["build", "-o", workerBinary, "./cmd/worker"], {
       cwd: resolve(root, "services/api"),
@@ -277,17 +279,21 @@ try {
       const test = spawn(
         process.execPath,
         [
-          operationalMode
-            ? "scripts/verify-all-operational-workspaces.mjs"
-            : invitationsMode
-              ? "scripts/verify-invitations.mjs"
-              : integrationMode
-                ? "scripts/integration.mjs"
-                : firebaseMode
-                  ? "scripts/verify-firebase.mjs"
-                  : recoveryMode
-                    ? "scripts/verify-recovery.mjs"
-                    : "scripts/verify-connected.mjs",
+          moduleUiAuditMode
+            ? "scripts/verify-module-pages.mjs"
+            : moduleAuditMode
+              ? "scripts/verify-module-contracts.mjs"
+              : operationalMode
+                ? "scripts/verify-all-operational-workspaces.mjs"
+                : invitationsMode
+                  ? "scripts/verify-invitations.mjs"
+                  : integrationMode
+                    ? "scripts/integration.mjs"
+                    : firebaseMode
+                      ? "scripts/verify-firebase.mjs"
+                      : recoveryMode
+                        ? "scripts/verify-recovery.mjs"
+                        : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,

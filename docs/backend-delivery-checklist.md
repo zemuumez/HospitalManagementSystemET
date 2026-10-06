@@ -4,6 +4,8 @@ Updated: 2026-10-04. Scope: **one hospital**, Next.js/Tailwind, Go clean archite
 
 ## How to read the status
 
+**Module audit checkpoint (2026-10-06):** Read [the source/action audit and acceptance matrix](module-audit/README.md) before treating an existing checkmark as original-feature parity. Authenticated characterization has confirmed missing card persistence, odontogram history/code loss and proxy/route gaps. Full source indexes and execution evidence are separate from completed module acceptance; no capability checkboxes are changed by this audit.
+
 Original database evidence is now available in [the ZIP schema audit](legacy-schema/README.md) (2026-10-06): 141 tables, 1,202 fields and 144 foreign keys. Research coverage is complete for the dump inventory, but the field-to-API contract and identified schema gaps remain implementation work. This audit does not mark any backend/integration capability complete.
 
 - `[x]` means the described behavior is implemented and has the evidence identified below. It does not imply an entire module is finished.

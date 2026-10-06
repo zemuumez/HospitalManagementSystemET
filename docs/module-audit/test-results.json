@@ -1,0 +1,3060 @@
+{
+  "date": "2026-10-06",
+  "baselineCommit": "fd39124",
+  "scope": "Source-index and current-contract characterization; not exhaustive legacy business-rule, all-role CRUD or visual parity acceptance.",
+  "go": {
+    "command": "go test -json -count=1 ./... with HMS_TEST_DATABASE_URL set to isolated loopback PostgreSQL",
+    "passed": 153,
+    "failed": 0,
+    "skipped": 0,
+    "tests": [
+      {
+        "Package": "hms.local/api/internal/adapters/httpapi",
+        "Test": "TestReadinessAndRedactedRequestLogs",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/httpapi",
+        "Test": "TestStableErrorCodes",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/httpapi",
+        "Test": "TestPrometheusMetricsExposition",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/httpapi",
+        "Test": "TestPublicLimits",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/httpapi",
+        "Test": "TestIdentityCannotBeForgedByHeader",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/httpapi",
+        "Test": "TestOriginCheckedBeforeAuthentication",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/httpapi",
+        "Test": "TestIntrospectionRejectsExpiredAndMismatchedSessions",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/privatefiles",
+        "Test": "TestScannerProtocol/clean",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/privatefiles",
+        "Test": "TestScannerProtocol/infected",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/privatefiles",
+        "Test": "TestScannerProtocol/error",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/privatefiles",
+        "Test": "TestScannerProtocol/malformed",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/privatefiles",
+        "Test": "TestScannerProtocol",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/valid_pdf_attachment",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/valid_image_attachment",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/disallowed_mime_type_executable",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/exceeds_25MB_max_size_limit",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/zero_byte_file_rejected",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/invalid_sha256_hash_length",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/empty_filename_rejected",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation/empty_storage_path_rejected",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestSecureAttachmentValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/on_time_full_day",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/within_grace_period",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/late_check_in",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/early_departure",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/overtime",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/half_day_worked",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/absent_under_half_day",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/checked_in_only",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/overnight_shift_normal",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/overnight_shift_late_and_early_out",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/invalid_time_sequence",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations/invalid_break_duration",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceCalculations",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAttendanceValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestInvoiceExactTotals",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDiagnosticValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPermissionsDenyByDefault",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestMessagesRejectHeaderInjectionAndInvalidNumbers",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientUnknownDOBAndHospitalDateBoundary",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestInventoryValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVitalsValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientProfileValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPharmacyValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestScheduleBoundaries",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAppointmentStateAndOwnershipPolicy",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAmbulanceValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAmbulanceCallValidation",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEnqueuePatientInput_Validate/valid_input",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEnqueuePatientInput_Validate/invalid_date",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEnqueuePatientInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestUpdateQueueStatusInput_Validate/valid_status",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestUpdateQueueStatusInput_Validate/invalid_status",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestUpdateQueueStatusInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestCreatePublicAppointmentRequestInput_Validate/valid_request",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestCreatePublicAppointmentRequestInput_Validate/empty_name",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestCreatePublicAppointmentRequestInput_Validate/short_phone",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestCreatePublicAppointmentRequestInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAssignBedInput_Validate/valid_input",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAssignBedInput_Validate/invalid_bed_id",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestAssignBedInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestCareTeamMember_Validate/valid_input",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestCareTeamMember_Validate/empty_role_title",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestCareTeamMember_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEncounterDiagnosis_Validate/valid_diagnosis",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEncounterDiagnosis_Validate/empty_description",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEncounterDiagnosis_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEncounterProcedure_Validate/valid_procedure",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestEncounterProcedure_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDischargeSummary_Validate/valid_discharge_summary",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDischargeSummary_Validate/invalid_follow_up_date",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDischargeSummary_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestOdontogram_Validate/valid_tooth_condition",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestOdontogram_Validate/invalid_tooth_number",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestOdontogram_Validate/invalid_condition",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestOdontogram_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDiagnosticCategoryInput_Validate/valid_category",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDiagnosticCategoryInput_Validate/invalid_kind",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDiagnosticCategoryInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDiagnosticUnitInput_Validate/valid_unit",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDiagnosticUnitInput_Validate/empty_name",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDiagnosticUnitInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVaccineAndAdminister_Validate/valid_vaccine",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVaccineAndAdminister_Validate/valid_administration",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVaccineAndAdminister_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVitalReports_Validate/valid_birth_report",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVitalReports_Validate/valid_death_report",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVitalReports_Validate/valid_operation_report",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestVitalReports_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorDepartmentInput_Validate/valid_create",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorDepartmentInput_Validate/empty_title",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorDepartmentInput_Validate/valid_update",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorDepartmentInput_Validate/update_missing_version_or_reason",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorDepartmentInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorExtInput_Validate/valid_input",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorExtInput_Validate/negative_charge",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestDoctorExtInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalHoursInput_Validate/valid_schedule",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalHoursInput_Validate/duplicate_weekday",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalHoursInput_Validate/invalid_times",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalHoursInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalDateOverrideInput_Validate/valid_closed_override",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalDateOverrideInput_Validate/valid_open_override_with_times",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalDateOverrideInput_Validate/closed_with_times_set_fails",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestHospitalDateOverrideInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientProfileExt_Validate/valid_ext",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientProfileExt_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientContactConsent_Validate/valid_consent",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientContactConsent_Validate/invalid_patient_id",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestPatientContactConsent_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestIssueSmartCardInput_Validate/valid_input",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestIssueSmartCardInput_Validate/invalid_patient_id",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestIssueSmartCardInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestMergePatientInput_Validate/valid_merge",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestMergePatientInput_Validate/same_patient_id",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestMergePatientInput_Validate/empty_reason",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/domain",
+        "Test": "TestMergePatientInput_Validate",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/delivery",
+        "Test": "TestDevelopmentTransportGuards",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/stripe",
+        "Test": "TestWebhookVerification",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/stripe",
+        "Test": "TestIntentRequest",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/reject_overlapping_overnight_record",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/today_retains_previous_night_open_record",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/reject_approval_of_unfinished_attendance",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/odontogram",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/follow_ups",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/referrals",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/diagnoses",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/procedures",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/care_team",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/attachments",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/doctor/beds",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/referrals",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/diagnoses",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/procedures",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/care_team",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/attachments",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/beds",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/odontogram",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/patient/follow_ups",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/odontogram",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/follow_ups",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/referrals",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/diagnoses",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/procedures",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/care_team",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/attachments",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/nurse/beds",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/overview_scope_doctor_doctor",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/overview_scope_doctor_other-doctor",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/overview_scope_patient_patient",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions/overview_scope_receptionist_reception",
+        "Action": "pass"
+      },
+      {
+        "Package": "hms.local/api/internal/adapters/postgres",
+        "Test": "TestClinicalTransactions",
+        "Action": "pass"
+      }
+    ]
+  },
+  "frontendUnit": {
+    "command": "npm test",
+    "passed": 8,
+    "failed": 0
+  },
+  "typecheck": {
+    "command": "npm run typecheck",
+    "status": "pass"
+  },
+  "authenticatedContracts": {
+    "date": "2026-10-06T20:35:52.977Z",
+    "scope": "Current policy status probes and targeted persistence characterization; not complete original-role parity or every CRUD.",
+    "results": [
+      {
+        "name": "GET patients: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET patients: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET cases: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=ipd: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET encounters?kind=opd: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET bed-types: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET attendance/shifts: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET ambulances: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET charge-categories: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET operations: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET complaints: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET invoices: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET expenses: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET medicine-categories: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET blood-bank: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET live-consultations: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: anonymous denied",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: admin",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: doctor",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: patient",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "GET prescriptions: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "patient create and reload",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram write denied: patient",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram write denied: nurse",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram write denied: receptionist",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram write denied: pharmacist",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram write denied: accountant",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram write denied: case_manager",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram write denied: lab_technician",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram unrelated doctor denied",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram invalid tooth rejected",
+        "status": "pass"
+      },
+      {
+        "name": "odontogram same-tooth persistence characterization",
+        "status": "pass"
+      },
+      {
+        "name": "original chart payload cannot be accepted as current tooth payload",
+        "status": "pass"
+      },
+      {
+        "name": "frontend dental code round-trip characterization",
+        "status": "pass"
+      },
+      {
+        "name": "integration route characterization: packages",
+        "status": "pass"
+      },
+      {
+        "name": "integration route characterization: insurances",
+        "status": "pass"
+      },
+      {
+        "name": "integration route characterization: general-settings",
+        "status": "pass"
+      },
+      {
+        "name": "integration route characterization: blood-banks",
+        "status": "pass"
+      },
+      {
+        "name": "smart-card template browser persistence characterization",
+        "status": "pass"
+      }
+    ],
+    "findings": [
+      {
+        "id": "ODONTO-CHART-HISTORY",
+        "status": "confirmed-gap",
+        "evidence": "Two saves for one tooth return the same ID and leave one updated DB row; original creates separately identified chart records."
+      },
+      {
+        "id": "ODONTO-AGGREGATE-CONTRACT",
+        "status": "confirmed-gap",
+        "evidence": "Current endpoint rejects original chart aggregate payload; requires explicit chart adapter/entity."
+      },
+      {
+        "id": "ODONTO-CODE-LOSS",
+        "status": "confirmed-gap",
+        "evidence": [
+          {
+            "code": "Ce",
+            "saved": "caries",
+            "restored": "K"
+          },
+          {
+            "code": "D",
+            "saved": "caries",
+            "restored": "K"
+          },
+          {
+            "code": "B",
+            "saved": "crown",
+            "restored": "C"
+          },
+          {
+            "code": "PS",
+            "saved": "filled",
+            "restored": "F"
+          }
+        ]
+      },
+      {
+        "id": "ROUTE-PACKAGES",
+        "status": "confirmed-gap",
+        "evidence": "Authenticated GET /api/hms/packages returned 404. Check proxy path and Go handler; frontend caller and API must agree."
+      },
+      {
+        "id": "ROUTE-INSURANCES",
+        "status": "confirmed-gap",
+        "evidence": "Authenticated GET /api/hms/insurances returned 404. Check proxy path and Go handler; frontend caller and API must agree."
+      },
+      {
+        "id": "ROUTE-GENERAL-SETTINGS",
+        "status": "confirmed-gap",
+        "evidence": "Authenticated GET /api/hms/general-settings returned 404. Check proxy path and Go handler; frontend caller and API must agree."
+      },
+      {
+        "id": "ROUTE-BLOOD-BANKS",
+        "status": "confirmed-gap",
+        "evidence": "Authenticated GET /api/hms/blood-banks returned 404. Check proxy path and Go handler; frontend caller and API must agree."
+      },
+      {
+        "id": "CARDS-SESSION-ONLY",
+        "status": "confirmed-gap",
+        "evidence": "UI-created template survives same-tab reload, sends zero HMS mutations and disappears in a fresh browser context using the same admin account."
+      }
+    ]
+  },
+  "adminPages": {
+    "date": "2026-10-06T20:58:18.091Z",
+    "scope": "Admin page navigation/initial API transport only; not all-role, CRUD or visual parity",
+    "results": [
+      {
+        "path": "/dashboard",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Dashboard",
+          "Yearly Income Expense Chart",
+          "Notice Boards",
+          "Enquiries",
+          "Appointments"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/patient-id-card-template",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Smart Patient Card Templates"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/generate-patient-id-card",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Generate Patient Smart Cards"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/users",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Users"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/admins",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Admins"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/accountants",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Accountants"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/nurses",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Nurses"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/lab-technicians",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Lab Technicians"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/receptionists",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Receptionists"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/pharmacists",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Pharmacists"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/appointments",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Appointments"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/appointment-calendars",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Appointment Calendars",
+          "October 2026"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/appointment-transaction",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Appointment Transaction"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/patient-queues",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Patient Queues"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-patient-departments",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/opd-patient-departments",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/accounts",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Accounts"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/employee-payrolls",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/invoices",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Invoices"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/payments",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/payment-reports",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/advanced-payments",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/bills",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/manual-bill-payments",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/bed-status",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Bed Status",
+          "ICU1",
+          "NICU",
+          "VIP Ward",
+          "Private Ward",
+          "General Ward Female",
+          "General Ward Male",
+          "Nulla assumenda ex u",
+          "John Kennedy Beds",
+          "PD Ward",
+          "ASAs",
+          "Regular",
+          "الفندقية",
+          "General Ward",
+          "MIND UPSET",
+          "BORE ADIKUITHU",
+          "TENSION AGATHU",
+          "TAMIL"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/bed-assigns",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/beds",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/bed-types",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/blood-banks",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/blood-donors",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/blood-donations",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/blood-issues",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/documents",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Documents"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/document-types",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Document Types"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/doctors",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/doctor-absences",
+            "status": 422
+          },
+          {
+            "path": "/api/hms/doctor-absences",
+            "status": 422
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/doctors\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/doctor-departments",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/doctor-absences",
+            "status": 422
+          },
+          {
+            "path": "/api/hms/doctor-absences",
+            "status": 422
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/doctor-departments\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/schedules",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Schedules"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/doctor-holiday",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Doctor Holidays"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/lunch-breaks",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Lunch Breaks"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/prescriptions",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/patient-diagnosis-test",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/diagnosis-categories",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/enquiries",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/incomes",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/expenses",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/call-logs",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/visitors",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/postals",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/complaints",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/front-settings",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Front Setting Details"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/services",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/services\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/notice-boards",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Notice Boards"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/testimonials",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Testimonials"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/charge-categories",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Charge Categories"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/charges",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Charges"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/doctor-opd-charges",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Doctor OPD Charges"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/item-categories",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          },
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/item-categories\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/items",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          },
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/items\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/item-stocks",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          },
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/item-stocks\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/issued-items",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          },
+          {
+            "path": "/api/hms/inventory/movements",
+            "status": 422
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/issued-items\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/live-consultations",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/live-consultations-live-meetings",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/goole-meet-consultation",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Google Meet Consultations"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/categories",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Medicine Categories"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/brands",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/medicines",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/purchase-medicines",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/used-medicine",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/medicine-bills",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/patients",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/patient-cases",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Patient Cases"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/case-handlers",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/patient-admissions",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/pathology-categories",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/pathology-units",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/pathology-parameter",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Pathology Parameters"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/pathology-tests",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/birth-reports",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Birth Reports"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/death-reports",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Death Reports"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/investigation-reports",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Investigation Reports"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/operation-reports",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Operation Reports"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/radiology-categories",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Radiology Categories"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/radiology-tests",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Radiology Tests"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/insurances",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/insurances\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/packages",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/packages\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/ambulances",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/ambulances\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/ambulance-calls",
+        "status": "fail",
+        "navigationStatus": null,
+        "headings": [],
+        "failedApi": [
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/insurances",
+            "status": 404
+          },
+          {
+            "path": "/api/hms/packages",
+            "status": 404
+          }
+        ],
+        "pageErrors": [],
+        "error": "page.goto: Timeout 45000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:<test-port>/modules/ambulance-calls\", waiting until \"networkidle\"\n"
+      },
+      {
+        "path": "/modules/sms",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "SMS"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/emails",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Mail"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/email-template",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Email Template"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/settings",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/hospital-schedule",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Hospital Schedule",
+          "Hospital Schedule"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/currency-settings",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Currencies"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/operation-categories",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Operation Categories"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/operations",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Operations"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/payment-gateway",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Payment Gateways"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/add-custom-fields",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Custom Field"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/vaccinations",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Vaccinations"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/vaccinated-patients",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "Vaccinated Patients"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/odontogram",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/add-on",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "AddOn"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-diagnoses",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "IPD Diagnoses"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-consultant-registers",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-operation",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "IPD Operation"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-charges",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-prescriptions",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-timelines",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-payments",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/ipd-bills",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/opd-diagnoses",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "OPD Diagnoses"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/opd-prescriptions",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [
+          "OPD Prescriptions"
+        ],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      },
+      {
+        "path": "/modules/opd-timelines",
+        "status": "pass",
+        "navigationStatus": 200,
+        "headings": [],
+        "failedApi": [],
+        "pageErrors": [],
+        "visibleAlerts": [
+          ""
+        ]
+      }
+    ]
+  },
+  "limitations": [
+    "Laravel was not executed; PHP/Composer absent on PATH.",
+    "Admin navigation does not prove populated CRUD, ownership, visual parity or correct business meaning.",
+    "Characterization assertions can pass while confirming product defects.",
+    "External-provider live credentials and public development schema were not changed."
+  ]
+}

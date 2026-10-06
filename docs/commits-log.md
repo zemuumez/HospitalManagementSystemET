@@ -488,3 +488,13 @@ Commit: `03feb14` — shift identity, unique codes, single default constraint an
 - Indexed current Go authorization/test entry points and 38 frontend files, including local persistence and API failure signals. Static extraction is a navigation aid, not full semantic/runtime verification.
 - Added module-family acceptance obligations and the current named-role policy register. Identified CMS permission-advertising omissions and duplicate message permission advertising.
 - Regenerated the source indexes successfully and checked staged whitespace. No application code, schema or external credentials changed.
+
+## Module audit — 2026-10-06, executable evidence
+
+- Added isolated authenticated contract and catalog-page audit modes. Temporary Go binary names include the run token to avoid concurrent Windows file collisions.
+- Full Go suite with real isolated PostgreSQL: 153 named test/subtest passes, no named test skips/failures. Frontend: eight tests and typecheck passed.
+- Nine-role/anonymous collection probes plus targeted patient/odontogram/card checks: 178 assertions passed; eight contract findings recorded. Passing characterization explicitly does not mean product parity.
+- Audited all 112 catalog/dashboard pages as admin: 101 initial-render checks passed; 11 failed with network-idle timeouts and observed 422/404 requests. Repeated with explicit authenticated-readiness assertion, obtaining the same totals. Failed pages remain failed; page navigation is not CRUD/visual acceptance.
+- Confirmed session-only smart-card templates, odontogram aggregate/history/code loss, missing/mismatched routes, omitted parent filters on doctor-absence/inventory requests, and generic encounter-register reuse for distinct clinical tabs.
+- Added sanitized results, per-page observations, source-backed findings and acceptance gates; linked the delivery checklist and AI handoff. No capability completion boxes were checked. Source evidence was committed separately as b82ce16.
+- Temporary schemas/services were cleaned; public development data/schema, application behavior and external credentials were unchanged. PHP/Laravel execution and comprehensive original all-role CRUD acceptance remain outstanding.

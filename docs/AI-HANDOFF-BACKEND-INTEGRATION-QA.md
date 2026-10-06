@@ -6,6 +6,8 @@ Prepared 2026-10-06. This document is the next agent's work order and evidence m
 
 ## 1. Objective and non-negotiable requirements
 
+**Latest module audit (2026-10-06):** Start with [module-audit/README.md](module-audit/README.md) and its acceptance matrix/test results. The source action index complements the schema reconstruction. Tests reproduce concrete gaps, including browser-only smart-card templates and lossy odontogram persistence. Passing characterization or page navigation is not CRUD parity. Complete the module's original-action, ownership, validation, persistence and error-path checks before declaring it understood; use separate commits for implementation fixes.
+
 **Original schema audit added 2026-10-06:** Read [the ZIP reconstruction and parity plan](legacy-schema/README.md) before designing further migrations. It inventories all 141 source tables / 1,202 fields, reconciles migration column coverage, and identifies semantic gaps in cards, odontograms, encounters, billing and catalogs. Its table mapping is a candidate design map, not verified field/API parity. Do not use matching screen appearance or table counts as completion evidence.
 
 Finish the single-hospital system's remaining backend, connect every required frontend workflow, reproduce the original pages/features/UX closely, and demonstrate correctness through tests. Modernize visual design only after original parity is accepted.
