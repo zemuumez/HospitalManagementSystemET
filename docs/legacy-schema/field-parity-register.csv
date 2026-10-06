@@ -1,0 +1,1203 @@
+domain,legacy_table,legacy_column,legacy_definition,candidate_target_tables,target_column_or_transform,api_field,ui_workflow,verification_status,evidence
+Identity,accountants,id,int UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:31
+Identity,accountants,user_id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:32
+Identity,accountants,created_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:33
+Identity,accountants,updated_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:34
+Finance,accounts,id,int UNSIGNED NOT NULL,charge_account,,,,pending_field_contract_review,hms/database/hms.sql:44
+Finance,accounts,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,charge_account,,,,pending_field_contract_review,hms/database/hms.sql:45
+Finance,accounts,type,tinyint NOT NULL,charge_account,,,,pending_field_contract_review,hms/database/hms.sql:46
+Finance,accounts,description,text COLLATE utf8mb4_unicode_ci,charge_account,,,,pending_field_contract_review,hms/database/hms.sql:47
+Finance,accounts,status,tinyint(1) NOT NULL DEFAULT '0',charge_account,,,,pending_field_contract_review,hms/database/hms.sql:48
+Finance,accounts,created_at,timestamp NULL DEFAULT NULL,charge_account,,,,pending_field_contract_review,hms/database/hms.sql:49
+Finance,accounts,updated_at,timestamp NULL DEFAULT NULL,charge_account,,,,pending_field_contract_review,hms/database/hms.sql:50
+Identity,addresses,id,bigint UNSIGNED NOT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:60
+Identity,addresses,owner_id,int DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:61
+Identity,addresses,owner_type,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:62
+Identity,addresses,address1,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:63
+Identity,addresses,address2,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:64
+Identity,addresses,city,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:65
+Identity,addresses,zip,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:66
+Identity,addresses,created_at,timestamp NULL DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:67
+Identity,addresses,updated_at,timestamp NULL DEFAULT NULL,"patient_profile,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:68
+Settings,add_custom_fields,id,bigint UNSIGNED NOT NULL,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:78
+Settings,add_custom_fields,module_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:79
+Settings,add_custom_fields,field_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:80
+Settings,add_custom_fields,field_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:81
+Settings,add_custom_fields,is_required,tinyint(1) NOT NULL,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:82
+Settings,add_custom_fields,values,text COLLATE utf8mb4_unicode_ci,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:83
+Settings,add_custom_fields,grid,int NOT NULL DEFAULT '12',custom_field,,,,pending_field_contract_review,hms/database/hms.sql:84
+Settings,add_custom_fields,created_at,timestamp NULL DEFAULT NULL,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:85
+Settings,add_custom_fields,updated_at,timestamp NULL DEFAULT NULL,custom_field,,,,pending_field_contract_review,hms/database/hms.sql:86
+Settings,add_ons,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:96
+Settings,add_ons,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:97
+Settings,add_ons,status,tinyint(1) NOT NULL DEFAULT '1',-,,,,pending_field_contract_review,hms/database/hms.sql:98
+Settings,add_ons,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:99
+Settings,add_ons,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:100
+Identity,admins,id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:110
+Identity,admins,user_id,int NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:111
+Identity,admins,is_default,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT '0',"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:112
+Identity,admins,created_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:113
+Identity,admins,updated_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:114
+Identity,admins,deleted_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:115
+Finance,advanced_payments,id,int UNSIGNED NOT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:132
+Finance,advanced_payments,patient_id,bigint UNSIGNED NOT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:133
+Finance,advanced_payments,receipt_no,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:134
+Finance,advanced_payments,amount,double NOT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:135
+Finance,advanced_payments,date,date NOT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:136
+Finance,advanced_payments,created_at,timestamp NULL DEFAULT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:137
+Finance,advanced_payments,updated_at,timestamp NULL DEFAULT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:138
+Finance,advanced_payments,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,patient_advance_payment,,,,pending_field_contract_review,hms/database/hms.sql:139
+Services,ambulances,id,int UNSIGNED NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:149
+Services,ambulances,vehicle_number,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:150
+Services,ambulances,vehicle_model,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:151
+Services,ambulances,year_made,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:152
+Services,ambulances,driver_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:153
+Services,ambulances,driver_license,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:154
+Services,ambulances,driver_contact,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:155
+Services,ambulances,note,text COLLATE utf8mb4_unicode_ci,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:156
+Services,ambulances,is_available,tinyint(1) NOT NULL DEFAULT '1',"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:157
+Services,ambulances,vehicle_type,int NOT NULL DEFAULT '1',"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:158
+Services,ambulances,created_at,timestamp NULL DEFAULT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:159
+Services,ambulances,updated_at,timestamp NULL DEFAULT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:160
+Services,ambulance_calls,id,int UNSIGNED NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:170
+Services,ambulance_calls,patient_id,int UNSIGNED NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:171
+Services,ambulance_calls,ambulance_id,int UNSIGNED NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:172
+Services,ambulance_calls,driver_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:173
+Services,ambulance_calls,date,date NOT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:174
+Services,ambulance_calls,amount,"double(8,2) NOT NULL","ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:175
+Services,ambulance_calls,created_at,timestamp NULL DEFAULT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:176
+Services,ambulance_calls,updated_at,timestamp NULL DEFAULT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:177
+Services,ambulance_calls,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"ambulance,ambulance_call,ambulance_call_invoice",,,,pending_field_contract_review,hms/database/hms.sql:178
+Staff and scheduling,appointments,id,bigint UNSIGNED NOT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:188
+Staff and scheduling,appointments,patient_id,int UNSIGNED NOT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:189
+Staff and scheduling,appointments,doctor_id,bigint UNSIGNED NOT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:190
+Staff and scheduling,appointments,department_id,bigint UNSIGNED NOT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:191
+Staff and scheduling,appointments,opd_date,datetime NOT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:192
+Staff and scheduling,appointments,problem,text COLLATE utf8mb4_unicode_ci,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:193
+Staff and scheduling,appointments,is_completed,tinyint(1) NOT NULL DEFAULT '0',"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:194
+Staff and scheduling,appointments,custom_field,longtext COLLATE utf8mb4_unicode_ci,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:195
+Staff and scheduling,appointments,payment_status,tinyint(1) NOT NULL DEFAULT '0',"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:196
+Staff and scheduling,appointments,payment_type,int NOT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:197
+Staff and scheduling,appointments,created_at,timestamp NULL DEFAULT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:198
+Staff and scheduling,appointments,updated_at,timestamp NULL DEFAULT NULL,"appointment,appointment_billing,public_appointment_request",,,,pending_field_contract_review,hms/database/hms.sql:199
+Staff and scheduling,appointment_transactions,id,bigint UNSIGNED NOT NULL,"appointment_billing,payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:209
+Staff and scheduling,appointment_transactions,transaction_id,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"appointment_billing,payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:210
+Staff and scheduling,appointment_transactions,payment_type,int NOT NULL,"appointment_billing,payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:211
+Staff and scheduling,appointment_transactions,amount,double NOT NULL,"appointment_billing,payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:212
+Staff and scheduling,appointment_transactions,appointment_id,bigint UNSIGNED NOT NULL,"appointment_billing,payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:213
+Staff and scheduling,appointment_transactions,created_at,timestamp NULL DEFAULT NULL,"appointment_billing,payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:214
+Staff and scheduling,appointment_transactions,updated_at,timestamp NULL DEFAULT NULL,"appointment_billing,payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:215
+Beds,beds,id,int UNSIGNED NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:225
+Beds,beds,bed_type,int UNSIGNED NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:226
+Beds,beds,bed_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:227
+Beds,beds,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:228
+Beds,beds,description,text COLLATE utf8mb4_unicode_ci,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:229
+Beds,beds,charge,double NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:230
+Beds,beds,is_available,tinyint(1) NOT NULL DEFAULT '1',"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:231
+Beds,beds,created_at,timestamp NULL DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:232
+Beds,beds,updated_at,timestamp NULL DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:233
+Beds,beds,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:234
+Beds,bed_assigns,id,int UNSIGNED NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:244
+Beds,bed_assigns,bed_id,int UNSIGNED NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:245
+Beds,bed_assigns,ipd_patient_department_id,int UNSIGNED DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:246
+Beds,bed_assigns,patient_id,int UNSIGNED NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:247
+Beds,bed_assigns,case_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:248
+Beds,bed_assigns,assign_date,datetime NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:249
+Beds,bed_assigns,discharge_date,datetime DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:250
+Beds,bed_assigns,description,text COLLATE utf8mb4_unicode_ci,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:251
+Beds,bed_assigns,status,tinyint(1) NOT NULL DEFAULT '0',"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:252
+Beds,bed_assigns,created_at,timestamp NULL DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:253
+Beds,bed_assigns,updated_at,timestamp NULL DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:254
+Beds,bed_types,id,int UNSIGNED NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:264
+Beds,bed_types,title,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:265
+Beds,bed_types,description,text COLLATE utf8mb4_unicode_ci,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:266
+Beds,bed_types,created_at,timestamp NULL DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:267
+Beds,bed_types,updated_at,timestamp NULL DEFAULT NULL,"bed_type,hospital_bed,bed_assignment,bed_event,bed_state_event",,,,pending_field_contract_review,hms/database/hms.sql:268
+Finance,bills,id,int UNSIGNED NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:278
+Finance,bills,bill_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:279
+Finance,bills,patient_id,int UNSIGNED NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:280
+Finance,bills,bill_date,datetime NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:281
+Finance,bills,amount,"decimal(16,2) DEFAULT NULL","invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:282
+Finance,bills,status,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:283
+Finance,bills,payment_mode,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:284
+Finance,bills,created_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:285
+Finance,bills,updated_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:286
+Finance,bills,patient_admission_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:287
+Finance,bills,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:288
+Finance,bill_items,id,int UNSIGNED NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:298
+Finance,bill_items,item_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:299
+Finance,bill_items,bill_id,int UNSIGNED NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:300
+Finance,bill_items,qty,int UNSIGNED NOT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:301
+Finance,bill_items,price,"double(8,2) NOT NULL","invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:302
+Finance,bill_items,amount,"decimal(16,2) NOT NULL","invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:303
+Finance,bill_items,created_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:304
+Finance,bill_items,updated_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line,encounter_billing",,,,pending_field_contract_review,hms/database/hms.sql:305
+Finance,bill_transactions,id,bigint UNSIGNED NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:315
+Finance,bill_transactions,transaction_id,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:316
+Finance,bill_transactions,payment_type,"int NOT NULL COMMENT '1 Stripe, 2 Manual'","payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:317
+Finance,bill_transactions,amount,double NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:318
+Finance,bill_transactions,bill_id,int UNSIGNED NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:319
+Finance,bill_transactions,status,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:320
+Finance,bill_transactions,meta,text COLLATE utf8mb4_unicode_ci,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:321
+Finance,bill_transactions,is_manual_payment,tinyint(1) DEFAULT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:322
+Finance,bill_transactions,created_at,timestamp NULL DEFAULT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:323
+Finance,bill_transactions,updated_at,timestamp NULL DEFAULT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:324
+Diagnostics,birth_reports,id,int UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:334
+Diagnostics,birth_reports,patient_id,int UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:335
+Diagnostics,birth_reports,case_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:336
+Diagnostics,birth_reports,doctor_id,bigint UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:337
+Diagnostics,birth_reports,date,datetime NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:338
+Diagnostics,birth_reports,description,text COLLATE utf8mb4_unicode_ci,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:339
+Diagnostics,birth_reports,created_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:340
+Diagnostics,birth_reports,updated_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:341
+Blood bank,blood_banks,id,int UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:351
+Blood bank,blood_banks,blood_group,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:352
+Blood bank,blood_banks,remained_bags,bigint NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:353
+Blood bank,blood_banks,created_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:354
+Blood bank,blood_banks,updated_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:355
+Blood bank,blood_donations,id,int UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:365
+Blood bank,blood_donations,blood_donor_id,int UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:366
+Blood bank,blood_donations,bags,int NOT NULL DEFAULT '1',"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:367
+Blood bank,blood_donations,created_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:368
+Blood bank,blood_donations,updated_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:369
+Blood bank,blood_donors,id,int UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:379
+Blood bank,blood_donors,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:380
+Blood bank,blood_donors,age,int NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:381
+Blood bank,blood_donors,gender,int NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:382
+Blood bank,blood_donors,blood_group,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:383
+Blood bank,blood_donors,last_donate_date,datetime NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:384
+Blood bank,blood_donors,created_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:385
+Blood bank,blood_donors,updated_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:386
+Blood bank,blood_issues,id,bigint UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:396
+Blood bank,blood_issues,issue_date,datetime NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:397
+Blood bank,blood_issues,doctor_id,bigint UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:398
+Blood bank,blood_issues,donor_id,int UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:399
+Blood bank,blood_issues,patient_id,int UNSIGNED NOT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:400
+Blood bank,blood_issues,amount,double DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:401
+Blood bank,blood_issues,remarks,text COLLATE utf8mb4_unicode_ci,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:402
+Blood bank,blood_issues,created_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:403
+Blood bank,blood_issues,updated_at,timestamp NULL DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:404
+Blood bank,blood_issues,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"blood_bank,blood_donor,blood_donation,blood_issue",,,,pending_field_contract_review,hms/database/hms.sql:405
+Pharmacy,brands,id,int UNSIGNED NOT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:415
+Pharmacy,brands,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:416
+Pharmacy,brands,email,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:417
+Pharmacy,brands,phone,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:418
+Pharmacy,brands,created_at,timestamp NULL DEFAULT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:419
+Pharmacy,brands,updated_at,timestamp NULL DEFAULT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:420
+Front office,call_logs,id,bigint UNSIGNED NOT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:430
+Front office,call_logs,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:431
+Front office,call_logs,phone,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:432
+Front office,call_logs,date,date DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:433
+Front office,call_logs,follow_up_date,date DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:434
+Front office,call_logs,note,text COLLATE utf8mb4_unicode_ci,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:435
+Front office,call_logs,call_type,int NOT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:436
+Front office,call_logs,created_at,timestamp NULL DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:437
+Front office,call_logs,updated_at,timestamp NULL DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:438
+Identity,case_handlers,id,int UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:448
+Identity,case_handlers,user_id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:449
+Identity,case_handlers,created_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:450
+Identity,case_handlers,updated_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:451
+Pharmacy,categories,id,int UNSIGNED NOT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:461
+Pharmacy,categories,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:462
+Pharmacy,categories,is_active,tinyint(1) NOT NULL DEFAULT '0',"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:463
+Pharmacy,categories,created_at,timestamp NULL DEFAULT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:464
+Pharmacy,categories,updated_at,timestamp NULL DEFAULT NULL,"medicine_category,medicine_brand",,,,pending_field_contract_review,hms/database/hms.sql:465
+Services,charges,id,int UNSIGNED NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:475
+Services,charges,charge_type,int NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:476
+Services,charges,charge_category_id,int UNSIGNED NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:477
+Services,charges,code,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:478
+Services,charges,standard_charge,double NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:479
+Services,charges,description,text COLLATE utf8mb4_unicode_ci,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:480
+Services,charges,created_at,timestamp NULL DEFAULT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:481
+Services,charges,updated_at,timestamp NULL DEFAULT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:482
+Services,charges,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:483
+Services,charge_categories,id,int UNSIGNED NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:493
+Services,charge_categories,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:494
+Services,charge_categories,description,text COLLATE utf8mb4_unicode_ci,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:495
+Services,charge_categories,charge_type,int NOT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:496
+Services,charge_categories,created_at,timestamp NULL DEFAULT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:497
+Services,charge_categories,updated_at,timestamp NULL DEFAULT NULL,"charge_category,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:498
+CMS,complaints,id,bigint UNSIGNED NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:508
+CMS,complaints,patient_id,bigint UNSIGNED NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:509
+CMS,complaints,title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:510
+CMS,complaints,description,text COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:511
+CMS,complaints,status,tinyint NOT NULL DEFAULT '0',"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:512
+CMS,complaints,response,text COLLATE utf8mb4_unicode_ci,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:513
+CMS,complaints,resolved_by,bigint UNSIGNED DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:514
+CMS,complaints,resolved_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:515
+CMS,complaints,created_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:516
+CMS,complaints,updated_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:517
+Settings,currency_settings,id,bigint UNSIGNED NOT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:527
+Settings,currency_settings,currency_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:528
+Settings,currency_settings,currency_icon,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:529
+Settings,currency_settings,currency_code,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:530
+Settings,currency_settings,created_at,timestamp NULL DEFAULT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:531
+Settings,currency_settings,updated_at,timestamp NULL DEFAULT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:532
+Settings,currency_settings,deleted_at,timestamp NULL DEFAULT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:533
+Diagnostics,death_reports,id,int UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:551
+Diagnostics,death_reports,patient_id,int UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:552
+Diagnostics,death_reports,case_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:553
+Diagnostics,death_reports,doctor_id,bigint UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:554
+Diagnostics,death_reports,date,datetime NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:555
+Diagnostics,death_reports,description,text COLLATE utf8mb4_unicode_ci,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:556
+Diagnostics,death_reports,created_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:557
+Diagnostics,death_reports,updated_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:558
+Identity,departments,id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:568
+Identity,departments,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:569
+Identity,departments,is_active,tinyint(1) NOT NULL DEFAULT '0',staff_access,,,,pending_field_contract_review,hms/database/hms.sql:570
+Identity,departments,guard_name,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:571
+Identity,departments,created_at,timestamp NULL DEFAULT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:572
+Identity,departments,updated_at,timestamp NULL DEFAULT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:573
+Diagnostics,diagnosis_categories,id,bigint UNSIGNED NOT NULL,"diagnostic_category,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:598
+Diagnostics,diagnosis_categories,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_category,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:599
+Diagnostics,diagnosis_categories,description,text COLLATE utf8mb4_unicode_ci,"diagnostic_category,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:600
+Diagnostics,diagnosis_categories,created_at,timestamp NULL DEFAULT NULL,"diagnostic_category,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:601
+Diagnostics,diagnosis_categories,updated_at,timestamp NULL DEFAULT NULL,"diagnostic_category,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:602
+Staff and scheduling,doctors,id,bigint UNSIGNED NOT NULL,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:612
+Staff and scheduling,doctors,user_id,bigint UNSIGNED NOT NULL,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:613
+Staff and scheduling,doctors,doctor_department_id,bigint UNSIGNED NOT NULL,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:614
+Staff and scheduling,doctors,specialist,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:615
+Staff and scheduling,doctors,description,text COLLATE utf8mb4_unicode_ci,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:616
+Staff and scheduling,doctors,appointment_charge,double DEFAULT '0',"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:617
+Staff and scheduling,doctors,google_json_file_path,longtext COLLATE utf8mb4_unicode_ci,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:618
+Staff and scheduling,doctors,created_at,timestamp NULL DEFAULT NULL,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:619
+Staff and scheduling,doctors,updated_at,timestamp NULL DEFAULT NULL,"doctor_profile,staff_profile,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:620
+Staff and scheduling,doctor_departments,id,bigint UNSIGNED NOT NULL,doctor_department,,,,pending_field_contract_review,hms/database/hms.sql:630
+Staff and scheduling,doctor_departments,title,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,doctor_department,,,,pending_field_contract_review,hms/database/hms.sql:631
+Staff and scheduling,doctor_departments,description,text COLLATE utf8mb4_unicode_ci,doctor_department,,,,pending_field_contract_review,hms/database/hms.sql:632
+Staff and scheduling,doctor_departments,created_at,timestamp NULL DEFAULT NULL,doctor_department,,,,pending_field_contract_review,hms/database/hms.sql:633
+Staff and scheduling,doctor_departments,updated_at,timestamp NULL DEFAULT NULL,doctor_department,,,,pending_field_contract_review,hms/database/hms.sql:634
+Staff and scheduling,doctor_holidays,id,bigint UNSIGNED NOT NULL,doctor_absence,,,,pending_field_contract_review,hms/database/hms.sql:644
+Staff and scheduling,doctor_holidays,name,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,doctor_absence,,,,pending_field_contract_review,hms/database/hms.sql:645
+Staff and scheduling,doctor_holidays,doctor_id,bigint UNSIGNED NOT NULL,doctor_absence,,,,pending_field_contract_review,hms/database/hms.sql:646
+Staff and scheduling,doctor_holidays,date,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,doctor_absence,,,,pending_field_contract_review,hms/database/hms.sql:647
+Staff and scheduling,doctor_holidays,created_at,timestamp NULL DEFAULT NULL,doctor_absence,,,,pending_field_contract_review,hms/database/hms.sql:648
+Staff and scheduling,doctor_holidays,updated_at,timestamp NULL DEFAULT NULL,doctor_absence,,,,pending_field_contract_review,hms/database/hms.sql:649
+Staff and scheduling,doctor_opd_charges,id,bigint UNSIGNED NOT NULL,"doctor_profile,patient_service_charge",,,,pending_field_contract_review,hms/database/hms.sql:659
+Staff and scheduling,doctor_opd_charges,doctor_id,bigint UNSIGNED NOT NULL,"doctor_profile,patient_service_charge",,,,pending_field_contract_review,hms/database/hms.sql:660
+Staff and scheduling,doctor_opd_charges,standard_charge,double NOT NULL,"doctor_profile,patient_service_charge",,,,pending_field_contract_review,hms/database/hms.sql:661
+Staff and scheduling,doctor_opd_charges,created_at,timestamp NULL DEFAULT NULL,"doctor_profile,patient_service_charge",,,,pending_field_contract_review,hms/database/hms.sql:662
+Staff and scheduling,doctor_opd_charges,updated_at,timestamp NULL DEFAULT NULL,"doctor_profile,patient_service_charge",,,,pending_field_contract_review,hms/database/hms.sql:663
+Staff and scheduling,doctor_opd_charges,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"doctor_profile,patient_service_charge",,,,pending_field_contract_review,hms/database/hms.sql:664
+Files,documents,id,int UNSIGNED NOT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:674
+Files,documents,title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:675
+Files,documents,document_type_id,int NOT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:676
+Files,documents,patient_id,int NOT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:677
+Files,documents,uploaded_by,bigint UNSIGNED NOT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:678
+Files,documents,notes,text COLLATE utf8mb4_unicode_ci,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:679
+Files,documents,created_at,timestamp NULL DEFAULT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:680
+Files,documents,updated_at,timestamp NULL DEFAULT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:681
+Files,document_types,id,int UNSIGNED NOT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:691
+Files,document_types,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:692
+Files,document_types,created_at,timestamp NULL DEFAULT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:693
+Files,document_types,updated_at,timestamp NULL DEFAULT NULL,"secure_attachment,encounter_attachment",,,,pending_field_contract_review,hms/database/hms.sql:694
+Messaging,email_templates,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:704
+Messaging,email_templates,template_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:705
+Messaging,email_templates,email_subject,text COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:706
+Messaging,email_templates,email_content,longtext COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:707
+Messaging,email_templates,dynamic_variables,json DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:708
+Messaging,email_templates,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:709
+Messaging,email_templates,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:710
+Finance,employee_payrolls,id,int UNSIGNED NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:731
+Finance,employee_payrolls,sr_no,bigint NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:732
+Finance,employee_payrolls,payroll_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:733
+Finance,employee_payrolls,type,int NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:734
+Finance,employee_payrolls,owner_id,int NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:735
+Finance,employee_payrolls,owner_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:736
+Finance,employee_payrolls,month,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:737
+Finance,employee_payrolls,year,int NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:738
+Finance,employee_payrolls,net_salary,double NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:739
+Finance,employee_payrolls,status,int NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:740
+Finance,employee_payrolls,basic_salary,double NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:741
+Finance,employee_payrolls,allowance,double NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:742
+Finance,employee_payrolls,deductions,double NOT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:743
+Finance,employee_payrolls,created_at,timestamp NULL DEFAULT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:744
+Finance,employee_payrolls,updated_at,timestamp NULL DEFAULT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:745
+Finance,employee_payrolls,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,employee_payroll,,,,pending_field_contract_review,hms/database/hms.sql:746
+CMS,enquiries,id,int UNSIGNED NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:756
+CMS,enquiries,full_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:757
+CMS,enquiries,email,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:758
+CMS,enquiries,contact_no,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:759
+CMS,enquiries,type,tinyint DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:760
+CMS,enquiries,message,text COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:761
+CMS,enquiries,viewed_by,bigint UNSIGNED DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:762
+CMS,enquiries,status,tinyint(1) NOT NULL DEFAULT '0',"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:763
+CMS,enquiries,created_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:764
+CMS,enquiries,updated_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:765
+Integrations,event_google_calendars,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:775
+Integrations,event_google_calendars,user_id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:776
+Integrations,event_google_calendars,google_calendar_list_id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:777
+Integrations,event_google_calendars,google_calendar_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:778
+Integrations,event_google_calendars,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:779
+Integrations,event_google_calendars,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:780
+Finance,expenses,id,bigint UNSIGNED NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:790
+Finance,expenses,expense_head,int NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:791
+Finance,expenses,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:792
+Finance,expenses,invoice_number,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:793
+Finance,expenses,date,datetime NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:794
+Finance,expenses,amount,double NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:795
+Finance,expenses,description,text COLLATE utf8mb4_unicode_ci,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:796
+Finance,expenses,created_at,timestamp NULL DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:797
+Finance,expenses,updated_at,timestamp NULL DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:798
+Finance,expenses,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:799
+Identity,failed_jobs,id,bigint UNSIGNED NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:809
+Identity,failed_jobs,uuid,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:810
+Identity,failed_jobs,connection,text COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:811
+Identity,failed_jobs,queue,text COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:812
+Identity,failed_jobs,payload,longtext COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:813
+Identity,failed_jobs,exception,longtext COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:814
+Identity,failed_jobs,failed_at,timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:815
+CMS,front_services,id,bigint UNSIGNED NOT NULL,"hospital_service,front_cms_setting",,,,pending_field_contract_review,hms/database/hms.sql:825
+CMS,front_services,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_service,front_cms_setting",,,,pending_field_contract_review,hms/database/hms.sql:826
+CMS,front_services,short_description,text COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_service,front_cms_setting",,,,pending_field_contract_review,hms/database/hms.sql:827
+CMS,front_services,created_at,timestamp NULL DEFAULT NULL,"hospital_service,front_cms_setting",,,,pending_field_contract_review,hms/database/hms.sql:828
+CMS,front_services,updated_at,timestamp NULL DEFAULT NULL,"hospital_service,front_cms_setting",,,,pending_field_contract_review,hms/database/hms.sql:829
+CMS,front_settings,id,bigint UNSIGNED NOT NULL,front_cms_setting,,,,pending_field_contract_review,hms/database/hms.sql:853
+CMS,front_settings,key,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,front_cms_setting,,,,pending_field_contract_review,hms/database/hms.sql:854
+CMS,front_settings,value,text COLLATE utf8mb4_unicode_ci NOT NULL,front_cms_setting,,,,pending_field_contract_review,hms/database/hms.sql:855
+CMS,front_settings,type,text COLLATE utf8mb4_unicode_ci NOT NULL,front_cms_setting,,,,pending_field_contract_review,hms/database/hms.sql:856
+CMS,front_settings,created_at,timestamp NULL DEFAULT NULL,front_cms_setting,,,,pending_field_contract_review,hms/database/hms.sql:857
+CMS,front_settings,updated_at,timestamp NULL DEFAULT NULL,front_cms_setting,,,,pending_field_contract_review,hms/database/hms.sql:858
+Integrations,google_calendar_integrations,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:902
+Integrations,google_calendar_integrations,user_id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:903
+Integrations,google_calendar_integrations,access_token,text COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:904
+Integrations,google_calendar_integrations,meta,text COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:905
+Integrations,google_calendar_integrations,last_used_at,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:906
+Integrations,google_calendar_integrations,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:907
+Integrations,google_calendar_integrations,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:908
+Integrations,google_calendar_lists,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:918
+Integrations,google_calendar_lists,user_id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:919
+Integrations,google_calendar_lists,calendar_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:920
+Integrations,google_calendar_lists,google_calendar_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:921
+Integrations,google_calendar_lists,meta,text COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:922
+Integrations,google_calendar_lists,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:923
+Integrations,google_calendar_lists,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:924
+Staff and scheduling,hospital_schedules,id,bigint UNSIGNED NOT NULL,"hospital_schedule_day,hospital_hours,hospital_date_override",,,,pending_field_contract_review,hms/database/hms.sql:934
+Staff and scheduling,hospital_schedules,day_of_week,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_schedule_day,hospital_hours,hospital_date_override",,,,pending_field_contract_review,hms/database/hms.sql:935
+Staff and scheduling,hospital_schedules,start_time,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_schedule_day,hospital_hours,hospital_date_override",,,,pending_field_contract_review,hms/database/hms.sql:936
+Staff and scheduling,hospital_schedules,end_time,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_schedule_day,hospital_hours,hospital_date_override",,,,pending_field_contract_review,hms/database/hms.sql:937
+Staff and scheduling,hospital_schedules,created_at,timestamp NULL DEFAULT NULL,"hospital_schedule_day,hospital_hours,hospital_date_override",,,,pending_field_contract_review,hms/database/hms.sql:938
+Staff and scheduling,hospital_schedules,updated_at,timestamp NULL DEFAULT NULL,"hospital_schedule_day,hospital_hours,hospital_date_override",,,,pending_field_contract_review,hms/database/hms.sql:939
+Finance,incomes,id,bigint UNSIGNED NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:949
+Finance,incomes,income_head,int NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:950
+Finance,incomes,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:951
+Finance,incomes,invoice_number,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:952
+Finance,incomes,date,datetime NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:953
+Finance,incomes,amount,double NOT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:954
+Finance,incomes,description,text COLLATE utf8mb4_unicode_ci,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:955
+Finance,incomes,created_at,timestamp NULL DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:956
+Finance,incomes,updated_at,timestamp NULL DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:957
+Finance,incomes,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_expense,hospital_expense_head,hospital_income,hospital_income_head",,,,pending_field_contract_review,hms/database/hms.sql:958
+Patients,insurances,id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:968
+Patients,insurances,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:969
+Patients,insurances,service_tax,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:970
+Patients,insurances,discount,double DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:971
+Patients,insurances,remark,text COLLATE utf8mb4_unicode_ci,-,,,,pending_field_contract_review,hms/database/hms.sql:972
+Patients,insurances,insurance_no,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:973
+Patients,insurances,insurance_code,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:974
+Patients,insurances,hospital_rate,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:975
+Patients,insurances,total,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:976
+Patients,insurances,status,tinyint(1) NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:977
+Patients,insurances,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:978
+Patients,insurances,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:979
+Patients,insurances,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:980
+Patients,insurance_diseases,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:990
+Patients,insurance_diseases,insurance_id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:991
+Patients,insurance_diseases,disease_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:992
+Patients,insurance_diseases,disease_charge,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:993
+Patients,insurance_diseases,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:994
+Patients,insurance_diseases,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:995
+Diagnostics,investigation_reports,id,int UNSIGNED NOT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1005
+Diagnostics,investigation_reports,patient_id,int UNSIGNED NOT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1006
+Diagnostics,investigation_reports,date,datetime NOT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1007
+Diagnostics,investigation_reports,title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1008
+Diagnostics,investigation_reports,description,text COLLATE utf8mb4_unicode_ci,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1009
+Diagnostics,investigation_reports,doctor_id,bigint UNSIGNED NOT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1010
+Diagnostics,investigation_reports,status,int NOT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1011
+Diagnostics,investigation_reports,created_at,timestamp NULL DEFAULT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1012
+Diagnostics,investigation_reports,updated_at,timestamp NULL DEFAULT NULL,"investigation_report,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1013
+Finance,invoices,id,int UNSIGNED NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1023
+Finance,invoices,invoice_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1024
+Finance,invoices,patient_id,int UNSIGNED NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1025
+Finance,invoices,invoice_date,date NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1026
+Finance,invoices,amount,"decimal(16,2) NOT NULL DEFAULT '0.00'","invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1027
+Finance,invoices,discount,"double(8,2) NOT NULL DEFAULT '0.00'","invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1028
+Finance,invoices,status,tinyint(1) NOT NULL DEFAULT '0',"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1029
+Finance,invoices,created_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1030
+Finance,invoices,updated_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1031
+Finance,invoices,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1032
+Finance,invoice_items,id,int UNSIGNED NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1042
+Finance,invoice_items,account_id,int UNSIGNED NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1043
+Finance,invoice_items,invoice_id,int UNSIGNED NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1044
+Finance,invoice_items,description,text COLLATE utf8mb4_unicode_ci,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1045
+Finance,invoice_items,quantity,int NOT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1046
+Finance,invoice_items,price,"decimal(16,2) NOT NULL","invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1047
+Finance,invoice_items,total,"decimal(16,2) NOT NULL","invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1048
+Finance,invoice_items,created_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1049
+Finance,invoice_items,updated_at,timestamp NULL DEFAULT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1050
+Finance,invoice_items,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"invoice,invoice_line",,,,pending_field_contract_review,hms/database/hms.sql:1051
+Clinical,ipd_bills,id,bigint UNSIGNED NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1061
+Clinical,ipd_bills,ipd_patient_department_id,int UNSIGNED NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1062
+Clinical,ipd_bills,total_charges,double NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1063
+Clinical,ipd_bills,total_payments,double NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1064
+Clinical,ipd_bills,gross_total,double NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1065
+Clinical,ipd_bills,discount_in_percentage,int NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1066
+Clinical,ipd_bills,tax_in_percentage,int NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1067
+Clinical,ipd_bills,other_charges,double NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1068
+Clinical,ipd_bills,net_payable_amount,double NOT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1069
+Clinical,ipd_bills,created_at,timestamp NULL DEFAULT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1070
+Clinical,ipd_bills,updated_at,timestamp NULL DEFAULT NULL,"encounter_billing,invoice,invoice_line,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:1071
+Clinical,ipd_charges,id,int UNSIGNED NOT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1081
+Clinical,ipd_charges,ipd_patient_department_id,int UNSIGNED NOT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1082
+Clinical,ipd_charges,date,date NOT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1083
+Clinical,ipd_charges,charge_type_id,int NOT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1084
+Clinical,ipd_charges,charge_category_id,int UNSIGNED NOT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1085
+Clinical,ipd_charges,charge_id,int UNSIGNED NOT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1086
+Clinical,ipd_charges,standard_charge,double DEFAULT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1087
+Clinical,ipd_charges,applied_charge,double NOT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1088
+Clinical,ipd_charges,created_at,timestamp NULL DEFAULT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1089
+Clinical,ipd_charges,updated_at,timestamp NULL DEFAULT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1090
+Clinical,ipd_charges,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"patient_service_charge,invoice_line,hospital_charge",,,,pending_field_contract_review,hms/database/hms.sql:1091
+Clinical,ipd_consultant_registers,id,int UNSIGNED NOT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1101
+Clinical,ipd_consultant_registers,ipd_patient_department_id,int UNSIGNED NOT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1102
+Clinical,ipd_consultant_registers,applied_date,datetime NOT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1103
+Clinical,ipd_consultant_registers,doctor_id,bigint UNSIGNED NOT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1104
+Clinical,ipd_consultant_registers,instruction,text COLLATE utf8mb4_unicode_ci NOT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1105
+Clinical,ipd_consultant_registers,instruction_date,date NOT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1106
+Clinical,ipd_consultant_registers,created_at,timestamp NULL DEFAULT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1107
+Clinical,ipd_consultant_registers,updated_at,timestamp NULL DEFAULT NULL,"encounter_care_team,clinical_note",,,,pending_field_contract_review,hms/database/hms.sql:1108
+Clinical,ipd_diagnoses,id,int UNSIGNED NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1118
+Clinical,ipd_diagnoses,ipd_patient_department_id,int UNSIGNED NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1119
+Clinical,ipd_diagnoses,report_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1120
+Clinical,ipd_diagnoses,report_date,datetime NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1121
+Clinical,ipd_diagnoses,description,text COLLATE utf8mb4_unicode_ci,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1122
+Clinical,ipd_diagnoses,created_at,timestamp NULL DEFAULT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1123
+Clinical,ipd_diagnoses,updated_at,timestamp NULL DEFAULT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1124
+Clinical,ipd_operation,id,bigint UNSIGNED NOT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1134
+Clinical,ipd_operation,ref_no,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1135
+Clinical,ipd_operation,operation_category_id,bigint UNSIGNED NOT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1136
+Clinical,ipd_operation,operation_id,bigint UNSIGNED NOT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1137
+Clinical,ipd_operation,ipd_patient_department_id,int UNSIGNED NOT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1138
+Clinical,ipd_operation,operation_date,date NOT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1139
+Clinical,ipd_operation,doctor_id,bigint UNSIGNED NOT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1140
+Clinical,ipd_operation,assistant_consultant_1,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1141
+Clinical,ipd_operation,assistant_consultant_2,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1142
+Clinical,ipd_operation,anesthetist,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1143
+Clinical,ipd_operation,anesthesia_type,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1144
+Clinical,ipd_operation,ot_technician,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1145
+Clinical,ipd_operation,ot_assistant,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1146
+Clinical,ipd_operation,remark,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1147
+Clinical,ipd_operation,result,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1148
+Clinical,ipd_operation,created_at,timestamp NULL DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1149
+Clinical,ipd_operation,updated_at,timestamp NULL DEFAULT NULL,"encounter_procedure,hospital_operation,operation_category",,,,pending_field_contract_review,hms/database/hms.sql:1150
+Clinical,ipd_patient_departments,id,int UNSIGNED NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1160
+Clinical,ipd_patient_departments,patient_id,int UNSIGNED NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1161
+Clinical,ipd_patient_departments,ipd_number,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1162
+Clinical,ipd_patient_departments,height,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1163
+Clinical,ipd_patient_departments,weight,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1164
+Clinical,ipd_patient_departments,bp,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1165
+Clinical,ipd_patient_departments,symptoms,text COLLATE utf8mb4_unicode_ci,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1166
+Clinical,ipd_patient_departments,notes,text COLLATE utf8mb4_unicode_ci,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1167
+Clinical,ipd_patient_departments,admission_date,datetime NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1168
+Clinical,ipd_patient_departments,discharge,tinyint(1) NOT NULL DEFAULT '0',"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1169
+Clinical,ipd_patient_departments,case_id,int UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1170
+Clinical,ipd_patient_departments,is_old_patient,tinyint(1) DEFAULT '0',"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1171
+Clinical,ipd_patient_departments,doctor_id,bigint UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1172
+Clinical,ipd_patient_departments,bed_type_id,int UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1173
+Clinical,ipd_patient_departments,bed_id,int UNSIGNED NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1174
+Clinical,ipd_patient_departments,custom_field,longtext COLLATE utf8mb4_unicode_ci,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1175
+Clinical,ipd_patient_departments,created_at,timestamp NULL DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1176
+Clinical,ipd_patient_departments,updated_at,timestamp NULL DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1177
+Clinical,ipd_patient_departments,bill_status,tinyint(1) NOT NULL DEFAULT '0',"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:1178
+Clinical,ipd_payments,id,int UNSIGNED NOT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1188
+Clinical,ipd_payments,ipd_patient_department_id,int UNSIGNED NOT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1189
+Clinical,ipd_payments,amount,double NOT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1190
+Clinical,ipd_payments,date,date NOT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1191
+Clinical,ipd_payments,payment_mode,tinyint NOT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1192
+Clinical,ipd_payments,notes,text COLLATE utf8mb4_unicode_ci,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1193
+Clinical,ipd_payments,transaction_id,int DEFAULT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1194
+Clinical,ipd_payments,created_at,timestamp NULL DEFAULT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1195
+Clinical,ipd_payments,updated_at,timestamp NULL DEFAULT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1196
+Clinical,ipd_payments,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"invoice_payment,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:1197
+Clinical,ipd_prescriptions,id,int UNSIGNED NOT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1207
+Clinical,ipd_prescriptions,ipd_patient_department_id,int UNSIGNED NOT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1208
+Clinical,ipd_prescriptions,header_note,text COLLATE utf8mb4_unicode_ci,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1209
+Clinical,ipd_prescriptions,footer_note,text COLLATE utf8mb4_unicode_ci,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1210
+Clinical,ipd_prescriptions,created_at,timestamp NULL DEFAULT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1211
+Clinical,ipd_prescriptions,updated_at,timestamp NULL DEFAULT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1212
+Clinical,ipd_prescription_items,id,int UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1222
+Clinical,ipd_prescription_items,ipd_prescription_id,int UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1223
+Clinical,ipd_prescription_items,category_id,int UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1224
+Clinical,ipd_prescription_items,medicine_id,int UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1225
+Clinical,ipd_prescription_items,dosage,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1226
+Clinical,ipd_prescription_items,dose_interval,int NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1227
+Clinical,ipd_prescription_items,day,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1228
+Clinical,ipd_prescription_items,instruction,text COLLATE utf8mb4_unicode_ci NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1229
+Clinical,ipd_prescription_items,created_at,timestamp NULL DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1230
+Clinical,ipd_prescription_items,updated_at,timestamp NULL DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1231
+Clinical,ipd_prescription_items,time,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:1232
+Clinical,ipd_timelines,id,int UNSIGNED NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1242
+Clinical,ipd_timelines,ipd_patient_department_id,int UNSIGNED NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1243
+Clinical,ipd_timelines,title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1244
+Clinical,ipd_timelines,date,date NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1245
+Clinical,ipd_timelines,description,text COLLATE utf8mb4_unicode_ci,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1246
+Clinical,ipd_timelines,visible_to_person,tinyint(1) NOT NULL DEFAULT '1',"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1247
+Clinical,ipd_timelines,created_at,timestamp NULL DEFAULT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1248
+Clinical,ipd_timelines,updated_at,timestamp NULL DEFAULT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:1249
+Inventory,issued_items,id,int UNSIGNED NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1259
+Inventory,issued_items,department_id,bigint UNSIGNED NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1260
+Inventory,issued_items,user_id,bigint UNSIGNED NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1261
+Inventory,issued_items,issued_by,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1262
+Inventory,issued_items,issued_date,date NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1263
+Inventory,issued_items,return_date,date DEFAULT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1264
+Inventory,issued_items,item_category_id,int UNSIGNED NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1265
+Inventory,issued_items,item_id,int UNSIGNED NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1266
+Inventory,issued_items,quantity,int NOT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1267
+Inventory,issued_items,description,text COLLATE utf8mb4_unicode_ci,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1268
+Inventory,issued_items,status,tinyint(1) DEFAULT '0',"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1269
+Inventory,issued_items,created_at,timestamp NULL DEFAULT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1270
+Inventory,issued_items,updated_at,timestamp NULL DEFAULT NULL,"inventory_movement,staff_access",,,,pending_field_contract_review,hms/database/hms.sql:1271
+Inventory,items,id,int UNSIGNED NOT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1281
+Inventory,items,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1282
+Inventory,items,item_category_id,int UNSIGNED NOT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1283
+Inventory,items,unit,bigint NOT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1284
+Inventory,items,description,text COLLATE utf8mb4_unicode_ci,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1285
+Inventory,items,available_quantity,int NOT NULL DEFAULT '0',"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1286
+Inventory,items,created_at,timestamp NULL DEFAULT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1287
+Inventory,items,updated_at,timestamp NULL DEFAULT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1288
+Inventory,item_categories,id,int UNSIGNED NOT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1298
+Inventory,item_categories,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1299
+Inventory,item_categories,created_at,timestamp NULL DEFAULT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1300
+Inventory,item_categories,updated_at,timestamp NULL DEFAULT NULL,"inventory_category,inventory_item",,,,pending_field_contract_review,hms/database/hms.sql:1301
+Inventory,item_stocks,id,int UNSIGNED NOT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1311
+Inventory,item_stocks,item_category_id,int UNSIGNED NOT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1312
+Inventory,item_stocks,item_id,int UNSIGNED NOT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1313
+Inventory,item_stocks,supplier_name,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1314
+Inventory,item_stocks,store_name,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1315
+Inventory,item_stocks,quantity,int NOT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1316
+Inventory,item_stocks,purchase_price,double NOT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1317
+Inventory,item_stocks,description,text COLLATE utf8mb4_unicode_ci,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1318
+Inventory,item_stocks,created_at,timestamp NULL DEFAULT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1319
+Inventory,item_stocks,updated_at,timestamp NULL DEFAULT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1320
+Inventory,item_stocks,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,inventory_movement,,,,pending_field_contract_review,hms/database/hms.sql:1321
+Identity,lab_technicians,id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1331
+Identity,lab_technicians,user_id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1332
+Identity,lab_technicians,created_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1333
+Identity,lab_technicians,updated_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1334
+Integrations,live_consultations,id,bigint UNSIGNED NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1344
+Integrations,live_consultations,doctor_id,bigint UNSIGNED NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1345
+Integrations,live_consultations,patient_id,int UNSIGNED NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1346
+Integrations,live_consultations,consultation_title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1347
+Integrations,live_consultations,consultation_date,datetime NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1348
+Integrations,live_consultations,host_video,tinyint(1) NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1349
+Integrations,live_consultations,participant_video,tinyint(1) NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1350
+Integrations,live_consultations,consultation_duration_minutes,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1351
+Integrations,live_consultations,type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1352
+Integrations,live_consultations,type_number,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1353
+Integrations,live_consultations,created_by,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1354
+Integrations,live_consultations,status,int NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1355
+Integrations,live_consultations,description,text COLLATE utf8mb4_unicode_ci,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1356
+Integrations,live_consultations,meeting_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1357
+Integrations,live_consultations,meta,text COLLATE utf8mb4_unicode_ci,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1358
+Integrations,live_consultations,time_zone,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1359
+Integrations,live_consultations,password,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1360
+Integrations,live_consultations,platform_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1361
+Integrations,live_consultations,created_at,timestamp NULL DEFAULT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1362
+Integrations,live_consultations,updated_at,timestamp NULL DEFAULT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1363
+Integrations,live_meetings,id,bigint UNSIGNED NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1373
+Integrations,live_meetings,consultation_title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1374
+Integrations,live_meetings,consultation_date,datetime NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1375
+Integrations,live_meetings,consultation_duration_minutes,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1376
+Integrations,live_meetings,host_video,tinyint(1) NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1377
+Integrations,live_meetings,participant_video,tinyint(1) NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1378
+Integrations,live_meetings,description,text COLLATE utf8mb4_unicode_ci,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1379
+Integrations,live_meetings,created_by,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1380
+Integrations,live_meetings,meta,text COLLATE utf8mb4_unicode_ci,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1381
+Integrations,live_meetings,meeting_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1382
+Integrations,live_meetings,time_zone,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1383
+Integrations,live_meetings,password,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1384
+Integrations,live_meetings,status,int NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1385
+Integrations,live_meetings,created_at,timestamp NULL DEFAULT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1386
+Integrations,live_meetings,updated_at,timestamp NULL DEFAULT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1387
+Integrations,live_meetings_candidates,id,bigint UNSIGNED NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1397
+Integrations,live_meetings_candidates,user_id,bigint UNSIGNED NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1398
+Integrations,live_meetings_candidates,live_meeting_id,bigint UNSIGNED NOT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1399
+Integrations,live_meetings_candidates,created_at,timestamp NULL DEFAULT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1400
+Integrations,live_meetings_candidates,updated_at,timestamp NULL DEFAULT NULL,"live_consultation,live_meeting,live_meeting_candidate",,,,pending_field_contract_review,hms/database/hms.sql:1401
+Staff and scheduling,lunch_breaks,id,bigint UNSIGNED NOT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1411
+Staff and scheduling,lunch_breaks,doctor_id,bigint UNSIGNED NOT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1412
+Staff and scheduling,lunch_breaks,break_from,time NOT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1413
+Staff and scheduling,lunch_breaks,break_to,time NOT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1414
+Staff and scheduling,lunch_breaks,every_day,tinyint(1) DEFAULT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1415
+Staff and scheduling,lunch_breaks,date,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1416
+Staff and scheduling,lunch_breaks,created_at,timestamp NULL DEFAULT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1417
+Staff and scheduling,lunch_breaks,updated_at,timestamp NULL DEFAULT NULL,"doctor_hours,doctor_absence",,,,pending_field_contract_review,hms/database/hms.sql:1418
+Messaging,mails,id,bigint UNSIGNED NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1428
+Messaging,mails,to,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1429
+Messaging,mails,subject,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1430
+Messaging,mails,message,text COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1431
+Messaging,mails,attachments,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1432
+Messaging,mails,user_id,bigint UNSIGNED NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1433
+Messaging,mails,created_at,timestamp NULL DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1434
+Messaging,mails,updated_at,timestamp NULL DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1435
+Files,media,id,bigint UNSIGNED NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1445
+Files,media,model_type,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1446
+Files,media,model_id,bigint UNSIGNED NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1447
+Files,media,collection_name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1448
+Files,media,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1449
+Files,media,file_name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1450
+Files,media,mime_type,varchar(160) COLLATE utf8mb4_unicode_ci DEFAULT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1451
+Files,media,disk,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1452
+Files,media,size,bigint UNSIGNED NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1453
+Files,media,manipulations,text COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1454
+Files,media,custom_properties,text COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1455
+Files,media,responsive_images,text COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1456
+Files,media,order_column,int UNSIGNED DEFAULT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1457
+Files,media,created_at,timestamp NULL DEFAULT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1458
+Files,media,updated_at,timestamp NULL DEFAULT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1459
+Files,media,conversions_disk,varchar(160) COLLATE utf8mb4_unicode_ci DEFAULT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1460
+Files,media,uuid,char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1461
+Files,media,generated_conversions,text COLLATE utf8mb4_unicode_ci NOT NULL,secure_attachment,,,,pending_field_contract_review,hms/database/hms.sql:1462
+Pharmacy,medicines,id,int UNSIGNED NOT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1472
+Pharmacy,medicines,category_id,int UNSIGNED DEFAULT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1473
+Pharmacy,medicines,brand_id,int UNSIGNED DEFAULT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1474
+Pharmacy,medicines,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1475
+Pharmacy,medicines,selling_price,double NOT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1476
+Pharmacy,medicines,buying_price,double NOT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1477
+Pharmacy,medicines,quantity,int NOT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1478
+Pharmacy,medicines,available_quantity,int NOT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1479
+Pharmacy,medicines,salt_composition,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1480
+Pharmacy,medicines,description,text COLLATE utf8mb4_unicode_ci,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1481
+Pharmacy,medicines,side_effects,text COLLATE utf8mb4_unicode_ci,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1482
+Pharmacy,medicines,created_at,timestamp NULL DEFAULT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1483
+Pharmacy,medicines,updated_at,timestamp NULL DEFAULT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1484
+Pharmacy,medicines,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"medicine,medicine_batch",,,,pending_field_contract_review,hms/database/hms.sql:1485
+Pharmacy,medicine_bills,id,bigint UNSIGNED NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1495
+Pharmacy,medicine_bills,bill_number,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1496
+Pharmacy,medicine_bills,patient_id,int UNSIGNED NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1497
+Pharmacy,medicine_bills,doctor_id,int UNSIGNED DEFAULT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1498
+Pharmacy,medicine_bills,model_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1499
+Pharmacy,medicine_bills,model_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1500
+Pharmacy,medicine_bills,discount,"double(25,2) NOT NULL","pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1501
+Pharmacy,medicine_bills,net_amount,"double(25,2) NOT NULL","pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1502
+Pharmacy,medicine_bills,total,"double(25,2) NOT NULL","pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1503
+Pharmacy,medicine_bills,tax_amount,"double(25,2) NOT NULL","pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1504
+Pharmacy,medicine_bills,payment_status,int NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1505
+Pharmacy,medicine_bills,payment_type,int NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1506
+Pharmacy,medicine_bills,note,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1507
+Pharmacy,medicine_bills,bill_date,datetime NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1508
+Pharmacy,medicine_bills,created_at,timestamp NULL DEFAULT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1509
+Pharmacy,medicine_bills,updated_at,timestamp NULL DEFAULT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:1510
+Identity,migrations,id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:1520
+Identity,migrations,migration,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:1521
+Identity,migrations,batch,int NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:1522
+Identity,model_has_permissions,permission_id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:1816
+Identity,model_has_permissions,model_type,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:1817
+Identity,model_has_permissions,model_id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:1818
+Identity,model_has_roles,role_id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:1828
+Identity,model_has_roles,model_type,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:1829
+Identity,model_has_roles,model_id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:1830
+Settings,modules,id,bigint UNSIGNED NOT NULL,hospital_module_setting,,,,pending_field_contract_review,hms/database/hms.sql:1847
+Settings,modules,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,hospital_module_setting,,,,pending_field_contract_review,hms/database/hms.sql:1848
+Settings,modules,is_active,tinyint(1) NOT NULL DEFAULT '1',hospital_module_setting,,,,pending_field_contract_review,hms/database/hms.sql:1849
+Settings,modules,route,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,hospital_module_setting,,,,pending_field_contract_review,hms/database/hms.sql:1850
+Settings,modules,created_at,timestamp NULL DEFAULT NULL,hospital_module_setting,,,,pending_field_contract_review,hms/database/hms.sql:1851
+Settings,modules,updated_at,timestamp NULL DEFAULT NULL,hospital_module_setting,,,,pending_field_contract_review,hms/database/hms.sql:1852
+CMS,notice_boards,id,int UNSIGNED NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:1951
+CMS,notice_boards,title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:1952
+CMS,notice_boards,description,text COLLATE utf8mb4_unicode_ci,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:1953
+CMS,notice_boards,created_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:1954
+CMS,notice_boards,updated_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:1955
+Messaging,notifications,id,int UNSIGNED NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1965
+Messaging,notifications,type,int NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1966
+Messaging,notifications,notification_for,int NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1967
+Messaging,notifications,user_id,bigint UNSIGNED NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1968
+Messaging,notifications,title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1969
+Messaging,notifications,text,text COLLATE utf8mb4_unicode_ci,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1970
+Messaging,notifications,meta,text COLLATE utf8mb4_unicode_ci,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1971
+Messaging,notifications,read_at,timestamp NULL DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1972
+Messaging,notifications,created_at,timestamp NULL DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1973
+Messaging,notifications,updated_at,timestamp NULL DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:1974
+Identity,nurses,id,int UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1984
+Identity,nurses,user_id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1985
+Identity,nurses,created_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1986
+Identity,nurses,updated_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:1987
+Clinical,odontograms,id,bigint UNSIGNED NOT NULL,patient_odontogram_entry,,,,pending_field_contract_review,hms/database/hms.sql:1997
+Clinical,odontograms,odontogram,json DEFAULT NULL,patient_odontogram_entry,,,,pending_field_contract_review,hms/database/hms.sql:1998
+Clinical,odontograms,patient_id,int UNSIGNED NOT NULL,patient_odontogram_entry,,,,pending_field_contract_review,hms/database/hms.sql:1999
+Clinical,odontograms,doctor_id,bigint UNSIGNED NOT NULL,patient_odontogram_entry,,,,pending_field_contract_review,hms/database/hms.sql:2000
+Clinical,odontograms,description,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,patient_odontogram_entry,,,,pending_field_contract_review,hms/database/hms.sql:2001
+Clinical,odontograms,created_at,timestamp NULL DEFAULT NULL,patient_odontogram_entry,,,,pending_field_contract_review,hms/database/hms.sql:2002
+Clinical,odontograms,updated_at,timestamp NULL DEFAULT NULL,patient_odontogram_entry,,,,pending_field_contract_review,hms/database/hms.sql:2003
+Clinical,opd_diagnoses,id,int UNSIGNED NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2013
+Clinical,opd_diagnoses,opd_patient_department_id,int UNSIGNED NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2014
+Clinical,opd_diagnoses,report_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2015
+Clinical,opd_diagnoses,report_date,datetime NOT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2016
+Clinical,opd_diagnoses,description,text COLLATE utf8mb4_unicode_ci,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2017
+Clinical,opd_diagnoses,created_at,timestamp NULL DEFAULT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2018
+Clinical,opd_diagnoses,updated_at,timestamp NULL DEFAULT NULL,"encounter_diagnosis,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2019
+Clinical,opd_patient_departments,id,int UNSIGNED NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2029
+Clinical,opd_patient_departments,patient_id,int UNSIGNED NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2030
+Clinical,opd_patient_departments,opd_number,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2031
+Clinical,opd_patient_departments,height,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2032
+Clinical,opd_patient_departments,weight,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2033
+Clinical,opd_patient_departments,bp,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2034
+Clinical,opd_patient_departments,symptoms,text COLLATE utf8mb4_unicode_ci,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2035
+Clinical,opd_patient_departments,notes,text COLLATE utf8mb4_unicode_ci,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2036
+Clinical,opd_patient_departments,appointment_date,datetime NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2037
+Clinical,opd_patient_departments,case_id,int UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2038
+Clinical,opd_patient_departments,is_old_patient,tinyint(1) DEFAULT '0',"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2039
+Clinical,opd_patient_departments,doctor_id,bigint UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2040
+Clinical,opd_patient_departments,standard_charge,double NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2041
+Clinical,opd_patient_departments,payment_mode,tinyint NOT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2042
+Clinical,opd_patient_departments,custom_field,longtext COLLATE utf8mb4_unicode_ci,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2043
+Clinical,opd_patient_departments,created_at,timestamp NULL DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2044
+Clinical,opd_patient_departments,updated_at,timestamp NULL DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2045
+Clinical,opd_patient_departments,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,clinical_vitals,opd_follow_up",,,,pending_field_contract_review,hms/database/hms.sql:2046
+Clinical,opd_prescriptions,id,bigint UNSIGNED NOT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2056
+Clinical,opd_prescriptions,opd_patient_department_id,int UNSIGNED NOT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2057
+Clinical,opd_prescriptions,header_note,text COLLATE utf8mb4_unicode_ci,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2058
+Clinical,opd_prescriptions,footer_note,text COLLATE utf8mb4_unicode_ci,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2059
+Clinical,opd_prescriptions,created_at,timestamp NULL DEFAULT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2060
+Clinical,opd_prescriptions,updated_at,timestamp NULL DEFAULT NULL,"prescription,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2061
+Clinical,opd_prescription_items,id,bigint UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2071
+Clinical,opd_prescription_items,opd_prescription_id,bigint UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2072
+Clinical,opd_prescription_items,category_id,int UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2073
+Clinical,opd_prescription_items,medicine_id,int UNSIGNED NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2074
+Clinical,opd_prescription_items,dosage,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2075
+Clinical,opd_prescription_items,dose_interval,int NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2076
+Clinical,opd_prescription_items,day,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2077
+Clinical,opd_prescription_items,time,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2078
+Clinical,opd_prescription_items,instruction,text COLLATE utf8mb4_unicode_ci NOT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2079
+Clinical,opd_prescription_items,created_at,timestamp NULL DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2080
+Clinical,opd_prescription_items,updated_at,timestamp NULL DEFAULT NULL,"prescription_medicine,medication_order",,,,pending_field_contract_review,hms/database/hms.sql:2081
+Clinical,opd_timelines,id,int UNSIGNED NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2091
+Clinical,opd_timelines,opd_patient_department_id,int UNSIGNED NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2092
+Clinical,opd_timelines,title,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2093
+Clinical,opd_timelines,date,date NOT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2094
+Clinical,opd_timelines,description,text COLLATE utf8mb4_unicode_ci,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2095
+Clinical,opd_timelines,visible_to_person,tinyint(1) NOT NULL DEFAULT '1',"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2096
+Clinical,opd_timelines,created_at,timestamp NULL DEFAULT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2097
+Clinical,opd_timelines,updated_at,timestamp NULL DEFAULT NULL,"clinical_note,encounter_attachment,secure_attachment",,,,pending_field_contract_review,hms/database/hms.sql:2098
+Services,operations,id,bigint UNSIGNED NOT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2108
+Services,operations,operation_category_id,bigint UNSIGNED NOT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2109
+Services,operations,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2110
+Services,operations,created_at,timestamp NULL DEFAULT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2111
+Services,operations,updated_at,timestamp NULL DEFAULT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2112
+Services,operation_categories,id,bigint UNSIGNED NOT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2122
+Services,operation_categories,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2123
+Services,operation_categories,created_at,timestamp NULL DEFAULT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2124
+Services,operation_categories,updated_at,timestamp NULL DEFAULT NULL,"operation_category,hospital_operation",,,,pending_field_contract_review,hms/database/hms.sql:2125
+Diagnostics,operation_reports,id,int UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2135
+Diagnostics,operation_reports,patient_id,int UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2136
+Diagnostics,operation_reports,case_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2137
+Diagnostics,operation_reports,doctor_id,bigint UNSIGNED NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2138
+Diagnostics,operation_reports,date,datetime NOT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2139
+Diagnostics,operation_reports,description,text COLLATE utf8mb4_unicode_ci,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2140
+Diagnostics,operation_reports,created_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2141
+Diagnostics,operation_reports,updated_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2142
+Patients,packages,id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2152
+Patients,packages,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2153
+Patients,packages,description,text COLLATE utf8mb4_unicode_ci,-,,,,pending_field_contract_review,hms/database/hms.sql:2154
+Patients,packages,discount,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2155
+Patients,packages,total_amount,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2156
+Patients,packages,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2157
+Patients,packages,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2158
+Patients,packages,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2159
+Patients,package_services,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2169
+Patients,package_services,package_id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2170
+Patients,package_services,service_id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2171
+Patients,package_services,quantity,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2172
+Patients,package_services,rate,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2173
+Patients,package_services,amount,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2174
+Patients,package_services,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2175
+Patients,package_services,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2176
+Identity,password_reset_tokens,email,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2186
+Identity,password_reset_tokens,token,longtext COLLATE utf8mb4_unicode_ci NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2187
+Identity,password_reset_tokens,created_at,timestamp NULL DEFAULT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2188
+Diagnostics,pathology_categories,id,int UNSIGNED NOT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2198
+Diagnostics,pathology_categories,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2199
+Diagnostics,pathology_categories,created_at,timestamp NULL DEFAULT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2200
+Diagnostics,pathology_categories,updated_at,timestamp NULL DEFAULT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2201
+Diagnostics,pathology_parameters,id,int UNSIGNED NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2211
+Diagnostics,pathology_parameters,parameter_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2212
+Diagnostics,pathology_parameters,reference_range,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2213
+Diagnostics,pathology_parameters,unit_id,int UNSIGNED NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2214
+Diagnostics,pathology_parameters,description,text COLLATE utf8mb4_unicode_ci,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2215
+Diagnostics,pathology_parameters,created_at,timestamp NULL DEFAULT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2216
+Diagnostics,pathology_parameters,updated_at,timestamp NULL DEFAULT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2217
+Diagnostics,pathology_parameter_items,id,bigint UNSIGNED NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2227
+Diagnostics,pathology_parameter_items,pathology_id,int UNSIGNED NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2228
+Diagnostics,pathology_parameter_items,patient_result,text COLLATE utf8mb4_unicode_ci NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2229
+Diagnostics,pathology_parameter_items,parameter_id,int UNSIGNED NOT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2230
+Diagnostics,pathology_parameter_items,created_at,timestamp NULL DEFAULT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2231
+Diagnostics,pathology_parameter_items,updated_at,timestamp NULL DEFAULT NULL,diagnostic_parameter,,,,pending_field_contract_review,hms/database/hms.sql:2232
+Diagnostics,pathology_tests,id,int UNSIGNED NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2242
+Diagnostics,pathology_tests,test_name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2243
+Diagnostics,pathology_tests,short_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2244
+Diagnostics,pathology_tests,test_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2245
+Diagnostics,pathology_tests,category_id,int UNSIGNED NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2246
+Diagnostics,pathology_tests,unit,int DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2247
+Diagnostics,pathology_tests,subcategory,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2248
+Diagnostics,pathology_tests,method,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2249
+Diagnostics,pathology_tests,report_days,int DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2250
+Diagnostics,pathology_tests,charge_category_id,int UNSIGNED NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2251
+Diagnostics,pathology_tests,standard_charge,double NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2252
+Diagnostics,pathology_tests,patient_id,int UNSIGNED DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2253
+Diagnostics,pathology_tests,created_at,timestamp NULL DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2254
+Diagnostics,pathology_tests,updated_at,timestamp NULL DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2255
+Diagnostics,pathology_tests,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2256
+Diagnostics,pathology_units,id,int UNSIGNED NOT NULL,diagnostic_unit,,,,pending_field_contract_review,hms/database/hms.sql:2266
+Diagnostics,pathology_units,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,diagnostic_unit,,,,pending_field_contract_review,hms/database/hms.sql:2267
+Diagnostics,pathology_units,created_at,timestamp NULL DEFAULT NULL,diagnostic_unit,,,,pending_field_contract_review,hms/database/hms.sql:2268
+Diagnostics,pathology_units,updated_at,timestamp NULL DEFAULT NULL,diagnostic_unit,,,,pending_field_contract_review,hms/database/hms.sql:2269
+Patients,patients,id,int UNSIGNED NOT NULL,"patient,patient_profile,patient_smart_card,patient_identity_alias",,,,pending_field_contract_review,hms/database/hms.sql:2279
+Patients,patients,user_id,bigint UNSIGNED NOT NULL,"patient,patient_profile,patient_smart_card,patient_identity_alias",,,,pending_field_contract_review,hms/database/hms.sql:2280
+Patients,patients,patient_unique_id,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"patient,patient_profile,patient_smart_card,patient_identity_alias",,,,pending_field_contract_review,hms/database/hms.sql:2281
+Patients,patients,template_id,bigint UNSIGNED DEFAULT NULL,"patient,patient_profile,patient_smart_card,patient_identity_alias",,,,pending_field_contract_review,hms/database/hms.sql:2282
+Patients,patients,custom_field,longtext COLLATE utf8mb4_unicode_ci,"patient,patient_profile,patient_smart_card,patient_identity_alias",,,,pending_field_contract_review,hms/database/hms.sql:2283
+Patients,patients,created_at,timestamp NULL DEFAULT NULL,"patient,patient_profile,patient_smart_card,patient_identity_alias",,,,pending_field_contract_review,hms/database/hms.sql:2284
+Patients,patients,updated_at,timestamp NULL DEFAULT NULL,"patient,patient_profile,patient_smart_card,patient_identity_alias",,,,pending_field_contract_review,hms/database/hms.sql:2285
+Patients,patient_admissions,id,int UNSIGNED NOT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2295
+Patients,patient_admissions,patient_admission_id,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2296
+Patients,patient_admissions,patient_id,int UNSIGNED NOT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2297
+Patients,patient_admissions,doctor_id,bigint UNSIGNED NOT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2298
+Patients,patient_admissions,admission_date,datetime NOT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2299
+Patients,patient_admissions,discharge_date,datetime DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2300
+Patients,patient_admissions,package_id,int UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2301
+Patients,patient_admissions,insurance_id,int UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2302
+Patients,patient_admissions,bed_id,int UNSIGNED DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2303
+Patients,patient_admissions,policy_no,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2304
+Patients,patient_admissions,agent_name,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2305
+Patients,patient_admissions,guardian_name,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2306
+Patients,patient_admissions,guardian_relation,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2307
+Patients,patient_admissions,guardian_contact,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2308
+Patients,patient_admissions,guardian_address,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2309
+Patients,patient_admissions,status,tinyint(1) DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2310
+Patients,patient_admissions,created_at,timestamp NULL DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2311
+Patients,patient_admissions,updated_at,timestamp NULL DEFAULT NULL,"encounter,ipd_admission_details,bed_assignment",,,,pending_field_contract_review,hms/database/hms.sql:2312
+Patients,patient_cases,id,int UNSIGNED NOT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2322
+Patients,patient_cases,case_id,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2323
+Patients,patient_cases,patient_id,int UNSIGNED NOT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2324
+Patients,patient_cases,phone,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2325
+Patients,patient_cases,doctor_id,bigint UNSIGNED NOT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2326
+Patients,patient_cases,date,datetime NOT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2327
+Patients,patient_cases,fee,double NOT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2328
+Patients,patient_cases,status,tinyint(1) NOT NULL DEFAULT '0',patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2329
+Patients,patient_cases,description,text COLLATE utf8mb4_unicode_ci,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2330
+Patients,patient_cases,created_at,timestamp NULL DEFAULT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2331
+Patients,patient_cases,updated_at,timestamp NULL DEFAULT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2332
+Patients,patient_cases,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,patient_case,,,,pending_field_contract_review,hms/database/hms.sql:2333
+Diagnostics,patient_diagnosis_properties,id,int UNSIGNED NOT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2343
+Diagnostics,patient_diagnosis_properties,patient_diagnosis_id,bigint UNSIGNED NOT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2344
+Diagnostics,patient_diagnosis_properties,property_name,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2345
+Diagnostics,patient_diagnosis_properties,property_value,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2346
+Diagnostics,patient_diagnosis_properties,created_at,timestamp NULL DEFAULT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2347
+Diagnostics,patient_diagnosis_properties,updated_at,timestamp NULL DEFAULT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2348
+Diagnostics,patient_diagnosis_tests,id,bigint UNSIGNED NOT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2358
+Diagnostics,patient_diagnosis_tests,patient_id,int UNSIGNED NOT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2359
+Diagnostics,patient_diagnosis_tests,doctor_id,bigint UNSIGNED NOT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2360
+Diagnostics,patient_diagnosis_tests,category_id,bigint UNSIGNED NOT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2361
+Diagnostics,patient_diagnosis_tests,report_number,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2362
+Diagnostics,patient_diagnosis_tests,created_at,timestamp NULL DEFAULT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2363
+Diagnostics,patient_diagnosis_tests,updated_at,timestamp NULL DEFAULT NULL,"diagnostic_order,diagnostic_result,diagnostic_value,diagnosis_template",,,,pending_field_contract_review,hms/database/hms.sql:2364
+Patients,patient_id_card_templates,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2374
+Patients,patient_id_card_templates,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2375
+Patients,patient_id_card_templates,color,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2376
+Patients,patient_id_card_templates,email,tinyint(1) NOT NULL DEFAULT '1',-,,,,pending_field_contract_review,hms/database/hms.sql:2377
+Patients,patient_id_card_templates,phone,tinyint(1) NOT NULL DEFAULT '1',-,,,,pending_field_contract_review,hms/database/hms.sql:2378
+Patients,patient_id_card_templates,dob,tinyint(1) NOT NULL DEFAULT '1',-,,,,pending_field_contract_review,hms/database/hms.sql:2379
+Patients,patient_id_card_templates,blood_group,tinyint(1) NOT NULL DEFAULT '1',-,,,,pending_field_contract_review,hms/database/hms.sql:2380
+Patients,patient_id_card_templates,address,tinyint(1) NOT NULL DEFAULT '1',-,,,,pending_field_contract_review,hms/database/hms.sql:2381
+Patients,patient_id_card_templates,patient_unique_id,tinyint(1) NOT NULL DEFAULT '1',-,,,,pending_field_contract_review,hms/database/hms.sql:2382
+Patients,patient_id_card_templates,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2383
+Patients,patient_id_card_templates,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2384
+Staff and scheduling,patient_queues,id,bigint UNSIGNED NOT NULL,patient_queue,,,,pending_field_contract_review,hms/database/hms.sql:2394
+Staff and scheduling,patient_queues,appointment_id,bigint UNSIGNED NOT NULL,patient_queue,,,,pending_field_contract_review,hms/database/hms.sql:2395
+Staff and scheduling,patient_queues,no,int NOT NULL,patient_queue,,,,pending_field_contract_review,hms/database/hms.sql:2396
+Staff and scheduling,patient_queues,created_at,timestamp NULL DEFAULT NULL,patient_queue,,,,pending_field_contract_review,hms/database/hms.sql:2397
+Staff and scheduling,patient_queues,updated_at,timestamp NULL DEFAULT NULL,patient_queue,,,,pending_field_contract_review,hms/database/hms.sql:2398
+Finance,payments,id,int UNSIGNED NOT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2408
+Finance,payments,payment_date,date NOT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2409
+Finance,payments,account_id,int UNSIGNED NOT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2410
+Finance,payments,pay_to,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2411
+Finance,payments,amount,double NOT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2412
+Finance,payments,description,text COLLATE utf8mb4_unicode_ci,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2413
+Finance,payments,created_at,timestamp NULL DEFAULT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2414
+Finance,payments,updated_at,timestamp NULL DEFAULT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2415
+Finance,payments,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_expense,invoice_payment",,,,pending_field_contract_review,hms/database/hms.sql:2416
+Identity,permissions,id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:2426
+Identity,permissions,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:2427
+Identity,permissions,guard_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:2428
+Identity,permissions,created_at,timestamp NULL DEFAULT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:2429
+Identity,permissions,updated_at,timestamp NULL DEFAULT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:2430
+Identity,personal_access_tokens,id,bigint UNSIGNED NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2470
+Identity,personal_access_tokens,tokenable_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2471
+Identity,personal_access_tokens,tokenable_id,bigint UNSIGNED NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2472
+Identity,personal_access_tokens,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2473
+Identity,personal_access_tokens,token,varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2474
+Identity,personal_access_tokens,abilities,text COLLATE utf8mb4_unicode_ci,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2475
+Identity,personal_access_tokens,last_used_at,timestamp NULL DEFAULT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2476
+Identity,personal_access_tokens,expires_at,timestamp NULL DEFAULT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2477
+Identity,personal_access_tokens,created_at,timestamp NULL DEFAULT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2478
+Identity,personal_access_tokens,updated_at,timestamp NULL DEFAULT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2479
+Identity,pharmacists,id,int UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2489
+Identity,pharmacists,user_id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2490
+Identity,pharmacists,created_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2491
+Identity,pharmacists,updated_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2492
+Front office,postals,id,bigint UNSIGNED NOT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2502
+Front office,postals,from_title,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2503
+Front office,postals,to_title,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2504
+Front office,postals,reference_no,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2505
+Front office,postals,date,date DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2506
+Front office,postals,address,text COLLATE utf8mb4_unicode_ci,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2507
+Front office,postals,type,int DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2508
+Front office,postals,created_at,timestamp NULL DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2509
+Front office,postals,updated_at,timestamp NULL DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:2510
+Clinical,prescriptions,id,int UNSIGNED NOT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2520
+Clinical,prescriptions,patient_id,int UNSIGNED NOT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2521
+Clinical,prescriptions,doctor_id,bigint UNSIGNED DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2522
+Clinical,prescriptions,food_allergies,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2523
+Clinical,prescriptions,tendency_bleed,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2524
+Clinical,prescriptions,heart_disease,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2525
+Clinical,prescriptions,high_blood_pressure,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2526
+Clinical,prescriptions,diabetic,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2527
+Clinical,prescriptions,surgery,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2528
+Clinical,prescriptions,accident,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2529
+Clinical,prescriptions,others,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2530
+Clinical,prescriptions,medical_history,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2531
+Clinical,prescriptions,current_medication,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2532
+Clinical,prescriptions,female_pregnancy,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2533
+Clinical,prescriptions,breast_feeding,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2534
+Clinical,prescriptions,health_insurance,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2535
+Clinical,prescriptions,low_income,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2536
+Clinical,prescriptions,reference,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2537
+Clinical,prescriptions,status,tinyint(1) DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2538
+Clinical,prescriptions,created_at,timestamp NULL DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2539
+Clinical,prescriptions,updated_at,timestamp NULL DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2540
+Clinical,prescriptions,plus_rate,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2541
+Clinical,prescriptions,temperature,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2542
+Clinical,prescriptions,problem_description,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2543
+Clinical,prescriptions,test,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2544
+Clinical,prescriptions,advice,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2545
+Clinical,prescriptions,next_visit_qty,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2546
+Clinical,prescriptions,next_visit_time,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription,,,,pending_field_contract_review,hms/database/hms.sql:2547
+Clinical,prescriptions_medicines,id,bigint UNSIGNED NOT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2557
+Clinical,prescriptions_medicines,prescription_id,int UNSIGNED NOT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2558
+Clinical,prescriptions_medicines,medicine,int UNSIGNED NOT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2559
+Clinical,prescriptions_medicines,dosage,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2560
+Clinical,prescriptions_medicines,day,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2561
+Clinical,prescriptions_medicines,time,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2562
+Clinical,prescriptions_medicines,dose_interval,int NOT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2563
+Clinical,prescriptions_medicines,comment,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2564
+Clinical,prescriptions_medicines,created_at,timestamp NULL DEFAULT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2565
+Clinical,prescriptions_medicines,updated_at,timestamp NULL DEFAULT NULL,prescription_medicine,,,,pending_field_contract_review,hms/database/hms.sql:2566
+Pharmacy,purchased_medicines,id,bigint UNSIGNED NOT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2576
+Pharmacy,purchased_medicines,purchase_medicines_id,bigint UNSIGNED NOT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2577
+Pharmacy,purchased_medicines,medicine_id,int UNSIGNED DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2578
+Pharmacy,purchased_medicines,expiry_date,datetime DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2579
+Pharmacy,purchased_medicines,lot_no,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2580
+Pharmacy,purchased_medicines,tax,"double(25,2) NOT NULL","medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2581
+Pharmacy,purchased_medicines,quantity,int NOT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2582
+Pharmacy,purchased_medicines,amount,"double(25,2) NOT NULL","medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2583
+Pharmacy,purchased_medicines,created_at,timestamp NULL DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2584
+Pharmacy,purchased_medicines,updated_at,timestamp NULL DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2585
+Pharmacy,purchase_medicines,id,bigint UNSIGNED NOT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2595
+Pharmacy,purchase_medicines,purchase_no,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2596
+Pharmacy,purchase_medicines,tax,"double(25,2) NOT NULL","medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2597
+Pharmacy,purchase_medicines,total,"double(25,2) NOT NULL","medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2598
+Pharmacy,purchase_medicines,net_amount,"double(25,2) NOT NULL","medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2599
+Pharmacy,purchase_medicines,payment_type,int NOT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2600
+Pharmacy,purchase_medicines,payment_status,tinyint(1) DEFAULT '1',"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2601
+Pharmacy,purchase_medicines,discount,"double(25,2) NOT NULL","medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2602
+Pharmacy,purchase_medicines,note,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2603
+Pharmacy,purchase_medicines,payment_note,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2604
+Pharmacy,purchase_medicines,created_at,timestamp NULL DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2605
+Pharmacy,purchase_medicines,updated_at,timestamp NULL DEFAULT NULL,"medicine_batch,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2606
+Diagnostics,radiology_categories,id,int UNSIGNED NOT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2616
+Diagnostics,radiology_categories,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2617
+Diagnostics,radiology_categories,created_at,timestamp NULL DEFAULT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2618
+Diagnostics,radiology_categories,updated_at,timestamp NULL DEFAULT NULL,diagnostic_category,,,,pending_field_contract_review,hms/database/hms.sql:2619
+Diagnostics,radiology_tests,id,int UNSIGNED NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2629
+Diagnostics,radiology_tests,test_name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2630
+Diagnostics,radiology_tests,short_name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2631
+Diagnostics,radiology_tests,test_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2632
+Diagnostics,radiology_tests,category_id,int UNSIGNED NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2633
+Diagnostics,radiology_tests,subcategory,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2634
+Diagnostics,radiology_tests,report_days,int DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2635
+Diagnostics,radiology_tests,charge_category_id,int UNSIGNED NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2636
+Diagnostics,radiology_tests,standard_charge,double NOT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2637
+Diagnostics,radiology_tests,created_at,timestamp NULL DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2638
+Diagnostics,radiology_tests,updated_at,timestamp NULL DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2639
+Diagnostics,radiology_tests,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2640
+Diagnostics,radiology_tests,charge_id,int UNSIGNED DEFAULT NULL,"diagnostic_test,diagnostic_order",,,,pending_field_contract_review,hms/database/hms.sql:2641
+Identity,receptionists,id,int UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2651
+Identity,receptionists,user_id,bigint UNSIGNED NOT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2652
+Identity,receptionists,created_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2653
+Identity,receptionists,updated_at,timestamp NULL DEFAULT NULL,"staff_access,staff_profile",,,,pending_field_contract_review,hms/database/hms.sql:2654
+Identity,role_has_permissions,permission_id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:2664
+Identity,role_has_permissions,role_id,bigint UNSIGNED NOT NULL,staff_access,,,,pending_field_contract_review,hms/database/hms.sql:2665
+Pharmacy,sale_medicines,id,bigint UNSIGNED NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2675
+Pharmacy,sale_medicines,medicine_bill_id,int UNSIGNED NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2676
+Pharmacy,sale_medicines,medicine_id,int UNSIGNED NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2677
+Pharmacy,sale_medicines,sale_quantity,int NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2678
+Pharmacy,sale_medicines,sale_price,"double(25,2) NOT NULL","pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2679
+Pharmacy,sale_medicines,tax,"double(25,2) NOT NULL","pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2680
+Pharmacy,sale_medicines,expiry_date,date NOT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2681
+Pharmacy,sale_medicines,amount,"double(25,2) NOT NULL","pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2682
+Pharmacy,sale_medicines,created_at,timestamp NULL DEFAULT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2683
+Pharmacy,sale_medicines,updated_at,timestamp NULL DEFAULT NULL,"pharmacy_invoice,invoice,invoice_line,pharmacy_movement",,,,pending_field_contract_review,hms/database/hms.sql:2684
+Staff and scheduling,schedules,id,int UNSIGNED NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2694
+Staff and scheduling,schedules,doctor_id,bigint UNSIGNED NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2695
+Staff and scheduling,schedules,per_patient_time,time NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2696
+Staff and scheduling,schedules,created_at,timestamp NULL DEFAULT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2697
+Staff and scheduling,schedules,updated_at,timestamp NULL DEFAULT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2698
+Staff and scheduling,schedule_days,id,bigint UNSIGNED NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2708
+Staff and scheduling,schedule_days,doctor_id,bigint UNSIGNED NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2709
+Staff and scheduling,schedule_days,schedule_id,int UNSIGNED NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2710
+Staff and scheduling,schedule_days,available_on,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2711
+Staff and scheduling,schedule_days,available_from,time NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2712
+Staff and scheduling,schedule_days,available_to,time NOT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2713
+Staff and scheduling,schedule_days,created_at,timestamp NULL DEFAULT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2714
+Staff and scheduling,schedule_days,updated_at,timestamp NULL DEFAULT NULL,doctor_hours,,,,pending_field_contract_review,hms/database/hms.sql:2715
+Services,services,id,int UNSIGNED NOT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2725
+Services,services,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2726
+Services,services,description,text COLLATE utf8mb4_unicode_ci,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2727
+Services,services,quantity,int NOT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2728
+Services,services,rate,double NOT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2729
+Services,services,status,int NOT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2730
+Services,services,created_at,timestamp NULL DEFAULT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2731
+Services,services,updated_at,timestamp NULL DEFAULT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2732
+Services,services,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,hospital_service,,,,pending_field_contract_review,hms/database/hms.sql:2733
+Settings,settings,id,int UNSIGNED NOT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:2743
+Settings,settings,key,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:2744
+Settings,settings,value,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:2745
+Settings,settings,created_at,timestamp NULL DEFAULT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:2746
+Settings,settings,updated_at,timestamp NULL DEFAULT NULL,hospital_general_setting,,,,pending_field_contract_review,hms/database/hms.sql:2747
+Messaging,sms,id,bigint UNSIGNED NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2807
+Messaging,sms,send_to,bigint UNSIGNED DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2808
+Messaging,sms,region_code,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2809
+Messaging,sms,phone_number,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2810
+Messaging,sms,message,text COLLATE utf8mb4_unicode_ci NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2811
+Messaging,sms,send_by,bigint UNSIGNED NOT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2812
+Messaging,sms,created_at,timestamp NULL DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2813
+Messaging,sms,updated_at,timestamp NULL DEFAULT NULL,message_outbox,,,,pending_field_contract_review,hms/database/hms.sql:2814
+Identity,subscriptions,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2824
+Identity,subscriptions,user_id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2825
+Identity,subscriptions,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2826
+Identity,subscriptions,stripe_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2827
+Identity,subscriptions,stripe_status,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2828
+Identity,subscriptions,stripe_price,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2829
+Identity,subscriptions,quantity,int DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2830
+Identity,subscriptions,trial_ends_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2831
+Identity,subscriptions,ends_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2832
+Identity,subscriptions,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2833
+Identity,subscriptions,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2834
+Identity,subscription_items,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2844
+Identity,subscription_items,subscription_id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2845
+Identity,subscription_items,stripe_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2846
+Identity,subscription_items,stripe_product,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2847
+Identity,subscription_items,stripe_price,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2848
+Identity,subscription_items,quantity,int DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2849
+Identity,subscription_items,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2850
+Identity,subscription_items,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2851
+CMS,testimonials,id,bigint UNSIGNED NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:2861
+CMS,testimonials,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:2862
+CMS,testimonials,description,text COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:2863
+CMS,testimonials,created_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:2864
+CMS,testimonials,updated_at,timestamp NULL DEFAULT NULL,"hospital_enquiry,hospital_notice_board,cms_testimonial,hospital_complaint",,,,pending_field_contract_review,hms/database/hms.sql:2865
+Finance,transactions,id,bigint UNSIGNED NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2875
+Finance,transactions,stripe_transaction_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2876
+Finance,transactions,amount,int NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2877
+Finance,transactions,user_id,int NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2878
+Finance,transactions,status,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2879
+Finance,transactions,meta,text COLLATE utf8mb4_unicode_ci,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2880
+Finance,transactions,created_at,timestamp NULL DEFAULT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2881
+Finance,transactions,updated_at,timestamp NULL DEFAULT NULL,"payment_checkout,payment_event,payment_receipt",,,,pending_field_contract_review,hms/database/hms.sql:2882
+Pharmacy,used_medicines,id,bigint UNSIGNED NOT NULL,pharmacy_movement,,,,pending_field_contract_review,hms/database/hms.sql:2892
+Pharmacy,used_medicines,stock_used,int NOT NULL,pharmacy_movement,,,,pending_field_contract_review,hms/database/hms.sql:2893
+Pharmacy,used_medicines,medicine_id,int UNSIGNED DEFAULT NULL,pharmacy_movement,,,,pending_field_contract_review,hms/database/hms.sql:2894
+Pharmacy,used_medicines,model_id,int NOT NULL,pharmacy_movement,,,,pending_field_contract_review,hms/database/hms.sql:2895
+Pharmacy,used_medicines,model_type,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,pharmacy_movement,,,,pending_field_contract_review,hms/database/hms.sql:2896
+Pharmacy,used_medicines,created_at,timestamp NULL DEFAULT NULL,pharmacy_movement,,,,pending_field_contract_review,hms/database/hms.sql:2897
+Pharmacy,used_medicines,updated_at,timestamp NULL DEFAULT NULL,pharmacy_movement,,,,pending_field_contract_review,hms/database/hms.sql:2898
+Identity,users,id,bigint UNSIGNED NOT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2908
+Identity,users,department_id,bigint UNSIGNED DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2909
+Identity,users,first_name,varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2910
+Identity,users,last_name,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2911
+Identity,users,email,varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2912
+Identity,users,password,varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2913
+Identity,users,designation,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2914
+Identity,users,phone,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2915
+Identity,users,gender,int NOT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2916
+Identity,users,qualification,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2917
+Identity,users,blood_group,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2918
+Identity,users,dob,date DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2919
+Identity,users,email_verified_at,timestamp NULL DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2920
+Identity,users,enable_two_factor_authentication,tinyint(1) NOT NULL DEFAULT '0',"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2921
+Identity,users,google2fa_secret,text COLLATE utf8mb4_unicode_ci,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2922
+Identity,users,two_factor_recovery_codes,text COLLATE utf8mb4_unicode_ci,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2923
+Identity,users,owner_id,int DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2924
+Identity,users,owner_type,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2925
+Identity,users,status,tinyint(1) NOT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2926
+Identity,users,language,varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'en',"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2927
+Identity,users,remember_token,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2928
+Identity,users,facebook_url,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2929
+Identity,users,twitter_url,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2930
+Identity,users,instagram_url,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2931
+Identity,users,linkedIn_url,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2932
+Identity,users,created_at,timestamp NULL DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2933
+Identity,users,updated_at,timestamp NULL DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2934
+Identity,users,stripe_id,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2935
+Identity,users,pm_type,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2936
+Identity,users,pm_last_four,varchar(4) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2937
+Identity,users,trial_ends_at,timestamp NULL DEFAULT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2938
+Identity,users,thememode,varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '0',"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2939
+Identity,users,card_brand,varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,"user,patient,patient_profile,staff_profile,staff_access,account,twoFactor",,,,pending_field_contract_review,hms/database/hms.sql:2940
+Integrations,user_google_event_schedules,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2957
+Integrations,user_google_event_schedules,user_id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2958
+Integrations,user_google_event_schedules,google_live_consultation_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2959
+Integrations,user_google_event_schedules,google_calendar_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2960
+Integrations,user_google_event_schedules,google_event_id,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2961
+Integrations,user_google_event_schedules,google_meet_link,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2962
+Integrations,user_google_event_schedules,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2963
+Integrations,user_google_event_schedules,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2964
+Integrations,user_zoom_credential,id,bigint UNSIGNED NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:2974
+Integrations,user_zoom_credential,user_id,bigint UNSIGNED NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:2975
+Integrations,user_zoom_credential,zoom_api_key,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:2976
+Integrations,user_zoom_credential,zoom_api_secret,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:2977
+Integrations,user_zoom_credential,created_at,timestamp NULL DEFAULT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:2978
+Integrations,user_zoom_credential,updated_at,timestamp NULL DEFAULT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:2979
+Diagnostics,vaccinated_patients,id,int UNSIGNED NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2989
+Diagnostics,vaccinated_patients,patient_id,int UNSIGNED NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2990
+Diagnostics,vaccinated_patients,vaccination_id,int UNSIGNED NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2991
+Diagnostics,vaccinated_patients,vaccination_serial_number,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2992
+Diagnostics,vaccinated_patients,dose_number,bigint NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2993
+Diagnostics,vaccinated_patients,dose_given_date,datetime NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2994
+Diagnostics,vaccinated_patients,description,text COLLATE utf8mb4_unicode_ci,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2995
+Diagnostics,vaccinated_patients,created_at,timestamp NULL DEFAULT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2996
+Diagnostics,vaccinated_patients,updated_at,timestamp NULL DEFAULT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:2997
+Diagnostics,vaccinations,id,int UNSIGNED NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:3007
+Diagnostics,vaccinations,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:3008
+Diagnostics,vaccinations,manufactured_by,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:3009
+Diagnostics,vaccinations,brand,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:3010
+Diagnostics,vaccinations,created_at,timestamp NULL DEFAULT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:3011
+Diagnostics,vaccinations,updated_at,timestamp NULL DEFAULT NULL,"vaccine_catalog,patient_vaccination",,,,pending_field_contract_review,hms/database/hms.sql:3012
+Front office,visitors,id,bigint UNSIGNED NOT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3022
+Front office,visitors,purpose,int NOT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3023
+Front office,visitors,name,varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3024
+Front office,visitors,phone,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3025
+Front office,visitors,id_card,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3026
+Front office,visitors,no_of_person,varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3027
+Front office,visitors,date,date DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3028
+Front office,visitors,in_time,time DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3029
+Front office,visitors,out_time,time DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3030
+Front office,visitors,note,text COLLATE utf8mb4_unicode_ci,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3031
+Front office,visitors,created_at,timestamp NULL DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3032
+Front office,visitors,updated_at,timestamp NULL DEFAULT NULL,"hospital_visitor,hospital_call_log,hospital_postal",,,,pending_field_contract_review,hms/database/hms.sql:3033
+Integrations,zoom_o_auth_credentials,id,bigint UNSIGNED NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:3043
+Integrations,zoom_o_auth_credentials,user_id,bigint UNSIGNED NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:3044
+Integrations,zoom_o_auth_credentials,access_token,text COLLATE utf8mb4_unicode_ci NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:3045
+Integrations,zoom_o_auth_credentials,refresh_token,text COLLATE utf8mb4_unicode_ci NOT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:3046
+Integrations,zoom_o_auth_credentials,created_at,timestamp NULL DEFAULT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:3047
+Integrations,zoom_o_auth_credentials,updated_at,timestamp NULL DEFAULT NULL,live_consultation_provider_setting,,,,pending_field_contract_review,hms/database/hms.sql:3048

@@ -1,4 +1,6 @@
 # Complete Database Schema & Frontend Synchronization Design
+
+> Evidence update, 2026-10-06: This is an earlier proposed target design, not proof of original-project parity or current deployed schema. Use the [original ZIP database reconstruction](legacy-schema/README.md), complete table dictionary and mapping to reconcile missing entities/fields before implementation. In particular, template-name strings, per-tooth records and generic encounter/billing tables do not alone preserve original card-template, odontogram-chart and clinical/financial workflows.
 **Hospital Management System (HMS) — Ethiopian Healthcare Deployment**  
 **Document Reference**: `docs/database-schema-and-frontend-sync-design.md`  
 **Status**: Architecture & Design Specification  

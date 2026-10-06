@@ -472,3 +472,12 @@ Commit: `03feb14` — shift identity, unique codes, single default constraint an
 - Typecheck, eight frontend unit tests, production build, formatting and Go suite passed at the documented checkpoints. The temporary QA schema/services were removed; the public development schema was not migrated.
 - Added the detailed next-agent execution plan in `docs/AI-HANDOFF-BACKEND-INTEGRATION-QA.md` and partial live-reference audit. Whole-demo parity and remaining integrations are explicitly unfinished.
 - User authorized publishing these verified commits to main. No production deployment is implied by publishing code.
+
+## Original database reconstruction — 2026-10-06
+
+- Re-examined `hms.zip`: extracted schema-only evidence for 141 tables, 1,202 columns and 144 foreign keys from the 2026-04-29 MySQL dump. No inserted hospital records or environment secrets were exported.
+- Indexed 275 application migrations, 130 models / 207 relationship calls, 18 historical release SQL files and 468 controller/request/repository/route sources. Workflow indexing is not an exhaustive manual business-logic certification.
+- Resolved configured Spatie role tables and Laravel implicit/renamed columns. Application migration column-name coverage matches the dump except documented Cashier/framework artifacts; no type/default or runtime-equivalence claim is made.
+- Added reproducible extractor, complete schema/dictionary, FK list, per-table PostgreSQL candidate mapping, field contract register and detailed schema parity plan under `docs/legacy-schema/`.
+- Documented confirmed semantic gaps: chart-level odontogram history, card-template master, package/insurance catalogs, IPD/OPD child records, distinct finance documents, pharmacy purchase documents and supporting catalogs/integrations.
+- Validated table-map coverage, target table existence, source column line references, FK endpoint columns, absence of row DML in exported schema and reproducible extraction. Existing application code and databases were not modified; no frontend/backend completion boxes were checked.

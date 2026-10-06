@@ -1,0 +1,21 @@
+{
+  "limitation": "Column-name reconciliation only; no execution or type/default/conditional-path equivalence claim.",
+  "dump_only_tables": [
+    "migrations",
+    "subscription_items",
+    "subscriptions"
+  ],
+  "migration_only_tables": [],
+  "unhandled_blueprint_statements": [],
+  "column_differences": [
+    {
+      "table": "users",
+      "dump_only": [
+        "pm_last_four",
+        "pm_type",
+        "trial_ends_at"
+      ],
+      "migration_only": []
+    }
+  ]
+}
