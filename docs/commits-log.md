@@ -442,3 +442,12 @@ This document tracks every commit executed, verified, and pushed to GitHub on br
 
 
 
+
+## Integration verification — 2026-10-06, step 1
+
+- Started `fix/verified-integration` from `4f85ab4` in an isolated worktree; the original running checkout is unchanged.
+- Restricted the PostgreSQL overview query: non-admin patient readers receive only their scoped patient counts. Financial, staff, and hospital-wide totals are not queried for them. Direct repository callers without patient-read permission are rejected.
+- Available beds now require active, ready, and unoccupied status.
+- Added PostgreSQL regression coverage for administrator totals, scoped doctor/patient/receptionist responses, disallowed roles, and availability.
+- Verified `go test ./...` and `TestClinicalTransactions` with the existing loopback database in a generated temporary schema. All migrations, including 047, ran successfully in that schema. The public development schema and seed data were not changed.
+- Live reference exploration began with Super Admin login, IPD register, admission details, and the diagnosis modal. Full-demo coverage remains outstanding; no claim of full UI/workflow parity is made.

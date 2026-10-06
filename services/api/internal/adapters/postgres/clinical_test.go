@@ -438,5 +438,6 @@ func TestClinicalTransactions(t *testing.T) {
 	testMergePreservesHistory(t, db, store, actors, patients)
 	testClinicalCareScope(t, db, store, actors, patients)
 	testOperationalBilling(t, db, store, actors, patients)
+	testOverviewScope(t, store, actors)
 
 }

@@ -104,6 +104,19 @@ func (s Store) RegisterPatient(ctx context.Context, a domain.Actor, in domain.Pa
 }
 func (s Store) Overview(ctx context.Context, a domain.Actor) (domain.Overview, error) {
 	var o domain.Overview
+	// The hospital-wide dashboard is an administrator view. Patient-list
+	// permission only grants the actor's existing patient scope, not finances
+	// or staff counts. Keep those aggregates out of the query entirely.
+	if !a.Can("patients.read") {
+		return o, domain.ErrForbidden
+	}
+	if a.Role != "admin" {
+		err := s.DB.QueryRow(ctx, `SELECT count(*), count(*) FILTER(WHERE created_at::date=CURRENT_DATE)
+			FROM patient WHERE canonical_patient_id(id)=id AND `+scope, a.Role, a.ID).
+			Scan(&o.PatientCount, &o.RegisteredToday)
+		o.Patients = o.PatientCount
+		return o, err
+	}
 	err := s.DB.QueryRow(ctx, `SELECT 
 		count(*),
 		count(*) FILTER(WHERE created_at::date=CURRENT_DATE),
@@ -112,7 +125,7 @@ func (s Store) Overview(ctx context.Context, a domain.Actor) (domain.Overview, e
 		COALESCE((SELECT SUM(amount_minor) FROM invoice_payment WHERE direction='payment'), 0),
 		COALESCE((SELECT SUM(amount_minor) FROM patient_advance_payment), 0),
 		COALESCE((SELECT COUNT(*) FROM hospital_bed WHERE active=true), 0),
-		COALESCE((SELECT COUNT(*) FROM hospital_bed b WHERE b.active=true AND NOT EXISTS (SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active')), 0),
+		COALESCE((SELECT COUNT(*) FROM hospital_bed b WHERE b.active=true AND b.state='ready' AND NOT EXISTS (SELECT 1 FROM encounter e WHERE e.bed_id=b.id AND e.status='active')), 0),
 		COALESCE((SELECT COUNT(*) FROM encounter WHERE status='active' AND bed_id IS NOT NULL), 0),
 		COALESCE((SELECT COUNT(*) FROM staff_access WHERE role='doctor' AND active=true), 0),
 		COALESCE((SELECT COUNT(*) FROM patient WHERE canonical_patient_id(id)=id), 0),
