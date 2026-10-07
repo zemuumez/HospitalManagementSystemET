@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Boxes,
   Layers,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useLanguage } from "./language";
 import { Modal } from "./modal";
+import { api } from "@/lib/api";
 
 export type InventoryTab =
   "items" | "item-categories" | "item-stocks" | "issued-items";
@@ -69,6 +70,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   const [loading, setLoading] = useState(false);
   const [isLive, setIsLive] = useState(false);
 
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
+  const pending = useRef<{ signature: string; key: string } | null>(null);
+
   // Data states
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -79,6 +85,39 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [showAddStock, setShowAddStock] = useState(false);
   const [showIssueItem, setShowIssueItem] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [recipients, setRecipients] = useState<
+    { id: string; name: string; role: string; active: boolean }[]
+  >([]);
+  useEffect(() => {
+    if (!showIssueItem) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/staff?search=${encodeURIComponent(recipientSearch)}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) throw new Error("Unable to load staff");
+        const data = await response.json();
+        setRecipients(
+          data.users.filter(
+            (user: { active: boolean; role: string }) =>
+              user.active && user.role !== "patient",
+          ),
+        );
+      } catch (cause) {
+        if (!controller.signal.aborted)
+          setError(
+            cause instanceof Error ? cause.message : "Unable to load staff",
+          );
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [showIssueItem, recipientSearch]);
 
   // Form states
   const [itemForm, setItemForm] = useState({
@@ -99,7 +138,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
     quantity: 50,
     supplier: "",
     storeName: "Central Hospital Store",
-    reference: `PO-${Math.floor(1000 + Math.random() * 9000)}`,
+    reference: "",
     unitCost: 15.0,
     reason: "Routine replenishment",
   });
@@ -111,390 +150,129 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
     reason: "Departmental clinical supply",
   });
 
-  const seedFallback = () => {
-    const catList: InventoryCategory[] = [
-      {
-        id: "cat-1111-1111",
-        name: "Surgical Supplies",
-        description: "Sterile gloves, scalpels, and disposable drapes.",
-        active: true,
-        version: 1,
-      },
-      {
-        id: "cat-2222-2222",
-        name: "General Medical Equipment",
-        description: "Thermometers, blood pressure cuffs, and IV stands.",
-        active: true,
-        version: 1,
-      },
-      {
-        id: "cat-3333-3333",
-        name: "Personal Protective Equipment",
-        description: "N95 masks, surgical gowns, and face shields.",
-        active: true,
-        version: 1,
-      },
-    ];
-
-    const itemList: InventoryItem[] = [
-      {
-        id: "item-1111-1111",
-        categoryId: "cat-1111-1111",
-        name: "Latex Examination Gloves (Box of 100)",
-        unit: "Box",
-        description: "Powder-free textured sterile gloves",
-        reorderMilli: 25000,
-        balanceMilli: 120000, // 120 boxes
-        active: true,
-        version: 1,
-      },
-      {
-        id: "item-2222-2222",
-        categoryId: "cat-1111-1111",
-        name: "Surgical Scalpel No. 10",
-        unit: "Piece",
-        description: "Stainless steel single-use surgical blade",
-        reorderMilli: 50000,
-        balanceMilli: 35000, // 35 pieces (low stock!)
-        active: true,
-        version: 1,
-      },
-      {
-        id: "item-3333-3333",
-        categoryId: "cat-3333-3333",
-        name: "N95 Particulate Respirator Mask",
-        unit: "Box",
-        description: "NIOSH certified medical respirator (Box of 20)",
-        reorderMilli: 15000,
-        balanceMilli: 85000, // 85 boxes
-        active: true,
-        version: 1,
-      },
-    ];
-
-    const movList: InventoryMovement[] = [
-      {
-        id: "mov-1",
-        itemId: "item-1111-1111",
-        kind: "receive",
-        quantityMilli: 50000,
-        deltaMilli: 50000,
-        supplier: "Ethiopian Pharmaceuticals Supply Service (EPSS)",
-        storeName: "Central Hospital Store",
-        reference: "PO-7741",
-        costMinor: 250000, // 2,500 ETB
-        reason: "Initial warehouse restock",
-        createdAt: "2026-10-04T10:00:00Z",
-      },
-      {
-        id: "mov-2",
-        itemId: "item-1111-1111",
-        kind: "issue",
-        quantityMilli: 10000,
-        deltaMilli: -10000,
-        recipientId: "Surgical Ward 1",
-        reason: "Daily ward distribution",
-        createdAt: "2026-10-05T08:30:00Z",
-      },
-      {
-        id: "mov-3",
-        itemId: "item-2222-2222",
-        kind: "receive",
-        quantityMilli: 35000,
-        deltaMilli: 35000,
-        supplier: "MedTech East Africa",
-        storeName: "Emergency Store",
-        reference: "PO-8812",
-        costMinor: 140000,
-        reason: "Emergency surgical supply",
-        createdAt: "2026-10-05T11:00:00Z",
-      },
-    ];
-
-    setCategories(catList);
-    setItems(itemList);
-    setMovements(movList);
-  };
-
   const fetchInventoryData = async () => {
     setLoading(true);
+    setError("");
     try {
-      const [resCat, resItems, resMov] = await Promise.allSettled([
-        fetch("/api/hms/inventory/categories"),
-        fetch("/api/hms/inventory/items"),
-        fetch("/api/hms/inventory/movements"),
+      const [cats, stock, history] = await Promise.all([
+        api<{ categories: InventoryCategory[] }>("inventory/categories"),
+        api<{ items: InventoryItem[] }>("inventory/items"),
+        api<{ movements: InventoryMovement[] }>("inventory/movements"),
       ]);
-
-      if (resCat.status === "fulfilled" && resCat.value.ok) {
-        const data = await resCat.value.json();
-        if (
-          data.categories &&
-          Array.isArray(data.categories) &&
-          data.categories.length > 0
-        ) {
-          setCategories(data.categories);
-        }
-      }
-      if (resItems.status === "fulfilled" && resItems.value.ok) {
-        const data = await resItems.value.json();
-        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
-          setItems(data.items);
-        }
-      }
-      if (resMov.status === "fulfilled" && resMov.value.ok) {
-        const data = await resMov.value.json();
-        if (
-          data.movements &&
-          Array.isArray(data.movements) &&
-          data.movements.length > 0
-        ) {
-          setMovements(data.movements);
-        }
-      }
-
+      setCategories(cats.categories);
+      setItems(stock.items);
+      setMovements(history.movements);
       setIsLive(true);
-    } catch {
+    } catch (cause) {
       setIsLive(false);
-      seedFallback();
+      setError(
+        cause instanceof Error ? cause.message : "Unable to load inventory",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    seedFallback();
-    fetchInventoryData();
+    void fetchInventoryData();
   }, []);
 
-  // Handlers
+  async function save(path: string, payload: object, onSaved: () => void) {
+    if (submitting.current) return;
+    submitting.current = true;
+    setSaving(true);
+    setError("");
+    const signature = JSON.stringify({ path, payload });
+    if (pending.current?.signature !== signature) {
+      pending.current = { signature, key: crypto.randomUUID() };
+    }
+    try {
+      await api(path, {
+        method: "POST",
+        headers: { "Idempotency-Key": pending.current.key },
+        body: JSON.stringify(payload),
+      });
+      pending.current = null;
+      onSaved();
+      await fetchInventoryData();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Unable to save inventory",
+      );
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+    }
+  }
+
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = {
-      name: categoryForm.name,
-      description: categoryForm.description,
-      active: true,
-      version: 1,
-    };
-
-    try {
-      const res = await fetch("/api/hms/inventory/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setCategories((prev) => [created, ...prev]);
-      } else {
-        const mock: InventoryCategory = {
-          id: `cat-${Date.now()}`,
-          ...payload,
-        };
-        setCategories((prev) => [mock, ...prev]);
-      }
-    } catch {
-      const mock: InventoryCategory = {
-        id: `cat-${Date.now()}`,
-        ...payload,
-      };
-      setCategories((prev) => [mock, ...prev]);
-    }
-    setShowAddCategory(false);
-    setCategoryForm({ name: "", description: "" });
+    await save(
+      "inventory/categories",
+      { ...categoryForm, active: true, version: 1 },
+      () => {
+        setShowAddCategory(false);
+        setCategoryForm({ name: "", description: "" });
+      },
+    );
   };
-
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    const categoryId =
-      itemForm.categoryId || categories[0]?.id || "cat-1111-1111";
-    const payload = {
-      categoryId,
-      name: itemForm.name,
-      unit: itemForm.unit,
-      description: itemForm.description,
-      reorderMilli: Number(itemForm.reorderLevel) * 1000,
-      active: true,
-      version: 1,
-    };
-
-    try {
-      const res = await fetch("/api/hms/inventory/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setItems((prev) => [created, ...prev]);
-      } else {
-        const mock: InventoryItem = {
-          id: `item-${Date.now()}`,
-          balanceMilli: 0,
-          ...payload,
-        };
-        setItems((prev) => [mock, ...prev]);
-      }
-    } catch {
-      const mock: InventoryItem = {
-        id: `item-${Date.now()}`,
-        balanceMilli: 0,
-        ...payload,
-      };
-      setItems((prev) => [mock, ...prev]);
-    }
-    setShowAddItem(false);
-    setItemForm({
-      name: "",
-      categoryId: "",
-      unit: "Piece",
-      reorderLevel: 10,
-      description: "",
-    });
+    await save(
+      "inventory/items",
+      {
+        categoryId: itemForm.categoryId || categories[0]?.id || "",
+        name: itemForm.name,
+        unit: itemForm.unit,
+        description: itemForm.description,
+        reorderMilli: Number(itemForm.reorderLevel) * 1000,
+        active: true,
+        version: 1,
+      },
+      () => {
+        setShowAddItem(false);
+        setItemForm({
+          name: "",
+          categoryId: "",
+          unit: "Piece",
+          reorderLevel: 10,
+          description: "",
+        });
+      },
+    );
   };
-
   const handleSaveStockReceive = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedItem =
-      items.find((i) => i.id === stockForm.itemId) || items[0];
-    if (!selectedItem) return;
-
-    const qtyMilli = Number(stockForm.quantity) * 1000;
-    const costMinor = Math.round(
-      Number(stockForm.unitCost) * Number(stockForm.quantity) * 100,
-    );
-
-    const payload = {
-      itemId: selectedItem.id,
-      kind: "receive",
-      quantityMilli: qtyMilli,
-      supplier: stockForm.supplier,
-      storeName: stockForm.storeName,
-      reference: stockForm.reference,
-      costMinor,
-      reason: stockForm.reason,
-    };
-
-    try {
-      const res = await fetch("/api/hms/inventory/movements", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": `rec-${Date.now()}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setMovements((prev) => [created, ...prev]);
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === selectedItem.id
-              ? { ...i, balanceMilli: i.balanceMilli + qtyMilli }
-              : i,
-          ),
-        );
-      } else {
-        const mock: InventoryMovement = {
-          id: `mov-${Date.now()}`,
-          deltaMilli: qtyMilli,
-          createdAt: new Date().toISOString(),
-          ...payload,
-        };
-        setMovements((prev) => [mock, ...prev]);
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === selectedItem.id
-              ? { ...i, balanceMilli: i.balanceMilli + qtyMilli }
-              : i,
-          ),
-        );
-      }
-    } catch {
-      const mock: InventoryMovement = {
-        id: `mov-${Date.now()}`,
-        deltaMilli: qtyMilli,
-        createdAt: new Date().toISOString(),
-        ...payload,
-      };
-      setMovements((prev) => [mock, ...prev]);
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === selectedItem.id
-            ? { ...i, balanceMilli: i.balanceMilli + qtyMilli }
-            : i,
+    await save(
+      "inventory/movements",
+      {
+        itemId: stockForm.itemId || items[0]?.id || "",
+        kind: "receive",
+        quantityMilli: Number(stockForm.quantity) * 1000,
+        costMinor: Math.round(
+          Number(stockForm.unitCost) * Number(stockForm.quantity) * 100,
         ),
-      );
-    }
-    setShowAddStock(false);
+        supplier: stockForm.supplier,
+        storeName: stockForm.storeName,
+        reference: stockForm.reference,
+        reason: stockForm.reason,
+      },
+      () => setShowAddStock(false),
+    );
   };
-
   const handleSaveIssue = async (e: React.FormEvent) => {
     e.preventDefault();
-    const selectedItem =
-      items.find((i) => i.id === issueForm.itemId) || items[0];
-    if (!selectedItem) return;
-
-    const qtyMilli = Number(issueForm.quantity) * 1000;
-    const payload = {
-      itemId: selectedItem.id,
-      kind: "issue",
-      quantityMilli: qtyMilli,
-      recipientId: issueForm.recipientId,
-      reason: issueForm.reason,
-    };
-
-    try {
-      const res = await fetch("/api/hms/inventory/movements", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": `iss-${Date.now()}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setMovements((prev) => [created, ...prev]);
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === selectedItem.id
-              ? { ...i, balanceMilli: Math.max(0, i.balanceMilli - qtyMilli) }
-              : i,
-          ),
-        );
-      } else {
-        const mock: InventoryMovement = {
-          id: `mov-${Date.now()}`,
-          deltaMilli: -qtyMilli,
-          createdAt: new Date().toISOString(),
-          ...payload,
-        };
-        setMovements((prev) => [mock, ...prev]);
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === selectedItem.id
-              ? { ...i, balanceMilli: Math.max(0, i.balanceMilli - qtyMilli) }
-              : i,
-          ),
-        );
-      }
-    } catch {
-      const mock: InventoryMovement = {
-        id: `mov-${Date.now()}`,
-        deltaMilli: -qtyMilli,
-        createdAt: new Date().toISOString(),
-        ...payload,
-      };
-      setMovements((prev) => [mock, ...prev]);
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === selectedItem.id
-            ? { ...i, balanceMilli: Math.max(0, i.balanceMilli - qtyMilli) }
-            : i,
-        ),
-      );
-    }
-    setShowIssueItem(false);
+    await save(
+      "inventory/movements",
+      {
+        itemId: issueForm.itemId || items[0]?.id || "",
+        kind: "issue",
+        quantityMilli: Number(issueForm.quantity) * 1000,
+        recipientId: issueForm.recipientId,
+        reason: issueForm.reason,
+      },
+      () => setShowIssueItem(false),
+    );
   };
 
   const getCategoryName = (catId: string) => {
@@ -533,6 +311,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <p role="alert" className="error">
+          {t(error)}
+        </p>
+      )}
       {/* Subtabs Nav */}
       <div className="border-b border-border/80 bg-card/50 backdrop-blur rounded-xl p-1.5 shadow-sm">
         <nav className="flex space-x-1 overflow-x-auto">
@@ -579,8 +362,8 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           <span className="text-muted-foreground hidden sm:inline">•</span>
           <span className="text-muted-foreground text-xs sm:text-sm">
             {isLive
-              ? t("Live Go / PostgreSQL Connected")
-              : t("Dual-mode local preview")}
+              ? t("Inventory loaded")
+              : t("Inventory is not synchronized")}
           </span>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -956,6 +739,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               </button>
             </div>
             <form onSubmit={handleSaveItem} className="space-y-4">
+              {error && (
+                <p role="alert" className="error">
+                  {t(error)}
+                </p>
+              )}
               <div>
                 <label className="block text-xs font-medium mb-1">
                   {t("Item Name")} *
@@ -963,6 +751,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 <input
                   type="text"
                   required
+                  aria-label={t("Item Name")}
                   value={itemForm.name}
                   onChange={(e) =>
                     setItemForm({ ...itemForm, name: e.target.value })
@@ -977,6 +766,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                     {t("Category")} *
                   </label>
                   <select
+                    aria-label={t("Category")}
                     value={itemForm.categoryId}
                     onChange={(e) =>
                       setItemForm({ ...itemForm, categoryId: e.target.value })
@@ -997,6 +787,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   <input
                     type="text"
                     required
+                    aria-label={t("Unit")}
                     value={itemForm.unit}
                     onChange={(e) =>
                       setItemForm({ ...itemForm, unit: e.target.value })
@@ -1013,6 +804,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 <input
                   type="number"
                   min={1}
+                  aria-label={t("Reorder Level")}
                   value={itemForm.reorderLevel}
                   onChange={(e) =>
                     setItemForm({
@@ -1029,6 +821,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </label>
                 <textarea
                   rows={3}
+                  aria-label={t("Description")}
                   value={itemForm.description}
                   onChange={(e) =>
                     setItemForm({ ...itemForm, description: e.target.value })
@@ -1046,6 +839,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </button>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="btn-primary px-4 py-2 text-xs rounded-lg"
                 >
                   {t("Save Item")}
@@ -1075,6 +869,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               </button>
             </div>
             <form onSubmit={handleSaveCategory} className="space-y-4">
+              {error && (
+                <p role="alert" className="error">
+                  {t(error)}
+                </p>
+              )}
               <div>
                 <label className="block text-xs font-medium mb-1">
                   {t("Category Name")} *
@@ -1082,6 +881,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 <input
                   type="text"
                   required
+                  aria-label={t("Category Name")}
                   value={categoryForm.name}
                   onChange={(e) =>
                     setCategoryForm({ ...categoryForm, name: e.target.value })
@@ -1096,6 +896,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </label>
                 <textarea
                   rows={3}
+                  aria-label={t("Description")}
                   value={categoryForm.description}
                   onChange={(e) =>
                     setCategoryForm({
@@ -1116,6 +917,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </button>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="btn-primary px-4 py-2 text-xs rounded-lg"
                 >
                   {t("Save Category")}
@@ -1145,6 +947,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               </button>
             </div>
             <form onSubmit={handleSaveStockReceive} className="space-y-4">
+              {error && (
+                <p role="alert" className="error">
+                  {t(error)}
+                </p>
+              )}
               <div>
                 <label className="block text-xs font-medium mb-1">
                   {t("Item")} *
@@ -1172,6 +979,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                     type="number"
                     min={1}
                     required
+                    aria-label={t("Quantity")}
                     value={stockForm.quantity}
                     onChange={(e) =>
                       setStockForm({
@@ -1190,6 +998,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                     type="number"
                     step="0.01"
                     min={0}
+                    aria-label={t("Unit Cost")}
                     value={stockForm.unitCost}
                     onChange={(e) =>
                       setStockForm({
@@ -1208,6 +1017,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   </label>
                   <input
                     type="text"
+                    aria-label={t("Supplier")}
                     value={stockForm.supplier}
                     onChange={(e) =>
                       setStockForm({ ...stockForm, supplier: e.target.value })
@@ -1222,6 +1032,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   </label>
                   <input
                     type="text"
+                    aria-label={t("Store Name")}
                     value={stockForm.storeName}
                     onChange={(e) =>
                       setStockForm({ ...stockForm, storeName: e.target.value })
@@ -1236,6 +1047,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </label>
                 <input
                   type="text"
+                  aria-label={t("Reference")}
                   value={stockForm.reference}
                   onChange={(e) =>
                     setStockForm({ ...stockForm, reference: e.target.value })
@@ -1253,6 +1065,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </button>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="btn-primary px-4 py-2 text-xs rounded-lg"
                 >
                   {t("Confirm Receive")}
@@ -1282,6 +1095,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               </button>
             </div>
             <form onSubmit={handleSaveIssue} className="space-y-4">
+              {error && (
+                <p role="alert" className="error">
+                  {t(error)}
+                </p>
+              )}
               <div>
                 <label className="block text-xs font-medium mb-1">
                   {t("Item")} *
@@ -1310,6 +1128,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                     type="number"
                     min={1}
                     required
+                    aria-label={t("Quantity to Issue")}
                     value={issueForm.quantity}
                     onChange={(e) =>
                       setIssueForm({
@@ -1322,10 +1141,17 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1">
-                    {t("Recipient / Department")} *
+                    {t("Recipient")} *
                   </label>
                   <input
-                    type="text"
+                    aria-label={t("Search staff")}
+                    placeholder={t("Search staff")}
+                    value={recipientSearch}
+                    onChange={(e) => setRecipientSearch(e.target.value)}
+                    className="field"
+                  />
+                  <select
+                    aria-label={t("Recipient")}
                     required
                     value={issueForm.recipientId}
                     onChange={(e) =>
@@ -1335,8 +1161,14 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                       })
                     }
                     className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                    placeholder="e.g. ICU, Emergency, OPD 3"
-                  />
+                  >
+                    <option value="">{t("Select staff")}</option>
+                    {recipients.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({t(user.role)})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div>
@@ -1345,6 +1177,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </label>
                 <textarea
                   rows={2}
+                  aria-label={t("Reason")}
                   value={issueForm.reason}
                   onChange={(e) =>
                     setIssueForm({ ...issueForm, reason: e.target.value })
@@ -1362,6 +1195,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 </button>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="btn-primary px-4 py-2 text-xs rounded-lg"
                 >
                   {t("Confirm Issue")}

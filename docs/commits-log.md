@@ -505,3 +505,10 @@ Commit: `03feb14` — shift identity, unique codes, single default constraint an
 - Exposed existing general-settings endpoint through the authenticated proxy; made bulk form saves atomic with whole-request validation and normalized-key collision checks.
 - Repaired CMS permission advertisement and duplicate message permission entries.
 - Verification: full Go suite with real isolated PostgreSQL passed after fixing synthetic test fixtures; new tests cover all non-admin roles, filtered/aggregate reads, pagination, and database rollback. Real Better Auth/Next/Go/browser checks: 49 passed across nine roles and six affected pages. Typecheck passed. No public database migration or provider credentials changed.
+
+## Inventory integration safeguards — 2026-10-07
+
+- Removed fake inventory seeds and failed-request local success. Saved records and balances now come from the API; failures keep forms open and visible.
+- Added staff recipient lookup, duplicate-submit protection, stable retry keys, accessible form names and Amharic status/error messages.
+- Verified category/item creation and reload, receive/issue database balance reconciliation, over-issue rejection, HTTP rejection and network failure without fabricated rows. Combined endpoint/browser suite: 55 checks passed; typecheck and eight frontend tests passed.
+- Inventory edit/archive/return workflows and full original UI/role parity remain open; module acceptance was not overstated. Endpoint repairs are in bead0c9; detailed evidence and next work are in docs/module-audit/REPAIRS.md.

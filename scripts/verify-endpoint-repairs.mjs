@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { Pool } from "pg";
 import { hashPassword } from "better-auth/crypto";
 import { chromium } from "@playwright/test";
+import { checkInventoryUI } from "./check-inventory-ui.mjs";
 
 assert.match(
   process.env.HMS_TEST_ISOLATED_SCHEMA || "",
@@ -153,7 +154,10 @@ try {
     });
     await page.close();
   }
-  console.log(`Endpoint repairs: ${results.length} checks passed.`);
+  await checkInventoryUI({ context, db, base, recipientId: id, results });
+  console.log(
+    `Endpoint and inventory repairs: ${results.length} checks passed.`,
+  );
 } finally {
   await browser?.close();
   await db.end();

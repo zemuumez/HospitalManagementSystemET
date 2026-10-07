@@ -1501,5 +1501,17 @@
   "Implant": "ኢምፕላንት",
   "Missing / Extracted": "የተነቀለ / የሌለ ጥርስ",
   "Bridge": "ብሪጅ",
-  "Crown": "ክራውን"
+  "Crown": "ክራውን",
+  "Inventory loaded": "የእቃ ዝርዝሩ ተጭኗል",
+  "Inventory is not synchronized": "የእቃ ዝርዝሩ አልተመሳሰለም",
+  "Unable to load inventory": "የእቃ ዝርዝሩን መጫን አልተቻለም",
+  "Unable to save inventory": "የእቃ መረጃውን ማስቀመጥ አልተቻለም",
+  "Unable to load staff": "የሠራተኞችን ዝርዝር መጫን አልተቻለም",
+  "Search staff": "ሠራተኛ ፈልግ",
+  "Select staff": "ሠራተኛ ይምረጡ",
+  "Recipient": "ተቀባይ",
+  "Failed to fetch": "ከአገልጋዩ ጋር መገናኘት አልተቻለም",
+  "Check the supplied fields and try again": "ያስገቡትን መረጃ ያረጋግጡና እንደገና ይሞክሩ",
+  "You do not have permission for this action": "ይህን እርምጃ ለማከናወን ፈቃድ የለዎትም",
+  "The record changed or the requested action is no longer available. Refresh and try again.": "መዝገቡ ተቀይሯል ወይም የተጠየቀው እርምጃ አይቻልም። ያድሱና እንደገና ይሞክሩ።"
 }
