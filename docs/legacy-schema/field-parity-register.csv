@@ -796,22 +796,22 @@ Diagnostics,operation_reports,date,datetime NOT NULL,"birth_report,death_report,
 Diagnostics,operation_reports,description,text COLLATE utf8mb4_unicode_ci,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2140
 Diagnostics,operation_reports,created_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2141
 Diagnostics,operation_reports,updated_at,timestamp NULL DEFAULT NULL,"birth_report,death_report,operation_report",,,,pending_field_contract_review,hms/database/hms.sql:2142
-Patients,packages,id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2152
-Patients,packages,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2153
-Patients,packages,description,text COLLATE utf8mb4_unicode_ci,-,,,,pending_field_contract_review,hms/database/hms.sql:2154
-Patients,packages,discount,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2155
-Patients,packages,total_amount,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2156
-Patients,packages,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2157
-Patients,packages,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2158
-Patients,packages,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2159
-Patients,package_services,id,bigint UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2169
-Patients,package_services,package_id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2170
-Patients,package_services,service_id,int UNSIGNED NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2171
-Patients,package_services,quantity,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2172
-Patients,package_services,rate,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2173
-Patients,package_services,amount,double NOT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2174
-Patients,package_services,created_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2175
-Patients,package_services,updated_at,timestamp NULL DEFAULT NULL,-,,,,pending_field_contract_review,hms/database/hms.sql:2176
+Patients,packages,id,int UNSIGNED NOT NULL,package,id,id,packages_list,backend_verified,049_packages_catalog.sql
+Patients,packages,name,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,package,name,name,packages_form,backend_verified,049_packages_catalog.sql
+Patients,packages,description,text COLLATE utf8mb4_unicode_ci,package,description,description,packages_form,backend_verified,049_packages_catalog.sql
+Patients,packages,discount,double NOT NULL,package,discount,discount,packages_form,backend_verified,049_packages_catalog.sql
+Patients,packages,total_amount,double NOT NULL,package,total_amount_minor,total_amount_minor,packages_list,backend_verified,049_packages_catalog.sql
+Patients,packages,created_at,timestamp NULL DEFAULT NULL,package,created_at,created_at,-,backend_verified,049_packages_catalog.sql
+Patients,packages,updated_at,timestamp NULL DEFAULT NULL,package,updated_at,updated_at,-,backend_verified,049_packages_catalog.sql
+Patients,packages,currency_symbol,varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,package,currency_symbol,currency_symbol,-,backend_verified,049_packages_catalog.sql
+Patients,package_services,id,bigint UNSIGNED NOT NULL,package_service,id,id,-,backend_verified,049_packages_catalog.sql
+Patients,package_services,package_id,int UNSIGNED NOT NULL,package_service,package_id,package_id,-,backend_verified,049_packages_catalog.sql
+Patients,package_services,service_id,int UNSIGNED NOT NULL,package_service,service_id,service_id,packages_form,backend_verified,049_packages_catalog.sql
+Patients,package_services,quantity,double NOT NULL,package_service,quantity,quantity,packages_form,backend_verified,049_packages_catalog.sql
+Patients,package_services,rate,double NOT NULL,package_service,rate_minor,rate_minor,packages_form,backend_verified,049_packages_catalog.sql
+Patients,package_services,amount,double NOT NULL,package_service,amount_minor,amount_minor,packages_detail,backend_verified,049_packages_catalog.sql
+Patients,package_services,created_at,timestamp NULL DEFAULT NULL,package_service,created_at,created_at,-,backend_verified,049_packages_catalog.sql
+Patients,package_services,updated_at,timestamp NULL DEFAULT NULL,package_service,updated_at,updated_at,-,backend_verified,049_packages_catalog.sql
 Identity,password_reset_tokens,email,varchar(160) COLLATE utf8mb4_unicode_ci NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2186
 Identity,password_reset_tokens,token,longtext COLLATE utf8mb4_unicode_ci NOT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2187
 Identity,password_reset_tokens,created_at,timestamp NULL DEFAULT NULL,"session,verification,account",,,,pending_field_contract_review,hms/database/hms.sql:2188

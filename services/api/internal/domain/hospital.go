@@ -11,6 +11,7 @@ import (
 var ErrForbidden = errors.New("forbidden")
 var ErrValidation = errors.New("validation failed")
 var ErrConflict = errors.New("idempotency key conflict")
+var ErrInUse = errors.New("record is in use and cannot be deleted")
 
 type Actor struct {
 	ID   string `json:"id"`
@@ -59,6 +60,10 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "case_manager" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse"
 	case "ambulance_call.read":
 		return a.Role == "admin" || a.Role == "case_manager" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "accountant" || a.Role == "patient"
+	case "packages.manage":
+		return a.Role == "admin" || a.Role == "receptionist"
+	case "packages.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "case_manager" || a.Role == "patient"
 	case "services.manage":
 		return a.Role == "admin" || a.Role == "accountant"
 	case "services.read":
@@ -133,7 +138,7 @@ func (a Actor) Permissions() []string {
 		"patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book",
 		"staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage",
 		"attendance.clock", "attendance.read_own", "attendance.manage", "ambulance.manage", "ambulance.read",
-		"ambulance_call.manage", "ambulance_call.read", "services.manage", "services.read", "operations.manage",
+		"ambulance_call.manage", "ambulance_call.read", "packages.manage", "packages.read", "services.manage", "services.read", "operations.manage",
 		"operations.read", "settings.manage", "settings.read", "cms.read", "cms.manage", "enquiries.read", "enquiries.manage",
 		"complaints.read", "complaints.manage", "complaints.create", "notices.read", "notices.manage",
 		"front_office.manage", "front_office.read", "live_consultations.manage", "live_consultations.read",

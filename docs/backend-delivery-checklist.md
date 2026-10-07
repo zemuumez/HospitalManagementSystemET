@@ -105,7 +105,17 @@ Commit: `21e2f55` — clinical admissions and immutable signed notes.
 - [x] Browser invoice creation and persisted total verification; payment form rendering checked.
 - [x] Disposable-schema payment/refund posting and concurrency tests, plus HTTP authorization/strict-input tests.
 - [x] Go tests/vet, frontend tests, typecheck, format check, production build and authentication/API integration suite.
-- [ ] Actual payment gateways, reconciliation, taxes, source-workflow charge linkage, invoice corrections/voiding, print/PDF, payroll and full original finance parity.
+### 1.6 Step 1 (Parity Roadmap): Package backend and contract parity
+
+- [x] Migration 049 (`049_packages_catalog.sql`): `package` and `package_service` tables with integer percentage discount, exact integer minor-unit totals, and `ipd_admission_details(package_id)` linkage with `ON DELETE RESTRICT`.
+- [x] Exact authoritative server-calculated line amounts and total amount with explicit half-up rounding; client-submitted totals are not trusted.
+- [x] Transactional create and update; child line ownership validation rejecting cross-parent line IDs.
+- [x] Atomic rollback on child write failure; no partial parent rows or audit events committed.
+- [x] In-use deletion protection: package deletion rejected with 409 Conflict (`RECORD_IN_USE`) when referenced in patient admissions.
+- [x] Scoped authorization: `packages.manage` for `admin` and `receptionist`; `packages.read` for `admin`, `receptionist`, `doctor`, `case_manager`, `patient`. All unauthorized roles receive 403; anonymous receives 401.
+- [x] Bounded pagination, search by name, full package detail with joined service names, and export endpoint `/v1/packages-export`.
+- [x] Comprehensive test coverage in `services/api/internal/adapters/postgres/packages_test.go` and `services/api/internal/domain/packages_test.go`. Full Go suite passing. See [backend-packages-contract.md](backend-packages-contract.md).
+- [ ] Step 2: Package frontend integration (connect ServicesWorkspace forms/lists to real `/v1/packages` API, remove false local saves, test browser create/edit/delete/reload).
 
 Manual payment forms record completed money movements; they do not send bank transfers. ETB is the only currency in the current implementation. Ledger posting tests run in a disposable schema, not the ordinary development dataset.
 
@@ -265,7 +275,7 @@ Backend-first progress:
 - [x] Released diagnostic-order invoices derive patient/tariff from the source, retain unique linkage and reject duplicate or changed-source billing (migration 016).
 - [x] IPD/OPD/ambulance charges, bundled lab bills and broader source-workflow billing (migration 035; anti-double-billing via `service_invoice_link` with unique source association).
 - [ ] Expenses, income, account transfers and daily/monthly financial reports (migration 035; `hospital_expense_head`, `hospital_expense`, `hospital_income_head`, `hospital_income`, and financial summary reports; [contract](backend-finance-payroll-contract.md)).
-- [ ] Insurance, packages, policy details, claims and patient responsibility.
+- [ ] Insurance, packages, policy details, claims and patient responsibility (packages backend completed in Step 1 / migration 049; insurance backend and frontend integrations remain open).
 - [ ] Employee payroll, allowances/deductions, approval, payout and payroll slips (migration 035; `employee_payroll`, salary calculation, payment timestamps, staff-scoped slips; [contract](backend-finance-payroll-contract.md)).
 - [ ] Currency configuration/migration rules; current new financial contracts use ETB only.
 - [ ] Tax/compliance requirements must be established before asserting accounting/legal compliance.

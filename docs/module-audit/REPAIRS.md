@@ -20,10 +20,20 @@ These repairs do not establish package/insurance endpoints, complete settings UI
 - Verification: typecheck and eight frontend tests passed. Combined real-login/API/browser run passed 55 checks, including six inventory persistence/failure scenarios: category reload, item opening balance, receive/issue reconciliation, over-issue rejection, HTTP failure, and network failure. See inventory-repairs.json. Public development records were not used or changed.
 - Remaining inventory parity: original supplier/store catalogs, full pagination/search, edit/archive UI, returns/write-offs UI, original field/layout comparison and complete role workflows. These are not marked complete by the create/receive/issue checks.
 
+## 2026-10-08: package backend and contract parity (Step 1)
+
+- Migration `049_packages_catalog.sql`: implemented `package` and `package_service` tables with strict constraints, minor-unit money types, and foreign key linkage to `ipd_admission_details(package_id)` with `ON DELETE RESTRICT`.
+- Authoritative calculation: server recalculates line amounts, subtotal, explicit half-up percentage discount rounding, and total amount. Client totals are never trusted.
+- Transactional mutations & ownership: transactional create and update enforce that submitted line IDs belong strictly to the target package. Cross-parent child line IDs are rejected with conflict. Forced child-write failure rolls back all parent and line rows atomically.
+- Admission in-use protection: deletion is strictly rejected if referenced by patient admissions (`ipd_admission_details`), returning `409 Conflict` (`RECORD_IN_USE`).
+- Scoped permissions & endpoints: `packages.manage` for `admin` and `receptionist`; `packages.read` for `admin`, `receptionist`, `doctor`, `case_manager`, `patient`. Anonymous access returns 401; unauthorized roles (`nurse`, `accountant`, etc.) receive 403.
+- Verification: isolated-schema PostgreSQL test suite (`TestClinicalTransactions/testPackages`) verified multi-line creation, line update/add/remove, duplicate name rejection, invalid service references, cross-parent line ID rejection, atomic rollback, admission in-use protection, role authorization, concurrency, search, and pagination.
+
 ## Next implementation order
 
-1. Packages and insurances: implement source-backed parent/line aggregates with authoritative totals, transactional writes, in-use deletion checks and role tests. Remove remaining false local success in ServicesWorkspace as part of that integration.
-2. Doctor workspace: remove remaining preview rows/saves and align doctor account creation, department and absence forms with their actual contracts.
-3. Settings frontend: connect the original field form to the now-available atomic endpoint, including the appropriate image storage contract.
-4. Smart-card templates/generation and chart-level odontograms: implement missing persistence/history without losing original codes.
-5. IPD/OPD detail workflows and remaining ACCEPTANCE-MATRIX families: compare fields/rules, then implement and test each complete workflow. All-role CRUD parity is still open.
+1. Step 2: Package frontend integration (connect ServicesWorkspace forms/lists to real `/v1/packages` API, remove false local saves, test browser create/edit/delete/reload).
+2. Step 3: Insurance backend (exact monetary service tax, disease line replacement transaction, admission-linked protection, role tests).
+3. Step 4: Insurance frontend integration and combined regression.
+4. Doctor workspace: remove remaining preview rows/saves and align doctor account creation, department and absence forms with their actual contracts.
+5. Settings frontend: connect the original field form to the now-available atomic endpoint, including the appropriate image storage contract.
+

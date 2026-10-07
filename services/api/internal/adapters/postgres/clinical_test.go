@@ -426,6 +426,7 @@ func TestClinicalTransactions(t *testing.T) {
 	testAttendance(t, db, store, actors)
 	testAmbulances(t, db, store, actors)
 	testServicesOperations(t, db, store, actors)
+	testPackages(t, db, store, actors, cases)
 	testCMSSettings(t, db, store, actors)
 	testFrontOffice(t, db, store, actors)
 	testLiveConsultations(t, db, store, actors, patients)
