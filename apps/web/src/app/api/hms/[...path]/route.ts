@@ -64,6 +64,7 @@ const allowedRoot = new Set([
   "inventory",
   "front-settings",
   "settings",
+  "general-settings",
   "hospital-schedules",
   "reviews",
   "doctor-departments",

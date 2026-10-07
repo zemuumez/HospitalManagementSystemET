@@ -15,7 +15,10 @@ func scanAbsence(row pgx.Row) (domain.DoctorAbsence, error) {
 	return a, clinicalError(e)
 }
 func (s Store) Absences(ctx context.Context, a domain.Actor, id string, page int) ([]domain.DoctorAbsence, error) {
-	rows, e := s.DB.Query(ctx, `SELECT `+absenceFields+` FROM doctor_absence WHERE doctor_id=$1 ORDER BY starts_at DESC,id LIMIT 25 OFFSET $2`, id, (page-1)*25)
+	if a.Role != "admin" && !(a.Role == "doctor" && id != "" && a.ID == id) {
+		return nil, domain.ErrForbidden
+	}
+	rows, e := s.DB.Query(ctx, `SELECT `+absenceFields+` FROM doctor_absence WHERE ($1='' OR doctor_id=$1) ORDER BY starts_at DESC,id LIMIT 25 OFFSET $2`, id, (page-1)*25)
 	if e != nil {
 		return nil, e
 	}

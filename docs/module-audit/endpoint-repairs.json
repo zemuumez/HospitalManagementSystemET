@@ -1,0 +1,240 @@
+{
+  "date": "2026-10-07T19:21:57.046Z",
+  "results": [
+    {
+      "name": "admin GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "admin GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "admin GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "admin PUT general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "doctor GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "doctor GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "doctor GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "doctor PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "patient GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "patient GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "patient GET general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "patient PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "nurse GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "nurse GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "nurse GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "nurse PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "receptionist GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "receptionist GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "receptionist GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "receptionist PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "pharmacist GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "pharmacist GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "pharmacist GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "pharmacist PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "accountant GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "accountant GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "accountant GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "accountant PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "case_manager GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "case_manager GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "case_manager GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "case_manager PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "lab_technician GET doctor-absences",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "lab_technician GET inventory/movements",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "lab_technician GET general-settings",
+      "status": "pass",
+      "httpStatus": 200
+    },
+    {
+      "name": "lab_technician PUT general-settings",
+      "status": "pass",
+      "httpStatus": 403
+    },
+    {
+      "name": "anonymous denied general-settings",
+      "status": "pass"
+    },
+    {
+      "name": "anonymous denied doctor-absences",
+      "status": "pass"
+    },
+    {
+      "name": "anonymous denied inventory/movements",
+      "status": "pass"
+    },
+    {
+      "name": "admin PUT general-settings",
+      "status": "pass",
+      "httpStatus": 422
+    },
+    {
+      "name": "settings rejected form preserves persisted values",
+      "status": "pass"
+    },
+    {
+      "name": "admin GET inventory/movements?itemId=invalid",
+      "status": "pass",
+      "httpStatus": 422
+    },
+    {
+      "name": "admin GET doctor-absences?page=0",
+      "status": "pass",
+      "httpStatus": 422
+    },
+    {
+      "name": "doctors authenticated initial API transport",
+      "status": "pass"
+    },
+    {
+      "name": "doctor-departments authenticated initial API transport",
+      "status": "pass"
+    },
+    {
+      "name": "items authenticated initial API transport",
+      "status": "pass"
+    },
+    {
+      "name": "item-categories authenticated initial API transport",
+      "status": "pass"
+    },
+    {
+      "name": "item-stocks authenticated initial API transport",
+      "status": "pass"
+    },
+    {
+      "name": "issued-items authenticated initial API transport",
+      "status": "pass"
+    }
+  ]
+}

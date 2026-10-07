@@ -3,12 +3,14 @@ package application
 import (
 	"context"
 	"hms.local/api/internal/domain"
+	"sort"
 	"time"
 )
 
 type CMSSettingsStore interface {
 	GeneralSettings(context.Context) (map[string]string, error)
 	UpdateGeneralSetting(context.Context, domain.Actor, domain.GeneralSettingInput) (domain.HospitalGeneralSetting, error)
+	UpdateGeneralSettings(context.Context, domain.Actor, []domain.GeneralSettingInput) error
 
 	HospitalSchedules(context.Context) ([]domain.HospitalScheduleDay, error)
 	UpdateHospitalSchedule(context.Context, domain.Actor, domain.HospitalScheduleDayInput) (domain.HospitalScheduleDay, error)
@@ -51,16 +53,22 @@ func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.
 	if !a.Can("settings.manage") {
 		return domain.ErrForbidden
 	}
+	inputs := make([]domain.GeneralSettingInput, 0, len(settings))
+	seen := make(map[string]bool)
 	for k, v := range settings {
 		in := domain.GeneralSettingInput{Key: k, Value: v}
 		if err := in.Validate(); err != nil {
 			return err
 		}
-		if _, err := s.Store.UpdateGeneralSetting(ctx, a, in); err != nil {
-			return err
+		if seen[in.Key] {
+			return domain.ErrValidation
 		}
+		seen[in.Key] = true
+		inputs = append(inputs, in)
 	}
-	return nil
+	// Validate the entire form before writing, and lock keys in stable order.
+	sort.Slice(inputs, func(i, j int) bool { return inputs[i].Key < inputs[j].Key })
+	return s.Store.UpdateGeneralSettings(ctx, a, inputs)
 }
 
 // --- Hospital Schedules ---

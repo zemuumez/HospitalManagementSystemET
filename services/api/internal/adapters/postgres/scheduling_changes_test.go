@@ -45,6 +45,39 @@ func testSchedulingChanges(t *testing.T, db *pgxpool.Pool, store Store, actors [
 	if e != nil {
 		t.Fatal(e)
 	}
+	t.Run("admin absence register preserves doctor scope", func(t *testing.T) {
+		if _, err := s.SaveDoctor(ctx, actors[0], domain.Doctor{ID: actors[2].ID, Department: "General", SlotMinutes: 30}); err != nil {
+			t.Fatal(err)
+		}
+		other := absence
+		other.DoctorID = actors[2].ID
+		if _, err := s.CreateAbsence(ctx, actors[0], other); err != nil {
+			t.Fatal(err)
+		}
+		all, err := s.Absences(ctx, actors[0], "", 1)
+		if err != nil || len(all) != 2 {
+			t.Fatal("admin aggregate", all, err)
+		}
+		own, err := s.Absences(ctx, actors[1], actors[1].ID, 1)
+		if err != nil || len(own) != 1 || own[0].ID != off.ID {
+			t.Fatal("doctor scope", own, err)
+		}
+		if _, err = s.Absences(ctx, actors[1], "", 1); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatal("doctor aggregate", err)
+		}
+		if _, err = store.Absences(ctx, actors[1], actors[2].ID, 1); !errors.Is(err, domain.ErrForbidden) {
+			t.Fatal("direct other doctor", err)
+		}
+		page, err := s.Absences(ctx, actors[0], "", 2)
+		if err != nil || len(page) != 0 {
+			t.Fatal("pagination", page, err)
+		}
+		for _, role := range []string{"patient", "nurse", "receptionist", "pharmacist", "accountant", "case_manager", "lab_technician"} {
+			if _, err = s.Absences(ctx, domain.Actor{ID: actors[1].ID, Role: role}, "", 1); !errors.Is(err, domain.ErrForbidden) {
+				t.Fatal("aggregate exposed", role, err)
+			}
+		}
+	})
 	if _, e = s.Reschedule(ctx, actors[0], app.ID, domain.RescheduleInput{StartsAt: absence.StartsAt, Version: 1, Reason: "Change"}); !errors.Is(e, domain.ErrStale) {
 		t.Fatal("rescheduled into absence", e)
 	}

@@ -73,7 +73,7 @@ func (i Inventory) Movements(ctx context.Context, a domain.Actor, id string, pag
 	if a.Role != "admin" {
 		return nil, domain.ErrForbidden
 	}
-	if !domain.UUIDPattern.MatchString(id) || !pageOK(page) {
+	if (id != "" && !domain.UUIDPattern.MatchString(id)) || !pageOK(page) {
 		return nil, domain.ErrValidation
 	}
 	return i.Store.InventoryMovements(ctx, a, id, page)

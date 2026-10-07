@@ -2,6 +2,8 @@
 
 Date: 2026-10-06. This is an audit of the original Laravel source and the current implementation, performed **before further backend/schema implementation**.
 
+Subsequent verified changes are tracked in [REPAIRS.md](REPAIRS.md). Historical audit results below are retained as the baseline, not rewritten as current passes.
+
 ## What this establishes
 
 The database inventory is now supplemented by source action/validation/authorization evidence and executable tests. This separates four questions that earlier completion claims mixed together:

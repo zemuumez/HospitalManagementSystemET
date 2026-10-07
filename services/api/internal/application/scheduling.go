@@ -87,7 +87,7 @@ func (s Scheduling) Absences(ctx context.Context, a domain.Actor, doctorID strin
 	if a.Role != "admin" && !(a.Role == "doctor" && a.ID == doctorID) {
 		return nil, domain.ErrForbidden
 	}
-	if doctorID == "" || len(doctorID) > 128 || page < 1 || page > 1000 {
+	if (doctorID == "" && a.Role != "admin") || len(doctorID) > 128 || page < 1 || page > 1000 {
 		return nil, domain.ErrValidation
 	}
 	return s.Store.Absences(ctx, a, doctorID, page)

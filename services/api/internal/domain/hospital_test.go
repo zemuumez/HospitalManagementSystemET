@@ -58,3 +58,21 @@ func TestPatientUnknownDOBAndHospitalDateBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestAdvertisedPermissions(t *testing.T) {
+	for _, role := range []string{"admin", "doctor", "patient", "nurse", "receptionist", "pharmacist", "accountant", "case_manager", "lab_technician"} {
+		actor := Actor{ID: "test", Role: role}
+		seen := map[string]bool{}
+		for _, permission := range actor.Permissions() {
+			if seen[permission] || !actor.Can(permission) {
+				t.Fatalf("invalid advertised permission %s for %s", permission, role)
+			}
+			seen[permission] = true
+		}
+		for _, permission := range []string{"cms.read", "cms.manage", "settings.read", "settings.manage"} {
+			if seen[permission] != actor.Can(permission) {
+				t.Fatalf("missing advertised permission %s for %s", permission, role)
+			}
+		}
+	}
+}

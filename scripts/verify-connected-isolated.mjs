@@ -20,6 +20,7 @@ import { setTimeout as delay } from "node:timers/promises";
 const root = process.cwd();
 const manualMode = process.argv.includes("--manual");
 const moduleAuditMode = process.argv.includes("--module-audit");
+const endpointRepairMode = process.argv.includes("--endpoint-repairs");
 const moduleUiAuditMode = process.argv.includes("--module-ui-audit");
 const operationalMode = process.argv.includes("--operational");
 const firebaseMode = process.argv.includes("--firebase");
@@ -279,21 +280,23 @@ try {
       const test = spawn(
         process.execPath,
         [
-          moduleUiAuditMode
-            ? "scripts/verify-module-pages.mjs"
-            : moduleAuditMode
-              ? "scripts/verify-module-contracts.mjs"
-              : operationalMode
-                ? "scripts/verify-all-operational-workspaces.mjs"
-                : invitationsMode
-                  ? "scripts/verify-invitations.mjs"
-                  : integrationMode
-                    ? "scripts/integration.mjs"
-                    : firebaseMode
-                      ? "scripts/verify-firebase.mjs"
-                      : recoveryMode
-                        ? "scripts/verify-recovery.mjs"
-                        : "scripts/verify-connected.mjs",
+          endpointRepairMode
+            ? "scripts/verify-endpoint-repairs.mjs"
+            : moduleUiAuditMode
+              ? "scripts/verify-module-pages.mjs"
+              : moduleAuditMode
+                ? "scripts/verify-module-contracts.mjs"
+                : operationalMode
+                  ? "scripts/verify-all-operational-workspaces.mjs"
+                  : invitationsMode
+                    ? "scripts/verify-invitations.mjs"
+                    : integrationMode
+                      ? "scripts/integration.mjs"
+                      : firebaseMode
+                        ? "scripts/verify-firebase.mjs"
+                        : recoveryMode
+                          ? "scripts/verify-recovery.mjs"
+                          : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,

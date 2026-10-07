@@ -215,12 +215,15 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	return out, tx.Commit(ctx)
 }
 func (s Store) InventoryMovements(ctx context.Context, a domain.Actor, id string, page int) ([]domain.InventoryMovement, error) {
+	if a.Role != "admin" {
+		return nil, domain.ErrForbidden
+	}
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
 	defer tx.Rollback(ctx)
-	rows, e := tx.Query(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement WHERE item_id=$1 ORDER BY created_at DESC,id LIMIT 25 OFFSET $2`, id, (page-1)*25)
+	rows, e := tx.Query(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement WHERE ($1='' OR item_id=NULLIF($1,'')::uuid) ORDER BY created_at DESC,id LIMIT 25 OFFSET $2`, id, (page-1)*25)
 	if e != nil {
 		return nil, e
 	}

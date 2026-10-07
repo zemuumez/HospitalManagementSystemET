@@ -31,6 +31,43 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 	patientUser := actorMap["patient"]
 
 	srv := application.CMSSettingsService{Store: store, Now: time.Now}
+	t.Run("settings form is atomic and admin only", func(t *testing.T) {
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{"audit_name": "Before", "audit_email": "before@example.test"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{"audit_name": "Partial", "": "invalid"}); !errors.Is(err, domain.ErrValidation) {
+			t.Fatal("invalid form", err)
+		}
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{"audit_name": "One", " audit_name ": "Two"}); !errors.Is(err, domain.ErrValidation) {
+			t.Fatal("normalized duplicate", err)
+		}
+		if _, err := db.Exec(ctx, `ALTER TABLE hospital_general_setting ADD CONSTRAINT audit_failure CHECK(value <> 'synthetic-db-rejection')`); err != nil {
+			t.Fatal(err)
+		}
+		err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{"audit_name": "Partial", "z_audit_failure": "synthetic-db-rejection"})
+		if _, dropErr := db.Exec(ctx, `ALTER TABLE hospital_general_setting DROP CONSTRAINT audit_failure`); dropErr != nil {
+			t.Fatal(dropErr)
+		}
+		if err == nil {
+			t.Fatal("expected database failure")
+		}
+		got, err := srv.GeneralSettings(ctx, admin)
+		if err != nil || got["audit_name"] != "Before" {
+			t.Fatal("partial settings persisted", got["audit_name"], err)
+		}
+		for _, role := range []string{"doctor", "patient", "nurse", "receptionist", "pharmacist", "accountant", "case_manager", "lab_technician"} {
+			if err := srv.UpdateGeneralSettings(ctx, domain.Actor{ID: doctor.ID, Role: role}, map[string]string{"audit_name": "Denied"}); !errors.Is(err, domain.ErrForbidden) {
+				t.Fatal("settings write exposed", role, err)
+			}
+		}
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{"audit_name": "After", "audit_email": "after@example.test"}); err != nil {
+			t.Fatal(err)
+		}
+		got, err = srv.GeneralSettings(ctx, admin)
+		if err != nil || got["audit_name"] != "After" || got["audit_email"] != "after@example.test" {
+			t.Fatal("settings reload", err)
+		}
+	})
 
 	// 1. Authorization checks
 	// Patient cannot update general settings

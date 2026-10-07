@@ -141,6 +141,40 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 	if e != nil || len(history) != 5 {
 		t.Fatal("history count", e, len(history))
 	}
+	t.Run("admin movement register and parent filter", func(t *testing.T) {
+		second, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: category.ID, Name: "Second supply", Unit: "box", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{ItemID: second.ID, Kind: "receive", QuantityMilli: 1000, Reference: "REGISTER-1", Reason: "Register fixture"}, "inventory-register-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		all, err := inv.Movements(ctx, a, "", 1)
+		if err != nil || len(all) != 6 {
+			t.Fatal("aggregate register", len(all), err)
+		}
+		filtered, err := inv.Movements(ctx, a, second.ID, 1)
+		if err != nil || len(filtered) != 1 || filtered[0].ItemID != second.ID {
+			t.Fatal("parent scope", filtered, err)
+		}
+		page, err := inv.Movements(ctx, a, "", 2)
+		if err != nil || len(page) != 0 {
+			t.Fatal("pagination", page, err)
+		}
+		if _, err = inv.Movements(ctx, a, "invalid", 1); !errors.Is(err, domain.ErrValidation) {
+			t.Fatal("invalid parent", err)
+		}
+		for _, role := range []string{"doctor", "nurse", "patient", "receptionist", "pharmacist", "accountant", "case_manager", "lab_technician"} {
+			actor := domain.Actor{ID: actors[1].ID, Role: role}
+			if _, err = inv.Movements(ctx, actor, "", 1); !errors.Is(err, domain.ErrForbidden) {
+				t.Fatal("aggregate exposed", role, err)
+			}
+			if _, err = store.InventoryMovements(ctx, actor, second.ID, 1); !errors.Is(err, domain.ErrForbidden) {
+				t.Fatal("direct store exposed", role, err)
+			}
+		}
+	})
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := strings.TrimPrefix(r.Header.Get("Cookie"), "session=")
 		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))
@@ -152,6 +186,9 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		want                              int
 	}{
 		{"admin", "GET", "/v1/inventory/items", "", "", 200}, {"patient", "GET", "/v1/inventory/items", "", "", 403},
+		{"admin", "GET", "/v1/inventory/movements", "", "", 200},
+		{"doctor", "GET", "/v1/inventory/movements", "", "", 403},
+		{"admin", "GET", "/v1/inventory/movements?itemId=invalid", "", "", 422},
 		{"admin", "POST", "/v1/inventory/movements", `{"unknown":true}`, "http://hospital.test", 400},
 		{"admin", "POST", "/v1/inventory/movements", `{}`, "http://evil.test", 403},
 	} {

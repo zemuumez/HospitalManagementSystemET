@@ -498,3 +498,10 @@ Commit: `03feb14` — shift identity, unique codes, single default constraint an
 - Confirmed session-only smart-card templates, odontogram aggregate/history/code loss, missing/mismatched routes, omitted parent filters on doctor-absence/inventory requests, and generic encounter-register reuse for distinct clinical tabs.
 - Added sanitized results, per-page observations, source-backed findings and acceptance gates; linked the delivery checklist and AI handoff. No capability completion boxes were checked. Source evidence was committed separately as b82ce16.
 - Temporary schemas/services were cleaned; public development data/schema, application behavior and external credentials were unchanged. PHP/Laravel execution and comprehensive original all-role CRUD acceptance remain outstanding.
+
+## Endpoint repairs — 2026-10-07
+
+- Added admin-only paginated aggregate doctor-absence and inventory movement reads while preserving parent filters and doctor ownership. Repository guards prevent bypass through direct calls.
+- Exposed existing general-settings endpoint through the authenticated proxy; made bulk form saves atomic with whole-request validation and normalized-key collision checks.
+- Repaired CMS permission advertisement and duplicate message permission entries.
+- Verification: full Go suite with real isolated PostgreSQL passed after fixing synthetic test fixtures; new tests cover all non-admin roles, filtered/aggregate reads, pagination, and database rollback. Real Better Auth/Next/Go/browser checks: 49 passed across nine roles and six affected pages. Typecheck passed. No public database migration or provider credentials changed.

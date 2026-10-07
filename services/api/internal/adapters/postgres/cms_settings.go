@@ -54,6 +54,26 @@ func (s Store) UpdateGeneralSetting(ctx context.Context, a domain.Actor, in doma
 
 // --- Hospital Schedules ---
 
+func (s Store) UpdateGeneralSettings(ctx context.Context, a domain.Actor, inputs []domain.GeneralSettingInput) error {
+	if !a.Can("settings.manage") {
+		return domain.ErrForbidden
+	}
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, in := range inputs {
+		if _, err = tx.Exec(ctx, `INSERT INTO hospital_general_setting(key,value,updated_at) VALUES($1,$2,clock_timestamp()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=clock_timestamp()`, in.Key, in.Value); err != nil {
+			return clinicalError(err)
+		}
+		if err = pharmacyAudit(ctx, tx, a, "general_setting.updated", in.Key); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (s Store) HospitalSchedules(ctx context.Context) ([]domain.HospitalScheduleDay, error) {
 	rows, err := s.DB.Query(ctx, `
 		SELECT id, day_of_week, start_time, end_time, is_closed, created_at, updated_at

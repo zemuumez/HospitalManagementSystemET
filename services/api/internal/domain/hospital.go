@@ -134,13 +134,13 @@ func (a Actor) Permissions() []string {
 		"staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage",
 		"attendance.clock", "attendance.read_own", "attendance.manage", "ambulance.manage", "ambulance.read",
 		"ambulance_call.manage", "ambulance_call.read", "services.manage", "services.read", "operations.manage",
-		"operations.read", "settings.manage", "settings.read", "enquiries.read", "enquiries.manage",
+		"operations.read", "settings.manage", "settings.read", "cms.read", "cms.manage", "enquiries.read", "enquiries.manage",
 		"complaints.read", "complaints.manage", "complaints.create", "notices.read", "notices.manage",
 		"front_office.manage", "front_office.read", "live_consultations.manage", "live_consultations.read",
 		"live_meetings.manage", "live_meetings.read", "blood_bank.manage", "blood_bank.read",
 		"prescriptions.manage", "prescriptions.read", "finance.read", "finance.manage",
 		"payroll.read", "payroll.read_own", "payroll.manage",
-		"scheduling.manage", "doctor_dept.manage", "messages.manage",
+		"scheduling.manage", "doctor_dept.manage",
 	} {
 		if a.Can(p) {
 			result = append(result, p)
@@ -186,12 +186,12 @@ type Patient struct {
 	ID          string `json:"id"`
 	MRN         string `json:"mrn"`
 	PatientInput
-	Email       string    `json:"email,omitempty"`
-	Gender      string    `json:"gender,omitempty"`
-	BloodGroup  string    `json:"bloodGroup,omitempty"`
-	FatherName  string    `json:"fatherName,omitempty"`
-	Active      bool      `json:"active"`
-	CreatedAt   time.Time `json:"createdAt"`
+	Email      string    `json:"email,omitempty"`
+	Gender     string    `json:"gender,omitempty"`
+	BloodGroup string    `json:"bloodGroup,omitempty"`
+	FatherName string    `json:"fatherName,omitempty"`
+	Active     bool      `json:"active"`
+	CreatedAt  time.Time `json:"createdAt"`
 }
 type PatientAccess struct {
 	UserID      string `json:"userId"`
