@@ -1,5 +1,7 @@
 # HMS ET: execution plan and AI handoff
 
+**2026-10-08 successor:** Use [the standalone builder handoff](builder-handoff/README.md) for the current baseline, complete evidence bundle, actor journeys and ordered implementation plan. The snapshot below is historical and predates the endpoint/settings/inventory repairs through `72c00a7`.
+
 Prepared 2026-10-06. This document is the next agent's work order and evidence map. It does not claim that the entire source, live demo, schema, or every role has been verified. Development was paused; the user requested this handoff so another AI can continue.
 
 **Publication update:** The work described below as uncommitted was subsequently committed as `03feb14` (shift identity/default integration, manual QA harness, formatting configuration and this handoff). Preserve that commit rather than recreating it. The original snapshot below records the state at handoff preparation. The user has now authorized publishing these commits to `main`; verify current Git history when resuming. Database migration application and production deployment remain separate tasks.

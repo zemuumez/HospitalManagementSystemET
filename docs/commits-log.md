@@ -1,5 +1,11 @@
 # Conversation Commits & Deliverables Log
 
+## 2026-10-08 — standalone builder documentation
+
+Added `docs/builder-handoff/README.md` and linked product/actor sequences, database design, 39 module work packets, 111 source-catalog screen field records, package/insurance first ticket, ordered implementation plan and security/acceptance gates. The portable documentation archive includes the complete exported 141-table/1,202-column/144-FK schema and existing source evidence; it requires no Laravel ZIP. Baseline implementation is `72c00a7`; historical snapshots are explicitly distinguished from subsequent repairs and unresolved work.
+
+Validation: generated counts and local handoff links verified, schema-only SQL checked for INSERT statements, archive integrity and SHA-256 entries verified, and `git diff --check` passed. No application behavior or database schema was changed, and application tests were not rerun for this documentation-only step. Rebuild the portable archive with `python scripts/build-builder-handoff.py`.
+
 This document tracks every commit executed, verified, and pushed to GitHub on branch [`feat/section-3-operational-modules`](https://github.com/zemuumez/HospitalManagementSystemET/tree/feat/section-3-operational-modules) during this pair-programming session.
 
 ---

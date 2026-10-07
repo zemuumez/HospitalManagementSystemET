@@ -1,0 +1,11 @@
+{
+  "prepared": "2026-10-08",
+  "implementation_baseline": "72c00a7",
+  "original_tables": 141,
+  "original_columns": 1202,
+  "original_foreign_keys": 144,
+  "catalog_screens": 111,
+  "module_families": 39,
+  "source_dump_sha256": "896cc74d3656bb1bcecabf2c975b63629706868005ba4108a92cd0c3d3ec57e7",
+  "scope": "Documentation and source-derived metadata only; no Laravel runtime, database rows or environment credentials."
+}

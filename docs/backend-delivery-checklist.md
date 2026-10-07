@@ -1,5 +1,7 @@
 # Backend, integration and QA delivery checklist
 
+**2026-10-08 handoff:** [Builder work order and source reference](builder-handoff/README.md) supplies the schema, workspace/actor descriptions, remaining implementation sequence and QA gates for a builder without the original ZIP. Documentation does not mark implementation items complete.
+
 Updated: 2026-10-04. Scope: **one hospital**, Next.js/Tailwind, Go clean architecture, PostgreSQL, Better Auth, Firebase phone authentication, operational SMS and development Mailpit. This is the current delivery tracker; earlier frontend-only status reports are historical.
 
 ## How to read the status
