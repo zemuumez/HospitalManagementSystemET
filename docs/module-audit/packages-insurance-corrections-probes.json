@@ -1,0 +1,14 @@
+{
+  "duplicate_rejected": true,
+  "export": {
+    "returned": 5000,
+    "total": 5002
+  },
+  "missing_status_retry": [
+    1,
+    0,
+    1
+  ],
+  "overflow_rejected": true,
+  "zero_rate": 0
+}
