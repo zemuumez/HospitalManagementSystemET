@@ -1,0 +1,9 @@
+{
+  "default_hours_count": 5,
+  "default_slot_minutes": 30,
+  "empty_required_designation_accepted": true,
+  "patient_detail_denied": true,
+  "patient_list_address": "Synthetic private address",
+  "patient_list_blood_group": "AB+",
+  "patient_list_dob": "1990-01-01"
+}
