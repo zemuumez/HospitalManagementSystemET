@@ -88,6 +88,10 @@ func (i *CreateDoctorInput) Validate() error {
 	i.UserID = strings.TrimSpace(i.UserID)
 	i.Specialist = strings.TrimSpace(i.Specialist)
 	i.DepartmentID = strings.TrimSpace(i.DepartmentID)
+	i.Designation = strings.TrimSpace(i.Designation)
+	i.Qualification = strings.TrimSpace(i.Qualification)
+	i.Gender = strings.TrimSpace(strings.ToLower(i.Gender))
+
 	if i.UserID == "" || len(i.UserID) > 128 {
 		return ErrValidation
 	}
@@ -97,7 +101,15 @@ func (i *CreateDoctorInput) Validate() error {
 	if i.Specialist == "" || len([]rune(i.Specialist)) > 191 {
 		return ErrValidation
 	}
-	if len([]rune(i.Designation)) > 191 || len([]rune(i.Qualification)) > 191 {
+	// D3: Designation and Qualification are required by original rules
+	if i.Designation == "" || len([]rune(i.Designation)) > 191 {
+		return ErrValidation
+	}
+	if i.Qualification == "" || len([]rune(i.Qualification)) > 191 {
+		return ErrValidation
+	}
+	// D3: Gender is required by original rules
+	if i.Gender == "" || (i.Gender != "male" && i.Gender != "female" && i.Gender != "other" && i.Gender != "0" && i.Gender != "1") {
 		return ErrValidation
 	}
 	if len([]rune(i.Description)) > 2000 {
@@ -106,8 +118,9 @@ func (i *CreateDoctorInput) Validate() error {
 	if i.AppointmentCharge < 0 || i.OpdCharge < 0 {
 		return ErrValidation
 	}
+	// D2: Default SlotMinutes to 60 (01:00:00 per_patient_time in DoctorRepository::store)
 	if i.SlotMinutes == 0 {
-		i.SlotMinutes = 30
+		i.SlotMinutes = 60
 	}
 	if i.SlotMinutes < 5 || i.SlotMinutes > 120 {
 		return ErrValidation
@@ -128,12 +141,6 @@ func (i *CreateDoctorInput) Validate() error {
 	if i.DateOfBirth != "" {
 		dob, err := time.Parse("2006-01-02", i.DateOfBirth)
 		if err != nil || dob.Year() < 1850 || dob.After(time.Now()) {
-			return ErrValidation
-		}
-	}
-	if i.Gender != "" {
-		g := strings.ToLower(i.Gender)
-		if g != "male" && g != "female" && g != "other" && g != "unknown" && g != "0" && g != "1" {
 			return ErrValidation
 		}
 	}
@@ -178,11 +185,23 @@ func (i *UpdateDoctorInput) Validate() error {
 			return ErrValidation
 		}
 	}
-	if i.Designation != nil && len([]rune(*i.Designation)) > 191 {
-		return ErrValidation
+	if i.Designation != nil {
+		*i.Designation = strings.TrimSpace(*i.Designation)
+		if *i.Designation == "" || len([]rune(*i.Designation)) > 191 {
+			return ErrValidation
+		}
 	}
-	if i.Qualification != nil && len([]rune(*i.Qualification)) > 191 {
-		return ErrValidation
+	if i.Qualification != nil {
+		*i.Qualification = strings.TrimSpace(*i.Qualification)
+		if *i.Qualification == "" || len([]rune(*i.Qualification)) > 191 {
+			return ErrValidation
+		}
+	}
+	if i.Gender != nil {
+		*i.Gender = strings.TrimSpace(strings.ToLower(*i.Gender))
+		if *i.Gender == "" || (*i.Gender != "male" && *i.Gender != "female" && *i.Gender != "other" && *i.Gender != "0" && *i.Gender != "1") {
+			return ErrValidation
+		}
 	}
 	if i.Description != nil && len([]rune(*i.Description)) > 2000 {
 		return ErrValidation
@@ -199,7 +218,7 @@ func (i *UpdateDoctorInput) Validate() error {
 	if len(i.Hours) > 21 {
 		return ErrValidation
 	}
-	slot := 30
+	slot := 60
 	if i.SlotMinutes != nil {
 		slot = *i.SlotMinutes
 	}
@@ -216,12 +235,6 @@ func (i *UpdateDoctorInput) Validate() error {
 	if i.DateOfBirth != nil && *i.DateOfBirth != "" {
 		dob, err := time.Parse("2006-01-02", *i.DateOfBirth)
 		if err != nil || dob.Year() < 1850 || dob.After(time.Now()) {
-			return ErrValidation
-		}
-	}
-	if i.Gender != nil && *i.Gender != "" {
-		g := strings.ToLower(*i.Gender)
-		if g != "male" && g != "female" && g != "other" && g != "unknown" && g != "0" && g != "1" {
 			return ErrValidation
 		}
 	}

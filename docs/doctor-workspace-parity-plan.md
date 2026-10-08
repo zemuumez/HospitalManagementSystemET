@@ -78,8 +78,8 @@
 | `currency_symbol` | `varchar(100)` | Yes | Currency symbol |
 
 #### F. Table `schedules` & `schedule_days` (`hms/database/hms.sql:3724`)
-- `schedules`: `id`, `doctor_id` (FK to `doctors.id`, Unique), `per_patient_time` (`time`, e.g. "01:00:00").
-- `schedule_days`: `id`, `doctor_id`, `schedule_id`, `available_on` (Monday..Sunday), `available_from` (`time`), `available_to` (`time`).
+- `schedules`: `id`, `doctor_id` (FK to `doctors.id`, Unique), `per_patient_time` (`time`, "01:00:00" = 60 minutes default slot duration).
+- `schedule_days`: `id`, `doctor_id`, `schedule_id`, `available_on` (all 7 days: Sunday through Saturday / weekdays 0..6), `available_from` (`10:00:00` / minute 600), `available_to` (`19:30:00` / minute 1170).
 
 #### G. Table `doctor_holidays` (`hms/database/hms.sql:643`)
 - `id`, `doctor_id` (FK to `doctors.id`), `name` (reason string), `date` (`varchar(191)` calendar date).
@@ -95,7 +95,7 @@
 |---|---|---|---|---|---|
 | Doctor Directory | `GET` | `/doctors` | `DoctorController@index` | `Admin`, `Receptionist` | Filter by status (0=Active, 1=Deactive, 2=All) |
 | Create Form | `GET` | `/doctors/create` | `DoctorController@create` | `Admin` | Loads departments and blood groups |
-| Store Doctor | `POST` | `/doctors` | `DoctorController@store` | `Admin` | Creates User, Doctor, default 7-day Schedule, Address, assigns Doctor role |
+| Store Doctor | `POST` | `/doctors` | `DoctorController@store` | `Admin` | Creates User, Doctor, default 7-day Schedule (all 7 days, 10:00–19:30, 60-min slots), Address, assigns Doctor role |
 | Show Doctor Details | `GET` | `/doctors/{doctor}` | `DoctorController@show` | `Admin`, `Receptionist`, `Nurse`, `Doctor` (own record only) | Doctor viewing another doctor is blocked by `checkRecordAccess` |
 | Edit Form | `GET` | `/doctors/{doctor}/edit` | `DoctorController@edit` | `Admin` | Loads doctor, user, address, departments |
 | Update Doctor | `PUT`/`PATCH` | `/doctors/{doctor}` | `DoctorController@update` | `Admin` | Updates User, Doctor, Address; blocks default doctor edit |

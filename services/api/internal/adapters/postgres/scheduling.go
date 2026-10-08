@@ -259,7 +259,7 @@ func (s Store) CreateDoctorProfile(ctx context.Context, a domain.Actor, input do
 
 	slotMinutes := input.SlotMinutes
 	if slotMinutes <= 0 {
-		slotMinutes = 30
+		slotMinutes = 60
 	}
 
 	// 4. Insert doctor_profile
@@ -330,8 +330,9 @@ func (s Store) CreateDoctorProfile(ctx context.Context, a domain.Actor, input do
 	// 6. Insert working hours: default or supplied
 	hours := input.Hours
 	if len(hours) == 0 {
-		for w := 1; w <= 5; w++ {
-			hours = append(hours, domain.DoctorHours{Weekday: w, StartMinute: 540, EndMinute: 1020})
+		// D2: Original Laravel default is all 7 days (0..6), 10:00:00 (minute 600) to 19:30:00 (minute 1170)
+		for w := 0; w <= 6; w++ {
+			hours = append(hours, domain.DoctorHours{Weekday: w, StartMinute: 600, EndMinute: 1170})
 		}
 	}
 	for _, h := range hours {

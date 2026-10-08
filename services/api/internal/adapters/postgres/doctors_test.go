@@ -112,7 +112,7 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 		PhotoURL:          "https://cdn.hospital.test/photos/dr-alice.jpg",
 		AppointmentCharge: 500,
 		OpdCharge:         350,
-		SlotMinutes:       30,
+		// SlotMinutes omitted to verify D2 default of 60 minutes
 	}
 
 	createdDoc, err := sched.CreateDoctorProfile(ctx, admin, createIn)
@@ -140,9 +140,18 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	if createdDoc.Version != 1 {
 		t.Fatalf("expected version 1, got %d", createdDoc.Version)
 	}
-	// Verify default 5-day hours (Mon-Fri) were seeded
-	if len(createdDoc.Hours) != 5 {
-		t.Fatalf("expected 5 default working hour blocks, got %d", len(createdDoc.Hours))
+	// D2: Verify default 60-minute slot duration
+	if createdDoc.SlotMinutes != 60 {
+		t.Fatalf("expected default slot duration 60 minutes, got %d", createdDoc.SlotMinutes)
+	}
+	// D2: Verify default 7-day hours (0..6, Sunday through Saturday, 10:00 to 19:30 / 600 to 1170)
+	if len(createdDoc.Hours) != 7 {
+		t.Fatalf("expected 7 default working hour blocks, got %d", len(createdDoc.Hours))
+	}
+	for _, h := range createdDoc.Hours {
+		if h.StartMinute != 600 || h.EndMinute != 1170 {
+			t.Fatalf("expected default hours 10:00 (600) to 19:30 (1170), got %d to %d for weekday %d", h.StartMinute, h.EndMinute, h.Weekday)
+		}
 	}
 
 	// Verify audit event
@@ -246,9 +255,12 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	// -------------------------------------------------------------
 	// 1. Nonexistent department on create
 	nonExistentIn := domain.CreateDoctorInput{
-		UserID:       docUser2,
-		DepartmentID: "00000000-0000-0000-0000-000000000000",
-		Specialist:   "Neurologist",
+		UserID:        docUser2,
+		DepartmentID:  "00000000-0000-0000-0000-000000000000",
+		Specialist:    "Neurologist",
+		Designation:   "Consultant",
+		Qualification: "MBBS",
+		Gender:        "male",
 	}
 	_, err = sched.CreateDoctorProfile(ctx, admin, nonExistentIn)
 	if !errors.Is(err, domain.ErrValidation) {
@@ -257,9 +269,12 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 
 	// 2. Archived department on create
 	archivedIn := domain.CreateDoctorInput{
-		UserID:       docUser2,
-		DepartmentID: archivedDeptID,
-		Specialist:   "Neurologist",
+		UserID:        docUser2,
+		DepartmentID:  archivedDeptID,
+		Specialist:    "Neurologist",
+		Designation:   "Consultant",
+		Qualification: "MBBS",
+		Gender:        "male",
 	}
 	_, err = sched.CreateDoctorProfile(ctx, admin, archivedIn)
 	if !errors.Is(err, domain.ErrValidation) {
@@ -286,14 +301,52 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 		t.Fatalf("expected ErrForbidden when doctor attempts to change own department, got %v", err)
 	}
 
+	// 5. D3 Regression: missing required fields on create
+	for _, tc := range []struct {
+		name string
+		in   domain.CreateDoctorInput
+	}{
+		{"missing designation", domain.CreateDoctorInput{UserID: docUser2, DepartmentID: activeDeptID, Specialist: "Neuro", Qualification: "MBBS", Gender: "male"}},
+		{"blank designation", domain.CreateDoctorInput{UserID: docUser2, DepartmentID: activeDeptID, Specialist: "Neuro", Designation: "   ", Qualification: "MBBS", Gender: "male"}},
+		{"missing qualification", domain.CreateDoctorInput{UserID: docUser2, DepartmentID: activeDeptID, Specialist: "Neuro", Designation: "Cons", Gender: "male"}},
+		{"blank qualification", domain.CreateDoctorInput{UserID: docUser2, DepartmentID: activeDeptID, Specialist: "Neuro", Designation: "Cons", Qualification: "  ", Gender: "male"}},
+		{"missing gender", domain.CreateDoctorInput{UserID: docUser2, DepartmentID: activeDeptID, Specialist: "Neuro", Designation: "Cons", Qualification: "MBBS"}},
+		{"invalid gender", domain.CreateDoctorInput{UserID: docUser2, DepartmentID: activeDeptID, Specialist: "Neuro", Designation: "Cons", Qualification: "MBBS", Gender: "nonbinary"}},
+	} {
+		_, err := sched.CreateDoctorProfile(ctx, admin, tc.in)
+		if !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for %s on create, got %v", tc.name, err)
+		}
+	}
+
+	// 6. D3 Regression: blank required fields on update
+	blankStr := "   "
+	for _, tc := range []struct {
+		name string
+		in   domain.UpdateDoctorInput
+	}{
+		{"blank designation", domain.UpdateDoctorInput{Designation: &blankStr, Version: 2}},
+		{"blank qualification", domain.UpdateDoctorInput{Qualification: &blankStr, Version: 2}},
+		{"blank specialist", domain.UpdateDoctorInput{Specialist: &blankStr, Version: 2}},
+		{"blank gender", domain.UpdateDoctorInput{Gender: &blankStr, Version: 2}},
+	} {
+		_, err := sched.UpdateDoctorProfile(ctx, admin, docUser1, tc.in)
+		if !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for %s on update, got %v", tc.name, err)
+		}
+	}
+
 	// -------------------------------------------------------------
 	// Test F: Identity checks: non-doctor candidate and conflict
 	// -------------------------------------------------------------
 	// Candidate has role='nurse', not 'doctor'
 	invalidRoleIn := domain.CreateDoctorInput{
-		UserID:       nonDocUser,
-		DepartmentID: activeDeptID,
-		Specialist:   "Pediatrician",
+		UserID:        nonDocUser,
+		DepartmentID:  activeDeptID,
+		Specialist:    "Pediatrician",
+		Designation:   "Consultant",
+		Qualification: "MBBS",
+		Gender:        "female",
 	}
 	_, err = sched.CreateDoctorProfile(ctx, admin, invalidRoleIn)
 	if !errors.Is(err, domain.ErrValidation) {
@@ -302,9 +355,12 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 
 	// Conflict check: doctor profile already exists for docUser1
 	dupIn := domain.CreateDoctorInput{
-		UserID:       docUser1,
-		DepartmentID: activeDeptID,
-		Specialist:   "Duplicate Doctor",
+		UserID:        docUser1,
+		DepartmentID:  activeDeptID,
+		Specialist:    "Duplicate Doctor",
+		Designation:   "Consultant",
+		Qualification: "MBBS",
+		Gender:        "female",
 	}
 	_, err = sched.CreateDoctorProfile(ctx, admin, dupIn)
 	if !errors.Is(err, domain.ErrConflict) {
@@ -364,10 +420,13 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	// -------------------------------------------------------------
 	// Create second doctor for listing tests
 	createDoc2In := domain.CreateDoctorInput{
-		UserID:       docUser2,
-		DepartmentID: activeDeptID,
-		Specialist:   "Pediatric Neurologist",
-		SlotMinutes:  20,
+		UserID:        docUser2,
+		DepartmentID:  activeDeptID,
+		Specialist:    "Pediatric Neurologist",
+		Designation:   "Consultant",
+		Qualification: "MBBS, MD",
+		Gender:        "male",
+		SlotMinutes:   20,
 	}
 	_, err = sched.CreateDoctorProfile(ctx, admin, createDoc2In)
 	if err != nil {
