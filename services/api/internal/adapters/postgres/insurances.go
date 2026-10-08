@@ -328,8 +328,8 @@ func (s Store) Insurances(ctx context.Context, a domain.Actor, page int, limit i
 	return out, total, nil
 }
 
-func (s Store) SetInsuranceStatus(ctx context.Context, a domain.Actor, id string, targetStatus *int) (domain.Insurance, error) {
-	if targetStatus != nil && *targetStatus != 0 && *targetStatus != 1 {
+func (s Store) SetInsuranceStatus(ctx context.Context, a domain.Actor, id string, targetStatus int) (domain.Insurance, error) {
+	if targetStatus != 0 && targetStatus != 1 {
 		return domain.Insurance{}, domain.ErrValidation
 	}
 	var out domain.Insurance
@@ -339,29 +339,13 @@ func (s Store) SetInsuranceStatus(ctx context.Context, a domain.Actor, id string
 	}
 	defer tx.Rollback(ctx)
 
-	var query string
-	var args []any
-	if targetStatus != nil {
-		query = `
-			UPDATE insurance
-			SET status = $2,
-			    updated_at = clock_timestamp()
-			WHERE id = $1
-			RETURNING id, name, service_tax_minor, discount, remark, insurance_no, insurance_code, hospital_rate_minor, total_minor, status, currency_symbol, created_at, updated_at
-		`
-		args = []any{id, *targetStatus}
-	} else {
-		query = `
-			UPDATE insurance
-			SET status = CASE WHEN status = 1 THEN 0 ELSE 1 END,
-			    updated_at = clock_timestamp()
-			WHERE id = $1
-			RETURNING id, name, service_tax_minor, discount, remark, insurance_no, insurance_code, hospital_rate_minor, total_minor, status, currency_symbol, created_at, updated_at
-		`
-		args = []any{id}
-	}
-
-	err = tx.QueryRow(ctx, query, args...).Scan(&out.ID, &out.Name, &out.ServiceTaxMinor, &out.Discount, &out.Remark, &out.InsuranceNo, &out.InsuranceCode, &out.HospitalRateMinor, &out.TotalMinor, &out.Status, &out.CurrencySymbol, &out.CreatedAt, &out.UpdatedAt)
+	err = tx.QueryRow(ctx, `
+		UPDATE insurance
+		SET status = $2,
+		    updated_at = clock_timestamp()
+		WHERE id = $1
+		RETURNING id, name, service_tax_minor, discount, remark, insurance_no, insurance_code, hospital_rate_minor, total_minor, status, currency_symbol, created_at, updated_at
+	`, id, targetStatus).Scan(&out.ID, &out.Name, &out.ServiceTaxMinor, &out.Discount, &out.Remark, &out.InsuranceNo, &out.InsuranceCode, &out.HospitalRateMinor, &out.TotalMinor, &out.Status, &out.CurrencySymbol, &out.CreatedAt, &out.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return out, domain.ErrNotFound
@@ -399,8 +383,4 @@ func (s Store) SetInsuranceStatus(ctx context.Context, a domain.Actor, id string
 	}
 
 	return out, tx.Commit(ctx)
-}
-
-func (s Store) ToggleInsuranceStatus(ctx context.Context, a domain.Actor, id string) (domain.Insurance, error) {
-	return s.SetInsuranceStatus(ctx, a, id, nil)
 }

@@ -106,20 +106,20 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 		t.Fatalf("expected 1 updated disease line, got %+v", updatedIns.Diseases)
 	}
 
-	// 4. Toggle Insurance Status (active <-> inactive)
-	toggledIns, err := insurancesService.ToggleStatus(ctx, admin, createdIns.ID)
+	// 4. Set Insurance Status (active <-> inactive)
+	toggledIns, err := insurancesService.SetStatus(ctx, admin, createdIns.ID, 0)
 	if err != nil {
-		t.Fatalf("failed to toggle insurance status: %v", err)
+		t.Fatalf("failed to set insurance status to 0: %v", err)
 	}
 	if toggledIns.Status != 0 {
-		t.Fatalf("expected toggled status 0 (inactive), got %d", toggledIns.Status)
+		t.Fatalf("expected status 0 (inactive), got %d", toggledIns.Status)
 	}
-	toggledBackIns, err := insurancesService.ToggleStatus(ctx, receptionist, createdIns.ID)
+	toggledBackIns, err := insurancesService.SetStatus(ctx, receptionist, createdIns.ID, 1)
 	if err != nil {
-		t.Fatalf("failed to toggle back insurance status: %v", err)
+		t.Fatalf("failed to set back insurance status to 1: %v", err)
 	}
 	if toggledBackIns.Status != 1 {
-		t.Fatalf("expected toggled back status 1 (active), got %d", toggledBackIns.Status)
+		t.Fatalf("expected back status 1 (active), got %d", toggledBackIns.Status)
 	}
 
 	// 5. Test Duplicate Name Rejection
@@ -385,12 +385,11 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	}
 
 	// -------------------------------------------------------------
-	// Regression R7: Idempotent status updates, duplicate/retry safety, concurrent updates
+	// Regression R7 / C1: Idempotent status updates, duplicate/retry safety, concurrent updates
 	// -------------------------------------------------------------
 	// 1) Test duplicate/retry setting status to 0 (must not oscillate/flip)
-	st0 := 0
 	for retry := 1; retry <= 3; retry++ {
-		res, err := insurancesService.SetStatus(ctx, admin, createdIns.ID, &st0)
+		res, err := insurancesService.SetStatus(ctx, admin, createdIns.ID, 0)
 		if err != nil {
 			t.Fatalf("SetStatus(0) failed on retry %d: %v", retry, err)
 		}
@@ -404,9 +403,8 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	}
 
 	// 2) Test duplicate/retry setting status to 1 (must not oscillate/flip)
-	st1 := 1
 	for retry := 1; retry <= 3; retry++ {
-		res, err := insurancesService.SetStatus(ctx, admin, createdIns.ID, &st1)
+		res, err := insurancesService.SetStatus(ctx, admin, createdIns.ID, 1)
 		if err != nil {
 			t.Fatalf("SetStatus(1) failed on retry %d: %v", retry, err)
 		}
@@ -416,18 +414,17 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	}
 
 	// 3) Test invalid status rejection in application/service
-	badSt := 2
-	_, err = insurancesService.SetStatus(ctx, admin, createdIns.ID, &badSt)
+	_, err = insurancesService.SetStatus(ctx, admin, createdIns.ID, 2)
 	if !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("expected ErrValidation for status=2, got: %v", err)
 	}
-	badStNeg := -1
-	_, err = insurancesService.SetStatus(ctx, admin, createdIns.ID, &badStNeg)
+	_, err = insurancesService.SetStatus(ctx, admin, createdIns.ID, -1)
 	if !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("expected ErrValidation for status=-1, got: %v", err)
 	}
 
 	// 4) Test invalid status rejection in InsuranceInput.Validate
+	badSt := 2
 	badStatusInput := domain.InsuranceInput{
 		Name:          "Bad Status Insurance",
 		InsuranceNo:   "BAD-ST-001",
@@ -449,8 +446,7 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			target := 0
-			r, e := insurancesService.SetStatus(ctx, admin, createdIns.ID, &target)
+			r, e := insurancesService.SetStatus(ctx, admin, createdIns.ID, 0)
 			if e != nil {
 				concurrentErrors <- e
 				return
@@ -522,12 +518,92 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 		}
 
 		// Test status update
-		stVal := 1
-		_, stErr := insurancesService.SetStatus(ctx, act, createdIns.ID, &stVal)
+		_, stErr := insurancesService.SetStatus(ctx, act, createdIns.ID, 1)
 		if canManageExpected && stErr != nil {
 			t.Errorf("role %s expected status manage allowed, got error: %v", rName, stErr)
 		} else if !canManageExpected && !errors.Is(stErr, domain.ErrForbidden) {
 			t.Errorf("role %s expected status manage forbidden, got: %v", rName, stErr)
 		}
+	}
+
+	// -------------------------------------------------------------
+	// C1 Regression: Reject missing, empty, null, and unknown-length bodies over HTTP
+	// -------------------------------------------------------------
+	var baselineAuditCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action = 'insurance.status_updated' AND resource_id = $1`, createdIns.ID).Scan(&baselineAuditCount)
+	preStatusIns, err := insurancesService.Insurance(ctx, admin, createdIns.ID)
+	if err != nil {
+		t.Fatalf("failed to get insurance: %v", err)
+	}
+	preStatus := preStatusIns.Status
+
+	// a) Missing body (nil reader) -> rejected
+	reqMissing := httptest.NewRequest("PATCH", fmt.Sprintf("/v1/insurances/%s/status", createdIns.ID), nil)
+	reqMissing.Header.Set("Cookie", "session=admin")
+	reqMissing.Header.Set("Origin", "http://hospital.test")
+	recMissing := httptest.NewRecorder()
+	httpHandler.ServeHTTP(recMissing, reqMissing)
+	if recMissing.Code != http.StatusBadRequest && recMissing.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 400 or 422 for missing body, got %d", recMissing.Code)
+	}
+
+	// b) Empty body ("") -> rejected
+	reqEmpty := httptest.NewRequest("PATCH", fmt.Sprintf("/v1/insurances/%s/status", createdIns.ID), bytes.NewReader([]byte{}))
+	reqEmpty.Header.Set("Cookie", "session=admin")
+	reqEmpty.Header.Set("Origin", "http://hospital.test")
+	reqEmpty.Header.Set("Content-Type", "application/json")
+	recEmpty := httptest.NewRecorder()
+	httpHandler.ServeHTTP(recEmpty, reqEmpty)
+	if recEmpty.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty body, got %d", recEmpty.Code)
+	}
+
+	// c) Empty JSON ("{}") without status -> rejected with 422
+	reqNoField := httptest.NewRequest("PATCH", fmt.Sprintf("/v1/insurances/%s/status", createdIns.ID), bytes.NewReader([]byte("{}")))
+	reqNoField.Header.Set("Cookie", "session=admin")
+	reqNoField.Header.Set("Origin", "http://hospital.test")
+	reqNoField.Header.Set("Content-Type", "application/json")
+	recNoField := httptest.NewRecorder()
+	httpHandler.ServeHTTP(recNoField, reqNoField)
+	if recNoField.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for empty JSON object {}, got %d", recNoField.Code)
+	}
+
+	// d) Null status ("{\"status\": null}") -> rejected with 422
+	reqNull := httptest.NewRequest("PATCH", fmt.Sprintf("/v1/insurances/%s/status", createdIns.ID), bytes.NewReader([]byte(`{"status": null}`)))
+	reqNull.Header.Set("Cookie", "session=admin")
+	reqNull.Header.Set("Origin", "http://hospital.test")
+	reqNull.Header.Set("Content-Type", "application/json")
+	recNull := httptest.NewRecorder()
+	httpHandler.ServeHTTP(recNull, reqNull)
+	if recNull.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for status: null, got %d", recNull.Code)
+	}
+
+	// Verify DB status and audit count remain UNCHANGED after all invalid requests
+	var postAuditCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action = 'insurance.status_updated' AND resource_id = $1`, createdIns.ID).Scan(&postAuditCount)
+	if postAuditCount != baselineAuditCount {
+		t.Fatalf("expected audit count unchanged (%d), got %d after failed status requests", baselineAuditCount, postAuditCount)
+	}
+	postStatusIns, _ := insurancesService.Insurance(ctx, admin, createdIns.ID)
+	if postStatusIns.Status != preStatus {
+		t.Fatalf("expected status unchanged (%d), got %d after failed status requests", preStatus, postStatusIns.Status)
+	}
+
+	// e) Chunked / unknown-length body (ContentLength = -1) with valid status: 1 -> must SUCCEED
+	chunkedReq := httptest.NewRequest("PATCH", fmt.Sprintf("/v1/insurances/%s/status", createdIns.ID), bytes.NewBufferString(`{"status": 1}`))
+	chunkedReq.ContentLength = -1
+	chunkedReq.Header.Set("Cookie", "session=admin")
+	chunkedReq.Header.Set("Origin", "http://hospital.test")
+	chunkedReq.Header.Set("Content-Type", "application/json")
+	recChunked := httptest.NewRecorder()
+	httpHandler.ServeHTTP(recChunked, chunkedReq)
+	if recChunked.Code != http.StatusOK {
+		t.Fatalf("expected 200 for chunked body with ContentLength=-1, got %d: %s", recChunked.Code, recChunked.Body.String())
+	}
+	var chunkedResp domain.Insurance
+	if err := json.Unmarshal(recChunked.Body.Bytes(), &chunkedResp); err != nil || chunkedResp.Status != 1 {
+		t.Fatalf("expected status 1 from chunked request, got status=%d err=%v", chunkedResp.Status, err)
 	}
 }

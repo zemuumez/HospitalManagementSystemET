@@ -12,8 +12,7 @@ type InsurancesStore interface {
 	DeleteInsurance(ctx context.Context, a domain.Actor, id string) error
 	Insurance(ctx context.Context, a domain.Actor, id string) (domain.Insurance, error)
 	Insurances(ctx context.Context, a domain.Actor, page int, limit int, search string) ([]domain.Insurance, int, error)
-	ToggleInsuranceStatus(ctx context.Context, a domain.Actor, id string) (domain.Insurance, error)
-	SetInsuranceStatus(ctx context.Context, a domain.Actor, id string, targetStatus *int) (domain.Insurance, error)
+	SetInsuranceStatus(ctx context.Context, a domain.Actor, id string, targetStatus int) (domain.Insurance, error)
 }
 
 type InsurancesService struct {
@@ -103,19 +102,15 @@ func (s InsurancesService) ExportInsurances(ctx context.Context, a domain.Actor,
 	return all, totalCount, nil
 }
 
-func (s InsurancesService) SetStatus(ctx context.Context, a domain.Actor, id string, targetStatus *int) (domain.Insurance, error) {
+func (s InsurancesService) SetStatus(ctx context.Context, a domain.Actor, id string, targetStatus int) (domain.Insurance, error) {
 	if !a.Can("insurances.manage") {
 		return domain.Insurance{}, domain.ErrForbidden
 	}
 	if id == "" {
 		return domain.Insurance{}, domain.ErrValidation
 	}
-	if targetStatus != nil && *targetStatus != 0 && *targetStatus != 1 {
+	if targetStatus != 0 && targetStatus != 1 {
 		return domain.Insurance{}, domain.ErrValidation
 	}
 	return s.Store.SetInsuranceStatus(ctx, a, id, targetStatus)
-}
-
-func (s InsurancesService) ToggleStatus(ctx context.Context, a domain.Actor, id string) (domain.Insurance, error) {
-	return s.SetStatus(ctx, a, id, nil)
 }
