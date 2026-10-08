@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -1813,6 +1814,252 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	err = sched.DeleteDoctorBreak(ctx, admin, createdBreak.ID)
 	if err != nil {
 		t.Fatalf("failed to delete lunch break: %v", err)
+	}
+
+	// -------------------------------------------------------------
+	// 5b. Deterministic Concurrency Tests (W1)
+	// Proving incompatible states cannot both commit concurrently
+	// -------------------------------------------------------------
+
+	// Test 5b.1: Deterministic Concurrent Booking vs Holiday Creation
+	// Slot on next Wednesday (targetWed + 21 days) at 11:00 AM
+	raceWed := targetWed.AddDate(0, 0, 21)
+	raceWedDateStr := raceWed.Format("2006-01-02")
+	raceWedSlotTime := time.Date(raceWed.Year(), raceWed.Month(), raceWed.Day(), 11, 0, 0, 0, domain.HospitalLocation).UTC()
+
+	{
+		var startBarrier sync.WaitGroup
+		startBarrier.Add(1)
+		var doneWg sync.WaitGroup
+		doneWg.Add(2)
+
+		var bookErr, holErr error
+		var bookedApptID, createdHolID string
+
+		go func() {
+			defer doneWg.Done()
+			startBarrier.Wait()
+			appt, err := sched.Book(ctx, admin, domain.AppointmentInput{
+				PatientID: schedPatID,
+				DoctorID:  docSchedUser,
+				StartsAt:  raceWedSlotTime,
+				Problem:   "Race booking vs holiday",
+			}, "test-race-book-hol-key")
+			bookErr = err
+			if err == nil {
+				bookedApptID = appt.ID
+			}
+		}()
+
+		go func() {
+			defer doneWg.Done()
+			startBarrier.Wait()
+			hol, err := sched.CreateDoctorHoliday(ctx, admin, domain.CreateDoctorHolidayInput{
+				DoctorID: docSchedUser,
+				Date:     raceWedDateStr,
+				Reason:   "Race holiday vs booking",
+			})
+			holErr = err
+			if err == nil {
+				createdHolID = hol.ID
+			}
+		}()
+
+		startBarrier.Done()
+		doneWg.Wait()
+
+		// Proving incompatible states cannot both commit:
+		// Exactly one must succeed, and the other must be rejected with ErrConflict (or ErrStale)
+		if bookErr == nil && holErr == nil {
+			t.Fatalf("W1 race violation: concurrent booking and holiday both committed successfully!")
+		}
+		if (bookErr == nil && !errors.Is(holErr, domain.ErrConflict)) &&
+			(holErr == nil && !errors.Is(bookErr, domain.ErrConflict) && !errors.Is(bookErr, domain.ErrStale)) {
+			t.Fatalf("W1 race test failed: unexpected error pair bookErr=%v, holErr=%v", bookErr, holErr)
+		}
+
+		// Verify database consistency: cannot have both appointment and holiday on the same doctor/date
+		var apptCount, holCount int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE doctor_id=$1 AND (starts_at AT TIME ZONE 'Africa/Addis_Ababa')::date=$2::date AND status<>'cancelled'`, docSchedUser, raceWedDateStr).Scan(&apptCount)
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_holiday WHERE doctor_id=$1 AND holiday_date=$2::date`, docSchedUser, raceWedDateStr).Scan(&holCount)
+		if apptCount > 0 && holCount > 0 {
+			t.Fatalf("W1 race violation in DB: doctor has both active appointment (%d) and holiday (%d) on %s", apptCount, holCount, raceWedDateStr)
+		}
+
+		// Cleanup fixture
+		if bookedApptID != "" {
+			_, _ = db.Exec(ctx, `DELETE FROM appointment WHERE id=$1`, bookedApptID)
+		}
+		if createdHolID != "" {
+			_ = sched.DeleteDoctorHoliday(ctx, admin, createdHolID)
+		}
+	}
+
+	// Test 5b.2: Deterministic Concurrent Booking vs Lunch Break Creation
+	// Slot on next Wednesday (targetWed + 28 days) at 14:00 (overlaps break 13:30 - 14:30)
+	raceBreakWed := targetWed.AddDate(0, 0, 28)
+	raceBreakDateStr := raceBreakWed.Format("2006-01-02")
+	raceBreakSlotTime := time.Date(raceBreakWed.Year(), raceBreakWed.Month(), raceBreakWed.Day(), 14, 0, 0, 0, domain.HospitalLocation).UTC()
+
+	{
+		var startBarrier sync.WaitGroup
+		startBarrier.Add(1)
+		var doneWg sync.WaitGroup
+		doneWg.Add(2)
+
+		var bookErr, breakErr error
+		var bookedApptID, createdBreakID string
+
+		go func() {
+			defer doneWg.Done()
+			startBarrier.Wait()
+			appt, err := sched.Book(ctx, admin, domain.AppointmentInput{
+				PatientID: schedPatID,
+				DoctorID:  docSchedUser,
+				StartsAt:  raceBreakSlotTime,
+				Problem:   "Race booking vs lunch break",
+			}, "test-race-book-break-key")
+			bookErr = err
+			if err == nil {
+				bookedApptID = appt.ID
+			}
+		}()
+
+		go func() {
+			defer doneWg.Done()
+			startBarrier.Wait()
+			brk, err := sched.CreateDoctorBreak(ctx, admin, domain.CreateDoctorBreakInput{
+				DoctorID:  docSchedUser,
+				BreakFrom: "13:30:00",
+				BreakTo:   "14:30:00",
+				EveryDay:  false,
+				Date:      raceBreakDateStr,
+			})
+			breakErr = err
+			if err == nil {
+				createdBreakID = brk.ID
+			}
+		}()
+
+		startBarrier.Done()
+		doneWg.Wait()
+
+		// Proving incompatible states cannot both commit:
+		if bookErr == nil && breakErr == nil {
+			t.Fatalf("W1 race violation: concurrent booking and lunch break both committed successfully!")
+		}
+		if (bookErr == nil && !errors.Is(breakErr, domain.ErrConflict)) &&
+			(breakErr == nil && !errors.Is(bookErr, domain.ErrConflict) && !errors.Is(bookErr, domain.ErrStale)) {
+			t.Fatalf("W1 race test failed: unexpected error pair bookErr=%v, breakErr=%v", bookErr, breakErr)
+		}
+
+		// Verify database consistency
+		var apptCount, breakCount int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE doctor_id=$1 AND starts_at=$2 AND status<>'cancelled'`, docSchedUser, raceBreakSlotTime).Scan(&apptCount)
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_lunch_break WHERE doctor_id=$1 AND break_date=$2::date`, docSchedUser, raceBreakDateStr).Scan(&breakCount)
+		if apptCount > 0 && breakCount > 0 {
+			t.Fatalf("W1 race violation in DB: doctor has both active appointment (%d) and break (%d) overlapping %s", apptCount, breakCount, raceBreakSlotTime)
+		}
+
+		// Cleanup fixture
+		if bookedApptID != "" {
+			_, _ = db.Exec(ctx, `DELETE FROM appointment WHERE id=$1`, bookedApptID)
+		}
+		if createdBreakID != "" {
+			_ = sched.DeleteDoctorBreak(ctx, admin, createdBreakID)
+		}
+	}
+
+	// Test 5b.3: Deterministic Concurrent Booking vs Schedule Deletion
+	// Use an isolated doctor with a fresh schedule
+	raceDelDocUser := "doc-race-del-test"
+	_, _ = db.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,'Dr. Race Del Test',$1||'@hospital.test') ON CONFLICT DO NOTHING`, raceDelDocUser)
+	_, _ = db.Exec(ctx, `INSERT INTO staff_access(user_id,role,active) VALUES($1,'doctor',true) ON CONFLICT DO NOTHING`, raceDelDocUser)
+	_, _ = sched.CreateDoctorProfile(ctx, admin, domain.CreateDoctorInput{
+		UserID:            raceDelDocUser,
+		DepartmentID:      activeDeptID,
+		Specialist:        "Race Specialist",
+		Designation:       "Specialist",
+		Qualification:     "MD",
+		Gender:            "female",
+		SlotMinutes:       60,
+		AppointmentCharge: 150,
+		OpdCharge:         100,
+	})
+	// Setup schedule for Wednesday 09:00 - 17:00
+	_, err = sched.SaveDoctorSchedule(ctx, admin, domain.SaveDoctorScheduleInput{
+		DoctorID:    raceDelDocUser,
+		SlotMinutes: 60,
+		Days: []domain.ScheduleDayRow{
+			{Day: "Wednesday", From: "09:00:00", To: "17:00:00"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to setup schedule for raceDelDocUser: %v", err)
+	}
+
+	raceDelSlotTime := time.Date(targetWed.AddDate(0, 0, 35).Year(), targetWed.AddDate(0, 0, 35).Month(), targetWed.AddDate(0, 0, 35).Day(), 10, 0, 0, 0, domain.HospitalLocation).UTC()
+
+	{
+		var startBarrier sync.WaitGroup
+		startBarrier.Add(1)
+		var doneWg sync.WaitGroup
+		doneWg.Add(2)
+
+		var bookErr, delErr error
+		var bookedApptID string
+
+		go func() {
+			defer doneWg.Done()
+			startBarrier.Wait()
+			appt, err := sched.Book(ctx, admin, domain.AppointmentInput{
+				PatientID: schedPatID,
+				DoctorID:  raceDelDocUser,
+				StartsAt:  raceDelSlotTime,
+				Problem:   "Race booking vs schedule deletion",
+			}, "test-race-book-del-key")
+			bookErr = err
+			if err == nil {
+				bookedApptID = appt.ID
+			}
+		}()
+
+		go func() {
+			defer doneWg.Done()
+			startBarrier.Wait()
+			delErr = sched.DeleteDoctorSchedule(ctx, admin, raceDelDocUser)
+		}()
+
+		startBarrier.Done()
+		doneWg.Wait()
+
+		// Proving incompatible states cannot both commit:
+		// If Book won: delErr must be ErrInUse, bookErr == nil.
+		// If DeleteDoctorSchedule won: delErr == nil, bookErr must be ErrStale (no schedule allows slot).
+		if bookErr == nil && delErr == nil {
+			t.Fatalf("W1 race violation: concurrent booking and schedule deletion both committed successfully!")
+		}
+		if (bookErr == nil && !errors.Is(delErr, domain.ErrInUse)) &&
+			(delErr == nil && !errors.Is(bookErr, domain.ErrStale)) {
+			t.Fatalf("W1 race test failed: unexpected error pair bookErr=%v, delErr=%v", bookErr, delErr)
+		}
+
+		// Verify database consistency:
+		var hoursCount, apptCount int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours WHERE doctor_id=$1`, raceDelDocUser).Scan(&hoursCount)
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE doctor_id=$1 AND status<>'cancelled'`, raceDelDocUser).Scan(&apptCount)
+		if hoursCount == 0 && apptCount > 0 {
+			t.Fatalf("W1 race violation in DB: active appointment exists but doctor_hours deleted!")
+		}
+
+		// Cleanup isolated test doctor
+		if bookedApptID != "" {
+			_, _ = db.Exec(ctx, `DELETE FROM appointment WHERE id=$1`, bookedApptID)
+		}
+		_, _ = db.Exec(ctx, `DELETE FROM doctor_hours WHERE doctor_id=$1`, raceDelDocUser)
+		_, _ = db.Exec(ctx, `DELETE FROM doctor_profile WHERE user_id=$1`, raceDelDocUser)
+		_, _ = db.Exec(ctx, `DELETE FROM staff_access WHERE user_id=$1`, raceDelDocUser)
+		_, _ = db.Exec(ctx, `DELETE FROM "user" WHERE id=$1`, raceDelDocUser)
 	}
 
 	// 6. Test HTTP endpoints for schedules, holidays, and breaks

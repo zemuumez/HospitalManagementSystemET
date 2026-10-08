@@ -1051,13 +1051,20 @@ func (s Store) SaveDoctorSchedule(ctx context.Context, a domain.Actor, input dom
 	}
 	defer tx.Rollback(ctx)
 
+	var lockedID string
+	err = tx.QueryRow(ctx, `SELECT user_id FROM staff_access WHERE user_id=$1 AND role='doctor' AND active FOR UPDATE`, input.DoctorID).Scan(&lockedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.DoctorSchedule{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+
 	var docName string
 	err = tx.QueryRow(ctx, `
 		SELECT u.name FROM doctor_profile p
 		JOIN "user" u ON u.id = p.user_id
-		JOIN staff_access sa ON sa.user_id = p.user_id
-		WHERE p.user_id = $1 AND sa.active = true
-		FOR UPDATE
+		WHERE p.user_id = $1
 	`, input.DoctorID).Scan(&docName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.DoctorSchedule{}, domain.ErrNotFound
@@ -1177,8 +1184,17 @@ func (s Store) DeleteDoctorSchedule(ctx context.Context, a domain.Actor, doctorI
 	}
 	defer tx.Rollback(ctx)
 
+	var lockedID string
+	err = tx.QueryRow(ctx, `SELECT user_id FROM staff_access WHERE user_id=$1 AND role='doctor' AND active FOR UPDATE`, doctorID).Scan(&lockedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+
 	var hasAppointments bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM appointment WHERE doctor_id = $1)`, doctorID).Scan(&hasAppointments)
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM appointment WHERE doctor_id = $1 AND status NOT IN ('cancelled'))`, doctorID).Scan(&hasAppointments)
 	if err != nil {
 		return err
 	}
@@ -1229,6 +1245,15 @@ func (s Store) CreateDoctorHoliday(ctx context.Context, a domain.Actor, input do
 		return domain.DoctorHoliday{}, err
 	}
 	defer tx.Rollback(ctx)
+
+	var lockedID string
+	err = tx.QueryRow(ctx, `SELECT user_id FROM staff_access WHERE user_id=$1 AND role='doctor' AND active FOR UPDATE`, input.DoctorID).Scan(&lockedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.DoctorHoliday{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.DoctorHoliday{}, err
+	}
 
 	var docName string
 	err = tx.QueryRow(ctx, `
@@ -1318,6 +1343,12 @@ func (s Store) DeleteDoctorHoliday(ctx context.Context, a domain.Actor, id strin
 		return domain.ErrForbidden
 	}
 
+	var lockedID string
+	err = tx.QueryRow(ctx, `SELECT user_id FROM staff_access WHERE user_id=$1 AND role='doctor' FOR UPDATE`, docID).Scan(&lockedID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+
 	_, err = tx.Exec(ctx, `DELETE FROM doctor_holiday WHERE id = $1::uuid`, id)
 	if err != nil {
 		return err
@@ -1369,6 +1400,15 @@ func (s Store) CreateDoctorBreak(ctx context.Context, a domain.Actor, input doma
 		return domain.DoctorLunchBreak{}, err
 	}
 	defer tx.Rollback(ctx)
+
+	var lockedID string
+	err = tx.QueryRow(ctx, `SELECT user_id FROM staff_access WHERE user_id=$1 AND role='doctor' AND active FOR UPDATE`, input.DoctorID).Scan(&lockedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.DoctorLunchBreak{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.DoctorLunchBreak{}, err
+	}
 
 	var docName, docEmail string
 	err = tx.QueryRow(ctx, `
@@ -1527,6 +1567,12 @@ func (s Store) DeleteDoctorBreak(ctx context.Context, a domain.Actor, id string)
 	}
 	if a.Role == "doctor" && docID != a.ID {
 		return domain.ErrForbidden
+	}
+
+	var lockedID string
+	err = tx.QueryRow(ctx, `SELECT user_id FROM staff_access WHERE user_id=$1 AND role='doctor' FOR UPDATE`, docID).Scan(&lockedID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
 	}
 
 	_, err = tx.Exec(ctx, `DELETE FROM doctor_lunch_break WHERE id = $1::uuid`, id)
