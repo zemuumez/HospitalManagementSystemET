@@ -15,6 +15,11 @@ type SchedulingRepository interface {
 	Reschedule(context.Context, domain.Actor, string, domain.RescheduleInput, time.Time) (domain.Appointment, error)
 	RescheduleHistory(context.Context, domain.Actor, string, int) ([]domain.RescheduleEvent, error)
 	Doctors(context.Context) ([]domain.Doctor, error)
+	Doctor(context.Context, string) (domain.Doctor, error)
+	CreateDoctorProfile(context.Context, domain.Actor, domain.CreateDoctorInput) (domain.Doctor, error)
+	UpdateDoctorProfile(context.Context, domain.Actor, string, domain.UpdateDoctorInput) (domain.Doctor, error)
+	SetDoctorStatus(context.Context, domain.Actor, string, bool) error
+	ListDoctors(context.Context, string, string, string) ([]domain.Doctor, error)
 	SaveDoctor(context.Context, domain.Actor, domain.Doctor) (domain.Doctor, error)
 	Slots(context.Context, string, time.Time, time.Time) ([]time.Time, error)
 	Appointments(context.Context, domain.Actor, int) ([]domain.Appointment, error)
@@ -31,6 +36,59 @@ func (s Scheduling) Doctors(ctx context.Context, a domain.Actor) ([]domain.Docto
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.Doctors(ctx)
+}
+
+func (s Scheduling) Doctor(ctx context.Context, a domain.Actor, id string) (domain.Doctor, error) {
+	if a.Role == "doctor" && a.ID != id {
+		return domain.Doctor{}, domain.ErrForbidden
+	}
+	if a.Role != "admin" && a.Role != "receptionist" && a.Role != "nurse" && a.Role != "doctor" {
+		return domain.Doctor{}, domain.ErrForbidden
+	}
+	return s.Store.Doctor(ctx, id)
+}
+
+func (s Scheduling) CreateDoctorProfile(ctx context.Context, a domain.Actor, input domain.CreateDoctorInput) (domain.Doctor, error) {
+	if a.Role != "admin" {
+		return domain.Doctor{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.Doctor{}, err
+	}
+	return s.Store.CreateDoctorProfile(ctx, a, input)
+}
+
+func (s Scheduling) UpdateDoctorProfile(ctx context.Context, a domain.Actor, id string, input domain.UpdateDoctorInput) (domain.Doctor, error) {
+	if a.Role != "admin" && !(a.Role == "doctor" && a.ID == id) {
+		return domain.Doctor{}, domain.ErrForbidden
+	}
+	if a.Role == "doctor" && input.DepartmentID != nil {
+		return domain.Doctor{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.Doctor{}, err
+	}
+	return s.Store.UpdateDoctorProfile(ctx, a, id, input)
+}
+
+func (s Scheduling) SetDoctorStatus(ctx context.Context, a domain.Actor, id string, active bool) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	if a.ID == id && !active {
+		return domain.ErrConflict
+	}
+	return s.Store.SetDoctorStatus(ctx, a, id, active)
+}
+
+func (s Scheduling) ListDoctors(ctx context.Context, a domain.Actor, statusFilter string, deptFilter string, search string) ([]domain.Doctor, error) {
+	if !a.Can("appointments.read") {
+		return nil, domain.ErrForbidden
+	}
+	if a.Role != "admin" || (statusFilter != "inactive" && statusFilter != "all") {
+		statusFilter = "active"
+	}
+	return s.Store.ListDoctors(ctx, statusFilter, deptFilter, search)
 }
 func (s Scheduling) SaveDoctor(ctx context.Context, a domain.Actor, d domain.Doctor) (domain.Doctor, error) {
 	if a.Role != "admin" && !(a.Role == "doctor" && a.ID == d.ID) {

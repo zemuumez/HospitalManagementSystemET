@@ -268,6 +268,9 @@ func (s Server) Handler() http.Handler {
 		if s.clinical(w, r, a) {
 			return
 		}
+		if s.doctors(w, r, a) {
+			return
+		}
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/v1/patients/") && r.Method == "PATCH":
 			var access domain.PatientAccess
@@ -279,24 +282,6 @@ func (s Server) Handler() http.Handler {
 				return
 			}
 			write(w, 200, map[string]bool{"saved": true})
-		case r.URL.Path == "/v1/doctors" && r.Method == "GET":
-			out, e := s.Scheduling.Doctors(r.Context(), a)
-			if e != nil {
-				fail(w, e)
-				return
-			}
-			write(w, 200, map[string]any{"doctors": out})
-		case r.URL.Path == "/v1/doctors" && r.Method == "POST":
-			var d domain.Doctor
-			if !decode(w, r, &d) {
-				return
-			}
-			out, e := s.Scheduling.SaveDoctor(r.Context(), a, d)
-			if e != nil {
-				fail(w, e)
-				return
-			}
-			write(w, 200, out)
 		case r.URL.Path == "/v1/slots" && r.Method == "GET":
 			out, e := s.Scheduling.Slots(r.Context(), a, r.URL.Query().Get("doctorId"), r.URL.Query().Get("date"))
 			if e != nil {

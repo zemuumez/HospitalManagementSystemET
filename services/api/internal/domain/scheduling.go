@@ -22,15 +22,193 @@ type Doctor struct {
 	ID                string        `json:"id"`
 	Name              string        `json:"name"`
 	Email             string        `json:"email,omitempty"`
+	Phone             string        `json:"phone,omitempty"`
 	Department        string        `json:"department"`
 	DepartmentID      *string       `json:"departmentId,omitempty"`
 	Specialist        string        `json:"specialist,omitempty"`
+	Designation       string        `json:"designation,omitempty"`
+	Qualification     string        `json:"qualification,omitempty"`
+	Gender            string        `json:"gender,omitempty"`
+	DateOfBirth       string        `json:"dateOfBirth,omitempty"`
+	BloodGroup        string        `json:"bloodGroup,omitempty"`
+	Address1          string        `json:"address1,omitempty"`
+	Address2          string        `json:"address2,omitempty"`
+	City              string        `json:"city,omitempty"`
+	Zip               string        `json:"zip,omitempty"`
+	Description       string        `json:"description,omitempty"`
 	PhotoURL          string        `json:"photoUrl,omitempty"`
 	OpdCharge         float64       `json:"opdCharge,omitempty"`
 	AppointmentCharge float64       `json:"appointmentCharge,omitempty"`
 	SlotMinutes       int           `json:"slotMinutes"`
+	Active            bool          `json:"active"`
 	Version           int           `json:"version"`
 	Hours             []DoctorHours `json:"hours"`
+}
+
+type CreateDoctorInput struct {
+	UserID            string        `json:"userId"`
+	DepartmentID      string        `json:"departmentId"`
+	Specialist        string        `json:"specialist"`
+	Designation       string        `json:"designation,omitempty"`
+	Qualification     string        `json:"qualification,omitempty"`
+	Phone             string        `json:"phone,omitempty"`
+	Gender            string        `json:"gender,omitempty"`
+	DateOfBirth       string        `json:"dateOfBirth,omitempty"`
+	BloodGroup        string        `json:"bloodGroup,omitempty"`
+	Address1          string        `json:"address1,omitempty"`
+	Address2          string        `json:"address2,omitempty"`
+	City              string        `json:"city,omitempty"`
+	Zip               string        `json:"zip,omitempty"`
+	Description       string        `json:"description,omitempty"`
+	PhotoURL          string        `json:"photoUrl,omitempty"`
+	AppointmentCharge float64       `json:"appointmentCharge,omitempty"`
+	OpdCharge         float64       `json:"opdCharge,omitempty"`
+	SlotMinutes       int           `json:"slotMinutes,omitempty"`
+	Hours             []DoctorHours `json:"hours,omitempty"`
+}
+
+func (i *CreateDoctorInput) Validate() error {
+	i.UserID = strings.TrimSpace(i.UserID)
+	i.Specialist = strings.TrimSpace(i.Specialist)
+	i.DepartmentID = strings.TrimSpace(i.DepartmentID)
+	if i.UserID == "" || len(i.UserID) > 128 {
+		return ErrValidation
+	}
+	if i.DepartmentID == "" || !UUIDPattern.MatchString(i.DepartmentID) {
+		return ErrValidation
+	}
+	if i.Specialist == "" || len([]rune(i.Specialist)) > 191 {
+		return ErrValidation
+	}
+	if len([]rune(i.Designation)) > 191 || len([]rune(i.Qualification)) > 191 {
+		return ErrValidation
+	}
+	if len([]rune(i.Description)) > 2000 {
+		return ErrValidation
+	}
+	if i.AppointmentCharge < 0 || i.OpdCharge < 0 {
+		return ErrValidation
+	}
+	if i.SlotMinutes == 0 {
+		i.SlotMinutes = 30
+	}
+	if i.SlotMinutes < 5 || i.SlotMinutes > 120 {
+		return ErrValidation
+	}
+	if len(i.Hours) > 21 {
+		return ErrValidation
+	}
+	for idx, h := range i.Hours {
+		if h.Weekday < 0 || h.Weekday > 6 || h.StartMinute < 0 || h.EndMinute > 1440 || h.EndMinute-h.StartMinute < i.SlotMinutes {
+			return ErrValidation
+		}
+		for _, other := range i.Hours[:idx] {
+			if h.Weekday == other.Weekday && h.StartMinute < other.EndMinute && other.StartMinute < h.EndMinute {
+				return ErrValidation
+			}
+		}
+	}
+	if i.DateOfBirth != "" {
+		dob, err := time.Parse("2006-01-02", i.DateOfBirth)
+		if err != nil || dob.Year() < 1850 || dob.After(time.Now()) {
+			return ErrValidation
+		}
+	}
+	if i.Gender != "" {
+		g := strings.ToLower(i.Gender)
+		if g != "male" && g != "female" && g != "other" && g != "unknown" && g != "0" && g != "1" {
+			return ErrValidation
+		}
+	}
+	return nil
+}
+
+type UpdateDoctorInput struct {
+	DepartmentID      *string       `json:"departmentId,omitempty"`
+	Specialist        *string       `json:"specialist,omitempty"`
+	Designation       *string       `json:"designation,omitempty"`
+	Qualification     *string       `json:"qualification,omitempty"`
+	Phone             *string       `json:"phone,omitempty"`
+	Gender            *string       `json:"gender,omitempty"`
+	DateOfBirth       *string       `json:"dateOfBirth,omitempty"`
+	BloodGroup        *string       `json:"bloodGroup,omitempty"`
+	Address1          *string       `json:"address1,omitempty"`
+	Address2          *string       `json:"address2,omitempty"`
+	City              *string       `json:"city,omitempty"`
+	Zip               *string       `json:"zip,omitempty"`
+	Description       *string       `json:"description,omitempty"`
+	PhotoURL          *string       `json:"photoUrl,omitempty"`
+	AppointmentCharge *float64      `json:"appointmentCharge,omitempty"`
+	OpdCharge         *float64      `json:"opdCharge,omitempty"`
+	SlotMinutes       *int          `json:"slotMinutes,omitempty"`
+	Hours             []DoctorHours `json:"hours,omitempty"`
+	Version           int           `json:"version"`
+}
+
+func (i *UpdateDoctorInput) Validate() error {
+	if i.Version <= 0 {
+		return ErrValidation
+	}
+	if i.DepartmentID != nil {
+		*i.DepartmentID = strings.TrimSpace(*i.DepartmentID)
+		if *i.DepartmentID == "" || !UUIDPattern.MatchString(*i.DepartmentID) {
+			return ErrValidation
+		}
+	}
+	if i.Specialist != nil {
+		*i.Specialist = strings.TrimSpace(*i.Specialist)
+		if *i.Specialist == "" || len([]rune(*i.Specialist)) > 191 {
+			return ErrValidation
+		}
+	}
+	if i.Designation != nil && len([]rune(*i.Designation)) > 191 {
+		return ErrValidation
+	}
+	if i.Qualification != nil && len([]rune(*i.Qualification)) > 191 {
+		return ErrValidation
+	}
+	if i.Description != nil && len([]rune(*i.Description)) > 2000 {
+		return ErrValidation
+	}
+	if i.AppointmentCharge != nil && *i.AppointmentCharge < 0 {
+		return ErrValidation
+	}
+	if i.OpdCharge != nil && *i.OpdCharge < 0 {
+		return ErrValidation
+	}
+	if i.SlotMinutes != nil && (*i.SlotMinutes < 5 || *i.SlotMinutes > 120) {
+		return ErrValidation
+	}
+	if len(i.Hours) > 21 {
+		return ErrValidation
+	}
+	slot := 30
+	if i.SlotMinutes != nil {
+		slot = *i.SlotMinutes
+	}
+	for idx, h := range i.Hours {
+		if h.Weekday < 0 || h.Weekday > 6 || h.StartMinute < 0 || h.EndMinute > 1440 || h.EndMinute-h.StartMinute < slot {
+			return ErrValidation
+		}
+		for _, other := range i.Hours[:idx] {
+			if h.Weekday == other.Weekday && h.StartMinute < other.EndMinute && other.StartMinute < h.EndMinute {
+				return ErrValidation
+			}
+		}
+	}
+	if i.DateOfBirth != nil && *i.DateOfBirth != "" {
+		dob, err := time.Parse("2006-01-02", *i.DateOfBirth)
+		if err != nil || dob.Year() < 1850 || dob.After(time.Now()) {
+			return ErrValidation
+		}
+	}
+	if i.Gender != nil && *i.Gender != "" {
+		g := strings.ToLower(*i.Gender)
+		if g != "male" && g != "female" && g != "other" && g != "unknown" && g != "0" && g != "1" {
+			return ErrValidation
+		}
+	}
+	return nil
 }
 
 func (d *Doctor) Validate() error {

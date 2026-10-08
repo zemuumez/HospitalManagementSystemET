@@ -8,6 +8,7 @@ type StaffDetails struct {
 	Phone         string `json:"phone"`
 	Gender        string `json:"gender"`
 	DateOfBirth   string `json:"dateOfBirth"`
+	BloodGroup    string `json:"bloodGroup,omitempty"`
 	Designation   string `json:"designation"`
 	Qualification string `json:"qualification"`
 	Specialty     string `json:"specialty"`
