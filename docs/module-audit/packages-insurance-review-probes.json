@@ -1,0 +1,26 @@
+{
+  "duplicate_child_id": {
+    "parentTotal": 300,
+    "persistedLineAmount": 200,
+    "persistedLines": 1,
+    "responseLines": 2
+  },
+  "explicit_zero_rate": {
+    "persisted": 500,
+    "requested": 0,
+    "total": 500
+  },
+  "export_service_arguments": {
+    "requestedLimit": 1000,
+    "returned": 25,
+    "total": 32
+  },
+  "insurance_100_percent_discount_overflow": {
+    "actualTotal": 184467440737095515,
+    "expectedTotal": 0
+  },
+  "package_100_percent_discount_overflow": {
+    "actualTotal": 184467440737095515,
+    "expectedTotal": 0
+  }
+}
