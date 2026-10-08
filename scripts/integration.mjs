@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Pool } from "pg";
 import { hashPassword } from "better-auth/crypto";
+
+const emailFixtures = JSON.parse(
+  readFileSync(resolve("docs/module-audit/doctor-email-fixtures.json"), "utf8"),
+);
 
 // The wrapper owns isolated services and drops the entire generated schema.
 const schema = process.env.HMS_TEST_ISOLATED_SCHEMA;
@@ -198,8 +204,23 @@ try {
     },
   });
 
-  // 2. Archived department failure cleanup: ensure complete rollback (no orphan user or staff_access)
+  // 2. Archived department failure cleanup: ensure complete rollback
   const failedDocEmail = `doc-fail-${randomUUID()}@example.test`;
+  const rollbackTables = [
+    '"user"',
+    "account",
+    "staff_access",
+    "doctor_profile",
+    "staff_profile",
+    "doctor_hours",
+    "audit_event",
+  ];
+  const beforeCounts = {};
+  for (const table of rollbackTables) {
+    const res = await db.query(`SELECT count(*)::int AS count FROM ${table}`);
+    beforeCounts[table] = res.rows[0].count;
+  }
+
   await expectStatus("/api/staff", 422, {
     cookie: admin.cookie,
     method: "POST",
@@ -215,64 +236,23 @@ try {
       gender: "male",
     },
   });
+
+  // Directly compare table counts before vs after failure across all relevant tables
+  for (const table of rollbackTables) {
+    const res = await db.query(`SELECT count(*)::int AS count FROM ${table}`);
+    const afterCount = res.rows[0].count;
+    assert.equal(
+      afterCount,
+      beforeCounts[table],
+      `Expected ${table} count to remain unchanged after rollback (${beforeCounts[table]} vs ${afterCount})`,
+    );
+  }
+
+  // Also assert directly that no user row exists with failedDocEmail
   assert.equal(
     (
       await db.query(
         'SELECT count(*)::int AS count FROM "user" WHERE email=$1',
-        [failedDocEmail],
-      )
-    ).rows[0].count,
-    0,
-  );
-  assert.equal(
-    (
-      await db.query(
-        'SELECT count(*)::int AS count FROM account WHERE "userId" IN (SELECT id FROM "user" WHERE email=$1)',
-        [failedDocEmail],
-      )
-    ).rows[0].count,
-    0,
-  );
-  assert.equal(
-    (
-      await db.query(
-        'SELECT count(*)::int AS count FROM staff_access WHERE user_id IN (SELECT id FROM "user" WHERE email=$1)',
-        [failedDocEmail],
-      )
-    ).rows[0].count,
-    0,
-  );
-  assert.equal(
-    (
-      await db.query(
-        'SELECT count(*)::int AS count FROM doctor_profile WHERE user_id IN (SELECT id FROM "user" WHERE email=$1)',
-        [failedDocEmail],
-      )
-    ).rows[0].count,
-    0,
-  );
-  assert.equal(
-    (
-      await db.query(
-        'SELECT count(*)::int AS count FROM staff_profile WHERE user_id IN (SELECT id FROM "user" WHERE email=$1)',
-        [failedDocEmail],
-      )
-    ).rows[0].count,
-    0,
-  );
-  assert.equal(
-    (
-      await db.query(
-        'SELECT count(*)::int AS count FROM doctor_hours WHERE doctor_id IN (SELECT id FROM "user" WHERE email=$1)',
-        [failedDocEmail],
-      )
-    ).rows[0].count,
-    0,
-  );
-  assert.equal(
-    (
-      await db.query(
-        "SELECT count(*)::int AS count FROM audit_event WHERE action='doctor.created' AND resource_id IN (SELECT id FROM \"user\" WHERE email=$1)",
         [failedDocEmail],
       )
     ).rows[0].count,
@@ -378,15 +358,27 @@ try {
     },
   });
 
-  // 6. Strict email validation on PATCH /api/staff: malformed emails rejected with 422
-  for (const badEmail of [
-    "not-an-email",
-    "missingdomain@",
-    "@missinglocal.test",
-    "missingdot@domain",
-    "two@@domain.com",
-    "has spaces@domain.com",
-  ]) {
+  // 6. Strict email validation: reject malformed emails from shared fixtures with 422
+  // Capture database state before invalid email attempts
+  const beforeUserRow = (
+    await db.query('SELECT name, email FROM "user" WHERE id=$1', [
+      coordinatedDoctorID,
+    ])
+  ).rows[0];
+  const beforeProfileRow = (
+    await db.query("SELECT version FROM doctor_profile WHERE user_id=$1", [
+      coordinatedDoctorID,
+    ])
+  ).rows[0];
+  const beforeAuditCount = (
+    await db.query(
+      "SELECT count(*)::int AS count FROM audit_event WHERE resource_id=$1",
+      [coordinatedDoctorID],
+    )
+  ).rows[0].count;
+
+  // Test PATCH /api/staff against all invalid emails from shared fixtures
+  for (const badEmail of emailFixtures.invalid) {
     await expectStatus("/api/staff", 422, {
       cookie: admin.cookie,
       method: "PATCH",
@@ -397,13 +389,54 @@ try {
     });
   }
 
-  // Verify email in database remains unchanged
-  const unchangedUserRow = (
-    await db.query('SELECT email FROM "user" WHERE id=$1', [
+  // Verify database state on coordinatedDoctorID remains completely unchanged
+  const afterUserRow = (
+    await db.query('SELECT name, email FROM "user" WHERE id=$1', [
       coordinatedDoctorID,
     ])
   ).rows[0];
-  assert.equal(unchangedUserRow.email, updatedDocEmail);
+  const afterProfileRow = (
+    await db.query("SELECT version FROM doctor_profile WHERE user_id=$1", [
+      coordinatedDoctorID,
+    ])
+  ).rows[0];
+  const afterAuditCount = (
+    await db.query(
+      "SELECT count(*)::int AS count FROM audit_event WHERE resource_id=$1",
+      [coordinatedDoctorID],
+    )
+  ).rows[0].count;
+
+  assert.equal(afterUserRow.email, beforeUserRow.email);
+  assert.equal(afterUserRow.name, beforeUserRow.name);
+  assert.equal(afterProfileRow.version, beforeProfileRow.version);
+  assert.equal(afterAuditCount, beforeAuditCount);
+
+  // Test POST /api/staff against invalid emails from shared fixtures, verifying no user creation
+  const userCountBeforePost = (
+    await db.query('SELECT count(*)::int AS count FROM "user"')
+  ).rows[0].count;
+  for (const badEmail of emailFixtures.invalid) {
+    await expectStatus("/api/staff", 422, {
+      cookie: admin.cookie,
+      method: "POST",
+      body: {
+        name: "Dr. Bad Email",
+        email: badEmail,
+        role: "doctor",
+        password: randomUUID() + "Aa1!",
+        departmentId: activeDept,
+        specialist: "Cardiologist",
+        designation: "Consultant",
+        qualification: "MBBS",
+        gender: "male",
+      },
+    });
+  }
+  const userCountAfterPost = (
+    await db.query('SELECT count(*)::int AS count FROM "user"')
+  ).rows[0].count;
+  assert.equal(userCountAfterPost, userCountBeforePost);
   const schedule = {
     id: doctor.id,
     name: "",

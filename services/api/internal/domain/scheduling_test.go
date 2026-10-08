@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"encoding/json"
+	"errors"
+	"os"
 	"testing"
 	"time"
 )
@@ -42,3 +45,50 @@ func TestAppointmentStateAndOwnershipPolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestDoctorEmailValidation(t *testing.T) {
+	var fixtureBytes []byte
+	for _, p := range []string{
+		"../../../../docs/module-audit/doctor-email-fixtures.json",
+		"../../../../../docs/module-audit/doctor-email-fixtures.json",
+		"docs/module-audit/doctor-email-fixtures.json",
+	} {
+		if data, readErr := os.ReadFile(p); readErr == nil {
+			fixtureBytes = data
+			break
+		}
+	}
+	if len(fixtureBytes) == 0 {
+		t.Fatalf("failed to read shared email fixtures from candidate paths")
+	}
+	var fixtures struct {
+		Valid   []string `json:"valid"`
+		Invalid []string `json:"invalid"`
+	}
+	if err := json.Unmarshal(fixtureBytes, &fixtures); err != nil {
+		t.Fatalf("failed to parse fixtures: %v", err)
+	}
+
+	for _, v := range fixtures.Valid {
+		email := v
+		in := UpdateDoctorInput{
+			Version: 1,
+			Email:   &email,
+		}
+		if err := in.Validate(); err != nil {
+			t.Errorf("expected valid email %q to pass validation, got %v", v, err)
+		}
+	}
+
+	for _, inv := range fixtures.Invalid {
+		email := inv
+		in := UpdateDoctorInput{
+			Version: 1,
+			Email:   &email,
+		}
+		if err := in.Validate(); !errors.Is(err, ErrValidation) {
+			t.Errorf("expected invalid email %q to be rejected with ErrValidation, got %v", inv, err)
+		}
+	}
+}
+

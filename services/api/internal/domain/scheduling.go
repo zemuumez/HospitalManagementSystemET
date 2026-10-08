@@ -11,7 +11,8 @@ import (
 var ErrNotFound = errors.New("record not found")
 var ErrStale = errors.New("record changed or time unavailable")
 var UUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-var EmailPattern = regexp.MustCompile(`^[a-zA-Z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$`)
+// EmailPattern defines the practical email acceptance contract matching the installed Next.js validator.
+var EmailPattern = regexp.MustCompile(`^(?:[a-zA-Z0-9_'+\-]+\.)*[a-zA-Z0-9_'+\-]*[a-zA-Z0-9_+-]@(?:[a-zA-Z0-9][a-zA-Z0-9\-]*\.)+[a-zA-Z]{2,}$`)
 var HospitalLocation, _ = time.LoadLocation("Africa/Addis_Ababa")
 
 type DoctorHours struct {
@@ -183,10 +184,11 @@ func (i *UpdateDoctorInput) Validate() error {
 		}
 	}
 	if i.Email != nil {
-		*i.Email = strings.TrimSpace(strings.ToLower(*i.Email))
-		if *i.Email == "" || len(*i.Email) > 254 || !EmailPattern.MatchString(*i.Email) {
+		email := strings.ToLower(*i.Email)
+		if len(email) > 254 || !EmailPattern.MatchString(email) {
 			return ErrValidation
 		}
+		*i.Email = email
 	}
 	if i.DepartmentID != nil {
 		*i.DepartmentID = strings.TrimSpace(*i.DepartmentID)

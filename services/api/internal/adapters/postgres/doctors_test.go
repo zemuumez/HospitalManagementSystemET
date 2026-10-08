@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -813,24 +815,47 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 		t.Fatalf("expected 409 for HTTP PUT duplicate email, got %d: %s", dupPutRec.Code, dupPutRec.Body.String())
 	}
 
-	// 12. Strict email validation: reject malformed emails with 422 without mutating account, profile version, or audit
+	// 12. Strict email validation: reject malformed emails with 422 using shared fixtures without mutating account, profile version, or audit
 	var beforeUserName, beforeUserEmail string
-	_ = db.QueryRow(ctx, `SELECT name, email FROM "user" WHERE id=$1`, docUser1).Scan(&beforeUserName, &beforeUserEmail)
+	err = db.QueryRow(ctx, `SELECT name, email FROM "user" WHERE id=$1`, docUser1).Scan(&beforeUserName, &beforeUserEmail)
+	if err != nil {
+		t.Fatalf("failed to query user before email test: %v", err)
+	}
 	var beforeDocVersion int
-	_ = db.QueryRow(ctx, `SELECT version FROM doctor_profile WHERE user_id=$1`, docUser1).Scan(&beforeDocVersion)
+	err = db.QueryRow(ctx, `SELECT version FROM doctor_profile WHERE user_id=$1`, docUser1).Scan(&beforeDocVersion)
+	if err != nil {
+		t.Fatalf("failed to query doctor_profile before email test: %v", err)
+	}
 	var beforeAuditCount int
-	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE resource_id=$1`, docUser1).Scan(&beforeAuditCount)
+	err = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE resource_id=$1`, docUser1).Scan(&beforeAuditCount)
+	if err != nil {
+		t.Fatalf("failed to query audit_event before email test: %v", err)
+	}
 
-	for _, malformedEmail := range []string{
-		"not-an-email",
-		"missingdomain@",
-		"@missinglocal.test",
-		"missingdot@domain",
-		"two@@domain.com",
-		"has spaces@domain.com",
-		"trailingdot@domain.com.",
+	var fixtureBytes []byte
+	for _, p := range []string{
+		"../../../../../docs/module-audit/doctor-email-fixtures.json",
+		"../../../../docs/module-audit/doctor-email-fixtures.json",
+		"docs/module-audit/doctor-email-fixtures.json",
 	} {
-		body := `{"email":"` + malformedEmail + `","version":` + string(rune('0'+beforeDocVersion)) + `}`
+		if data, readErr := os.ReadFile(p); readErr == nil {
+			fixtureBytes = data
+			break
+		}
+	}
+	if len(fixtureBytes) == 0 {
+		t.Fatalf("failed to read shared email fixtures from candidate paths")
+	}
+	var emailFixtures struct {
+		Valid   []string `json:"valid"`
+		Invalid []string `json:"invalid"`
+	}
+	if err := json.Unmarshal(fixtureBytes, &emailFixtures); err != nil {
+		t.Fatalf("failed to unmarshal shared email fixtures: %v", err)
+	}
+
+	for _, malformedEmail := range emailFixtures.Invalid {
+		body := fmt.Sprintf(`{"email":%q,"version":%d}`, malformedEmail, beforeDocVersion)
 		badReq := httptest.NewRequest("PUT", "/v1/doctors/"+docUser1, bytes.NewReader([]byte(body)))
 		badReq.Header.Set("Cookie", "session=admin")
 		badReq.Header.Set("Origin", "http://hospital.test")
@@ -843,11 +868,20 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	}
 
 	var afterUserName, afterUserEmail string
-	_ = db.QueryRow(ctx, `SELECT name, email FROM "user" WHERE id=$1`, docUser1).Scan(&afterUserName, &afterUserEmail)
+	err = db.QueryRow(ctx, `SELECT name, email FROM "user" WHERE id=$1`, docUser1).Scan(&afterUserName, &afterUserEmail)
+	if err != nil {
+		t.Fatalf("failed to query user after email test: %v", err)
+	}
 	var afterDocVersion int
-	_ = db.QueryRow(ctx, `SELECT version FROM doctor_profile WHERE user_id=$1`, docUser1).Scan(&afterDocVersion)
+	err = db.QueryRow(ctx, `SELECT version FROM doctor_profile WHERE user_id=$1`, docUser1).Scan(&afterDocVersion)
+	if err != nil {
+		t.Fatalf("failed to query doctor_profile after email test: %v", err)
+	}
 	var afterAuditCount int
-	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE resource_id=$1`, docUser1).Scan(&afterAuditCount)
+	err = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE resource_id=$1`, docUser1).Scan(&afterAuditCount)
+	if err != nil {
+		t.Fatalf("failed to query audit_event after email test: %v", err)
+	}
 
 	if afterUserName != beforeUserName || afterUserEmail != beforeUserEmail {
 		t.Fatalf("user account data changed on invalid email: before=(%s,%s), after=(%s,%s)", beforeUserName, beforeUserEmail, afterUserName, afterUserEmail)
@@ -859,7 +893,31 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 		t.Fatalf("audit event count changed on invalid email: before=%d, after=%d", beforeAuditCount, afterAuditCount)
 	}
 
-	// 13. Transaction rollback test: deliberately fail doctor creation and verify no partial records survive
+	// Verify valid email from shared fixtures succeeds and increments version
+	validSharedEmail := emailFixtures.Valid[0]
+	validBody := fmt.Sprintf(`{"email":%q,"version":%d}`, validSharedEmail, afterDocVersion)
+	validReq := httptest.NewRequest("PUT", "/v1/doctors/"+docUser1, bytes.NewReader([]byte(validBody)))
+	validReq.Header.Set("Cookie", "session=admin")
+	validReq.Header.Set("Origin", "http://hospital.test")
+	validReq.Header.Set("Content-Type", "application/json")
+	validRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(validRec, validReq)
+	if validRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid email %q, got %d: %s", validSharedEmail, validRec.Code, validRec.Body.String())
+	}
+	var updatedSharedEmail string
+	var updatedSharedVersion int
+	err = db.QueryRow(ctx, `SELECT email FROM "user" WHERE id=$1`, docUser1).Scan(&updatedSharedEmail)
+	if err != nil || updatedSharedEmail != validSharedEmail {
+		t.Fatalf("expected updated email %q, got %q (err=%v)", validSharedEmail, updatedSharedEmail, err)
+	}
+	err = db.QueryRow(ctx, `SELECT version FROM doctor_profile WHERE user_id=$1`, docUser1).Scan(&updatedSharedVersion)
+	if err != nil || updatedSharedVersion != afterDocVersion+1 {
+		t.Fatalf("expected incremented version %d, got %d (err=%v)", afterDocVersion+1, updatedSharedVersion, err)
+	}
+
+	// 13. Transaction rollback tests:
+	// 13a. Pre-insert validation failure (archived department): verify ErrValidation and 0 partial records
 	deliberateDocID := "deliberate-fail-doctor"
 	_, err = db.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,$2,$1||'@hospital.test')`, deliberateDocID, "Dr. Deliberate Fail")
 	if err != nil {
@@ -884,17 +942,127 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	}
 
 	var profileCount, hoursCount, auditDoctorCount int
-	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, deliberateDocID).Scan(&profileCount)
-	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours WHERE doctor_id=$1`, deliberateDocID).Scan(&hoursCount)
-	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.created' AND resource_id=$1`, deliberateDocID).Scan(&auditDoctorCount)
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, deliberateDocID).Scan(&profileCount); err != nil {
+		t.Fatalf("failed to query doctor_profile count: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours WHERE doctor_id=$1`, deliberateDocID).Scan(&hoursCount); err != nil {
+		t.Fatalf("failed to query doctor_hours count: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.created' AND resource_id=$1`, deliberateDocID).Scan(&auditDoctorCount); err != nil {
+		t.Fatalf("failed to query audit_event count: %v", err)
+	}
 
 	if profileCount != 0 {
-		t.Fatalf("expected 0 doctor_profile records after rollback, got %d", profileCount)
+		t.Fatalf("expected 0 doctor_profile records after archived-dept rejection, got %d", profileCount)
 	}
 	if hoursCount != 0 {
-		t.Fatalf("expected 0 doctor_hours records after rollback, got %d", hoursCount)
+		t.Fatalf("expected 0 doctor_hours records after archived-dept rejection, got %d", hoursCount)
 	}
 	if auditDoctorCount != 0 {
-		t.Fatalf("expected 0 audit_event records after rollback, got %d", auditDoctorCount)
+		t.Fatalf("expected 0 audit_event records after archived-dept rejection, got %d", auditDoctorCount)
+	}
+
+	// 13b. Post-profile-write transaction rollback:
+	// Inject a failure on the audit_event insert (which executes AFTER doctor_profile, staff_profile, and doctor_hours within CreateDoctorProfile)
+	// and verify that the transaction rollback leaves zero partial records behind.
+	postWriteDocID := "fail-audit-doctor"
+	_, err = db.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,$2,$1||'@hospital.test')`, postWriteDocID, "Dr. Post Write Rollback")
+	if err != nil {
+		t.Fatalf("failed to insert test user for post-write rollback: %v", err)
+	}
+	_, err = db.Exec(ctx, `INSERT INTO staff_access(user_id,role,active) VALUES($1,'doctor',true)`, postWriteDocID)
+	if err != nil {
+		t.Fatalf("failed to insert staff_access for post-write rollback: %v", err)
+	}
+
+	// Create temporary trigger on audit_event to raise exception when inserting for postWriteDocID
+	_, err = db.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_fail_audit_insert() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.resource_id = '`+postWriteDocID+`' THEN
+				RAISE EXCEPTION 'injected test failure on audit_event insert';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS trg_test_fail_audit_insert ON audit_event;
+		CREATE TRIGGER trg_test_fail_audit_insert
+		BEFORE INSERT ON audit_event
+		FOR EACH ROW EXECUTE FUNCTION test_fail_audit_insert();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install test trigger: %v", err)
+	}
+	defer func() {
+		_, _ = db.Exec(ctx, `DROP TRIGGER IF EXISTS trg_test_fail_audit_insert ON audit_event`)
+		_, _ = db.Exec(ctx, `DROP FUNCTION IF EXISTS test_fail_audit_insert()`)
+		_, _ = db.Exec(ctx, `DELETE FROM staff_access WHERE user_id=$1`, postWriteDocID)
+		_, _ = db.Exec(ctx, `DELETE FROM "user" WHERE id=$1`, postWriteDocID)
+	}()
+
+	var beforeAllProfiles, beforeAllHours, beforeAllAudits int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile`).Scan(&beforeAllProfiles); err != nil {
+		t.Fatalf("failed to count doctor_profile before post-write failure: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours`).Scan(&beforeAllHours); err != nil {
+		t.Fatalf("failed to count doctor_hours before post-write failure: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM audit_event`).Scan(&beforeAllAudits); err != nil {
+		t.Fatalf("failed to count audit_event before post-write failure: %v", err)
+	}
+
+	postWriteIn := domain.CreateDoctorInput{
+		UserID:        postWriteDocID,
+		DepartmentID:  activeDeptID,
+		Specialist:    "Neurology",
+		Designation:   "Consultant",
+		Qualification: "MBBS, MD",
+		Gender:        "female",
+	}
+	_, err = sched.CreateDoctorProfile(ctx, admin, postWriteIn)
+	if err == nil {
+		t.Fatalf("expected error from injected audit failure, but CreateDoctorProfile succeeded")
+	}
+
+	// Verify 0 rows exist for postWriteDocID across doctor_profile, doctor_hours, audit_event
+	var postProfileCount, postHoursCount, postAuditCount int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, postWriteDocID).Scan(&postProfileCount); err != nil {
+		t.Fatalf("failed to query doctor_profile for postWriteDocID: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours WHERE doctor_id=$1`, postWriteDocID).Scan(&postHoursCount); err != nil {
+		t.Fatalf("failed to query doctor_hours for postWriteDocID: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE resource_id=$1`, postWriteDocID).Scan(&postAuditCount); err != nil {
+		t.Fatalf("failed to query audit_event for postWriteDocID: %v", err)
+	}
+	if postProfileCount != 0 {
+		t.Fatalf("expected 0 doctor_profile records after post-write rollback, got %d", postProfileCount)
+	}
+	if postHoursCount != 0 {
+		t.Fatalf("expected 0 doctor_hours records after post-write rollback, got %d", postHoursCount)
+	}
+	if postAuditCount != 0 {
+		t.Fatalf("expected 0 audit_event records after post-write rollback, got %d", postAuditCount)
+	}
+
+	// Compare total table row counts before and after failure
+	var afterAllProfiles, afterAllHours, afterAllAudits int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile`).Scan(&afterAllProfiles); err != nil {
+		t.Fatalf("failed to count doctor_profile after post-write failure: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours`).Scan(&afterAllHours); err != nil {
+		t.Fatalf("failed to count doctor_hours after post-write failure: %v", err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM audit_event`).Scan(&afterAllAudits); err != nil {
+		t.Fatalf("failed to count audit_event after post-write failure: %v", err)
+	}
+	if afterAllProfiles != beforeAllProfiles {
+		t.Fatalf("doctor_profile table count changed after post-write rollback: before=%d, after=%d", beforeAllProfiles, afterAllProfiles)
+	}
+	if afterAllHours != beforeAllHours {
+		t.Fatalf("doctor_hours table count changed after post-write rollback: before=%d, after=%d", beforeAllHours, afterAllHours)
+	}
+	if afterAllAudits != beforeAllAudits {
+		t.Fatalf("audit_event table count changed after post-write rollback: before=%d, after=%d", beforeAllAudits, afterAllAudits)
 	}
 }

@@ -1,0 +1,21 @@
+{
+  "valid": [
+    "doctor@example.com",
+    "dr.alice+specialty@hospital.org",
+    "first.middle.last@subdomain.clinic.com",
+    "doctor_123@medical.et",
+    "consultant-surgeon@hospital.net"
+  ],
+  "invalid": [
+    ".doctor@example.com",
+    "doctor.@example.com",
+    "doc..tor@example.com",
+    "not-an-email",
+    "missingdomain@",
+    "@missinglocal.test",
+    "missingdot@domain",
+    "two@@domain.com",
+    "has spaces@domain.com",
+    "trailingdot@domain.com."
+  ]
+}
