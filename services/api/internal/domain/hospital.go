@@ -64,6 +64,10 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "receptionist"
 	case "packages.read":
 		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "case_manager" || a.Role == "patient"
+	case "insurances.manage":
+		return a.Role == "admin" || a.Role == "receptionist"
+	case "insurances.read":
+		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "case_manager" || a.Role == "patient"
 	case "services.manage":
 		return a.Role == "admin" || a.Role == "accountant"
 	case "services.read":
@@ -138,7 +142,7 @@ func (a Actor) Permissions() []string {
 		"patients.read", "patients.create", "messages.manage", "appointments.read", "appointments.book",
 		"staff.manage", "beds.read", "clinical.read", "clinical.admit", "billing.read", "billing.manage",
 		"attendance.clock", "attendance.read_own", "attendance.manage", "ambulance.manage", "ambulance.read",
-		"ambulance_call.manage", "ambulance_call.read", "packages.manage", "packages.read", "services.manage", "services.read", "operations.manage",
+		"ambulance_call.manage", "ambulance_call.read", "packages.manage", "packages.read", "insurances.manage", "insurances.read", "services.manage", "services.read", "operations.manage",
 		"operations.read", "settings.manage", "settings.read", "cms.read", "cms.manage", "enquiries.read", "enquiries.manage",
 		"complaints.read", "complaints.manage", "complaints.create", "notices.read", "notices.manage",
 		"front_office.manage", "front_office.read", "live_consultations.manage", "live_consultations.read",

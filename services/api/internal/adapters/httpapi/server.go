@@ -24,6 +24,7 @@ type Server struct {
 	Attendance         application.Attendance
 	Ambulance          application.AmbulanceService
 	Packages           application.PackagesService
+	Insurances         application.InsurancesService
 	ServicesOperations application.ServicesOperationsService
 	CMSSettings        application.CMSSettingsService
 	FrontOffice        application.FrontOfficeService
@@ -93,7 +94,7 @@ func fail(w http.ResponseWriter, err error) {
 	if errors.Is(err, domain.ErrInUse) {
 		code = "RECORD_IN_USE"
 		status = 409
-		message = "Package is in use by patient admissions and cannot be deleted"
+		message = "Record is in use by patient admissions and cannot be deleted"
 	}
 	write(w, status, map[string]string{"error": message, "code": code})
 }
@@ -191,6 +192,9 @@ func (s Server) Handler() http.Handler {
 			return
 		}
 		if s.packages(w, r, a) {
+			return
+		}
+		if s.insurances(w, r, a) {
 			return
 		}
 		if s.servicesOperations(w, r, a) {
