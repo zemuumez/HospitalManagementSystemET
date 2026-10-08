@@ -202,23 +202,63 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   const [docEmail, setDocEmail] = useState("");
   const [docPassword, setDocPassword] = useState("DoctorPass1234!");
   const [docDeptId, setDocDeptId] = useState("");
-  const [docSpecialist, setDocSpecialist] = useState("General Medicine");
-  const [docPhone, setDocPhone] = useState("+251 91 123 4567");
-  const [docQual, setDocQual] = useState("MD, Specialist");
-  const [docDesignation, setDocDesignation] = useState("Senior Consultant");
-  const [docGender, setDocGender] = useState("male");
-  const [docOpdCharge, setDocOpdCharge] = useState("300");
-  const [docApptCharge, setDocApptCharge] = useState("300");
+  const [docSpecialist, setDocSpecialist] = useState("");
+  const [docDesignation, setDocDesignation] = useState("");
+  const [docQual, setDocQual] = useState("");
+  const [docGender, setDocGender] = useState("");
+  const [docPhone, setDocPhone] = useState("");
+  const [docDob, setDocDob] = useState("");
+  const [docBloodGroup, setDocBloodGroup] = useState("");
+  const [docAddress1, setDocAddress1] = useState("");
+  const [docAddress2, setDocAddress2] = useState("");
+  const [docCity, setDocCity] = useState("");
+  const [docZip, setDocZip] = useState("");
+  const [docDescription, setDocDescription] = useState("");
+  const [docOpdCharge, setDocOpdCharge] = useState("0");
+  const [docApptCharge, setDocApptCharge] = useState("0");
+  const [docSlotMinutes, setDocSlotMinutes] = useState("60");
+
+  const resetAddDoctorForm = () => {
+    setDocName("");
+    setDocEmail("");
+    setDocPassword("DoctorPass1234!");
+    setDocDeptId("");
+    setDocSpecialist("");
+    setDocDesignation("");
+    setDocQual("");
+    setDocGender("");
+    setDocPhone("");
+    setDocDob("");
+    setDocBloodGroup("");
+    setDocAddress1("");
+    setDocAddress2("");
+    setDocCity("");
+    setDocZip("");
+    setDocDescription("");
+    setDocOpdCharge("0");
+    setDocApptCharge("0");
+    setDocSlotMinutes("60");
+  };
 
   // Edit Doctor modal state
   const [editingDoctor, setEditingDoctor] = useState<DoctorItem | null>(null);
   const [editDocName, setEditDocName] = useState("");
   const [editDocDeptId, setEditDocDeptId] = useState("");
   const [editDocSpecialist, setEditDocSpecialist] = useState("");
-  const [editDocPhone, setEditDocPhone] = useState("");
+  const [editDocDesignation, setEditDocDesignation] = useState("");
   const [editDocQual, setEditDocQual] = useState("");
+  const [editDocGender, setEditDocGender] = useState("");
+  const [editDocPhone, setEditDocPhone] = useState("");
+  const [editDocDob, setEditDocDob] = useState("");
+  const [editDocBloodGroup, setEditDocBloodGroup] = useState("");
+  const [editDocAddress1, setEditDocAddress1] = useState("");
+  const [editDocAddress2, setEditDocAddress2] = useState("");
+  const [editDocCity, setEditDocCity] = useState("");
+  const [editDocZip, setEditDocZip] = useState("");
+  const [editDocDescription, setEditDocDescription] = useState("");
   const [editDocOpdCharge, setEditDocOpdCharge] = useState("0");
   const [editDocApptCharge, setEditDocApptCharge] = useState("0");
+  const [editDocSlotMinutes, setEditDocSlotMinutes] = useState("60");
 
   // Doctor Details modal state
   const [viewingDoctor, setViewingDoctor] = useState<DoctorItem | null>(null);
@@ -236,7 +276,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
 
   // New Schedule form state
   const [scheduleDoctorId, setScheduleDoctorId] = useState("");
-  const [perPatientTime, setPerPatientTime] = useState("00:15:00");
+  const [perPatientTime, setPerPatientTime] = useState("01:00:00");
   const [scheduleDays, setScheduleDays] = useState<ScheduleRow[]>(
     DAYS_OF_WEEK.map((day) => ({
       day,
@@ -305,7 +345,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               department: d.department || "",
               departmentId: d.departmentId || d.department_id || "",
               specialist: d.specialist || "",
-              qualification: d.qualification || "MD",
+              qualification: d.qualification || "",
               designation: d.designation || "",
               gender: d.gender || "",
               dob: d.dob || d.dateOfBirth || "",
@@ -323,7 +363,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               appointmentCharge: Number(
                 d.appointmentCharge ?? d.appointment_charge ?? 0,
               ),
-              slotMinutes: Number(d.slotMinutes ?? d.slot_minutes ?? 15),
+              slotMinutes: Number(d.slotMinutes ?? d.slot_minutes ?? 60),
               version: Number(d.version ?? 1),
               avatarColor: AVATAR_COLORS[idx % AVATAR_COLORS.length],
               initials:
@@ -438,8 +478,26 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   // Handle Create Doctor via real atomic /api/staff endpoint
   const handleCreateDoctor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docName.trim() || !docEmail.trim() || !docSpecialist.trim()) {
-      setApiErrorBanner(t("Doctor name, email, and specialist are required."));
+    if (
+      !docName.trim() ||
+      !docEmail.trim() ||
+      !docDeptId ||
+      !docSpecialist.trim() ||
+      !docDesignation.trim() ||
+      !docQual.trim() ||
+      !docGender
+    ) {
+      setApiErrorBanner(
+        t(
+          "Please fill in all required doctor fields: name, email, department, specialist, designation, qualification, and gender.",
+        ),
+      );
+      return;
+    }
+    if (docPassword.length < 12) {
+      setApiErrorBanner(
+        t("Check the supplied fields. Passwords need at least 12 characters."),
+      );
       return;
     }
 
@@ -458,15 +516,22 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           email: docEmail.trim().toLowerCase(),
           role: "doctor",
           password: docPassword,
-          departmentId: docDeptId || undefined,
+          departmentId: docDeptId,
           specialist: docSpecialist.trim(),
-          designation: docDesignation.trim() || "Senior Consultant",
-          qualification: docQual.trim() || "MD",
-          gender: docGender || "male",
+          designation: docDesignation.trim(),
+          qualification: docQual.trim(),
+          gender: docGender,
           phone: docPhone.trim() || undefined,
+          dateOfBirth: docDob || undefined,
+          bloodGroup: docBloodGroup || undefined,
+          address1: docAddress1.trim() || undefined,
+          address2: docAddress2.trim() || undefined,
+          city: docCity.trim() || undefined,
+          zip: docZip.trim() || undefined,
+          description: docDescription.trim() || undefined,
           opdCharge: parseFloat(docOpdCharge) || 0,
           appointmentCharge: parseFloat(docApptCharge) || 0,
-          slotMinutes: 15,
+          slotMinutes: parseInt(docSlotMinutes) || 60,
         }),
       });
 
@@ -475,13 +540,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           t("Doctor account and clinical profile created successfully!"),
         );
         setShowAddDoctor(false);
-        setDocName("");
-        setDocEmail("");
-        setDocSpecialist("General Medicine");
-        setDocPhone("+251 91 123 4567");
-        setDocQual("MD, Specialist");
-        setDocOpdCharge("300");
-        setDocApptCharge("300");
+        resetAddDoctorForm();
         await loadDoctorsData();
       } else {
         const err = await res.json().catch(() => ({}));
@@ -503,11 +562,21 @@ export function DoctorsWorkspace({ id }: { id: string }) {
     setEditingDoctor(doc);
     setEditDocName(doc.name);
     setEditDocDeptId(doc.departmentId || "");
-    setEditDocSpecialist(doc.specialist || doc.department);
-    setEditDocPhone(doc.phone);
-    setEditDocQual(doc.qualification);
+    setEditDocSpecialist(doc.specialist || doc.department || "");
+    setEditDocDesignation(doc.designation || "");
+    setEditDocQual(doc.qualification || "");
+    setEditDocGender(doc.gender || "");
+    setEditDocPhone(doc.phone || "");
+    setEditDocDob(doc.dob || "");
+    setEditDocBloodGroup(doc.bloodGroup || "");
+    setEditDocAddress1(doc.address1 || "");
+    setEditDocAddress2(doc.address2 || "");
+    setEditDocCity(doc.city || "");
+    setEditDocZip(doc.zip || "");
+    setEditDocDescription(doc.description || "");
     setEditDocOpdCharge(String(doc.opdCharge));
     setEditDocApptCharge(String(doc.appointmentCharge));
+    setEditDocSlotMinutes(String(doc.slotMinutes || 60));
   };
 
   // Handle Edit Doctor via PUT /api/hms/doctors/{id}
@@ -527,10 +596,20 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           name: editDocName.trim(),
           departmentId: editDocDeptId || undefined,
           specialist: editDocSpecialist.trim(),
+          designation: editDocDesignation.trim() || undefined,
           qualification: editDocQual.trim(),
-          phone: editDocPhone.trim(),
+          gender: editDocGender || undefined,
+          phone: editDocPhone.trim() || undefined,
+          dateOfBirth: editDocDob || undefined,
+          bloodGroup: editDocBloodGroup || undefined,
+          address1: editDocAddress1.trim() || undefined,
+          address2: editDocAddress2.trim() || undefined,
+          city: editDocCity.trim() || undefined,
+          zip: editDocZip.trim() || undefined,
+          description: editDocDescription.trim() || undefined,
           opdCharge: parseFloat(editDocOpdCharge) || 0,
           appointmentCharge: parseFloat(editDocApptCharge) || 0,
+          slotMinutes: parseInt(editDocSlotMinutes) || 60,
           version: editingDoctor.version,
         }),
       });
@@ -1212,86 +1291,6 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   // DEFAULT VIEW: Sub-tab Lists
   return (
     <div className="legacy-page-container" style={{ padding: "24px" }}>
-      {/* Subtabs navigation */}
-      <div className="module-subtabs-nav" style={{ marginBottom: "20px" }}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <Link
-              key={tab.id}
-              href={tab.href}
-              className={`subtab-btn ${isActive ? "active" : ""}`}
-            >
-              {t(tab.label)}
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* Backend Status Banner */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          background: apiConnected
-            ? "rgba(16, 185, 129, 0.08)"
-            : "rgba(239, 68, 68, 0.08)",
-          border: `1px solid ${apiConnected ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
-          borderRadius: "8px",
-          padding: "10px 16px",
-          marginBottom: "16px",
-          fontSize: "13px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {apiConnected ? (
-            <CheckCircle2 size={16} color="#10b981" />
-          ) : (
-            <AlertCircle size={16} color="#ef4444" />
-          )}
-          <span
-            style={{
-              fontWeight: 500,
-              color: apiConnected ? "#10b981" : "#f87171",
-            }}
-          >
-            {apiConnected
-              ? t("Connected to PostgreSQL Doctor Workspace (Live Database)")
-              : t("Connecting to PostgreSQL Backend...")}
-          </span>
-          <span style={{ color: "#94a3b8" }}>•</span>
-          <span style={{ color: "#cbd5e1" }}>
-            {doctors.length} {t("doctors")} | {departments.length}{" "}
-            {t("departments")} | {schedules.length} {t("schedules")} |{" "}
-            {holidays.length} {t("holidays")} | {breaks.length} {t("breaks")} |{" "}
-            {opdCharges.length} {t("OPD charges")}
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => loadDoctorsData()}
-          disabled={isSyncing}
-          style={{
-            background: "transparent",
-            border: "1px solid #475569",
-            color: "#e2e8f0",
-            borderRadius: "6px",
-            padding: "4px 10px",
-            fontSize: "12px",
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-          }}
-          title={t("Sync Data")}
-        >
-          <RefreshCw size={12} className={isSyncing ? "animate-spin" : ""} />
-          {isSyncing ? t("Syncing...") : t("Sync Data")}
-        </button>
-      </div>
-
       {apiSuccessBanner && (
         <div
           style={{
@@ -1984,7 +1983,13 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         <div className="modal-backdrop-custom">
           <div
             className="modal-card-custom"
-            style={{ maxWidth: "560px", width: "100%" }}
+            style={{
+              maxWidth: "680px",
+              width: "100%",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
           >
             <div className="modal-header-custom">
               <h3 className="modal-title-custom">{t("New Doctor")}</h3>
@@ -1995,7 +2000,27 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreateDoctor} className="modal-body-custom">
+            <form
+              onSubmit={handleCreateDoctor}
+              className="modal-body-custom"
+              style={{ overflowY: "auto", padding: "20px 24px" }}
+            >
+              {apiErrorBanner && (
+                <div
+                  style={{
+                    marginBottom: "16px",
+                    padding: "10px 14px",
+                    background: "rgba(239, 68, 68, 0.15)",
+                    border: "1px solid #ef4444",
+                    borderRadius: "6px",
+                    color: "#fca5a5",
+                    fontSize: "13px",
+                  }}
+                >
+                  {apiErrorBanner}
+                </div>
+              )}
+
               <div
                 style={{
                   display: "grid",
@@ -2094,9 +2119,10 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 </div>
                 <div>
                   <label className="form-label-custom">
-                    {t("Designation")}:
+                    {t("Designation")}: <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
+                    required
                     placeholder="Senior Consultant"
                     className="form-input-custom"
                     value={docDesignation}
@@ -2115,24 +2141,30 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               >
                 <div>
                   <label className="form-label-custom">
-                    {t("Qualification")}:
+                    {t("Qualification")}: <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
-                    placeholder="MD, Specialist"
+                    required
+                    placeholder="MBBS, MD"
                     className="form-input-custom"
                     value={docQual}
                     onChange={(e) => setDocQual(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Gender")}:</label>
+                  <label className="form-label-custom">
+                    {t("Gender")}: <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
                   <select
+                    required
                     className="form-select-custom"
                     value={docGender}
                     onChange={(e) => setDocGender(e.target.value)}
                   >
+                    <option value="">{t("Select Gender")}</option>
                     <option value="male">{t("Male")}</option>
                     <option value="female">{t("Female")}</option>
+                    <option value="other">{t("Other")}</option>
                   </select>
                 </div>
               </div>
@@ -2142,9 +2174,36 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr 1fr",
                   gap: "16px",
-                  marginBottom: "20px",
+                  marginBottom: "16px",
                 }}
               >
+                <div>
+                  <label className="form-label-custom">{t("Date of Birth")}:</label>
+                  <input
+                    type="date"
+                    className="form-input-custom"
+                    value={docDob}
+                    onChange={(e) => setDocDob(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Blood Group")}:</label>
+                  <select
+                    className="form-select-custom"
+                    value={docBloodGroup}
+                    onChange={(e) => setDocBloodGroup(e.target.value)}
+                  >
+                    <option value="">{t("Select Blood Group")}</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                  </select>
+                </div>
                 <div>
                   <label className="form-label-custom">{t("Phone")}:</label>
                   <input
@@ -2153,6 +2212,31 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                     value={docPhone}
                     onChange={(e) => setDocPhone(e.target.value)}
                   />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label className="form-label-custom">{t("Slot Duration")}:</label>
+                  <select
+                    className="form-select-custom"
+                    value={docSlotMinutes}
+                    onChange={(e) => setDocSlotMinutes(e.target.value)}
+                  >
+                    <option value="15">15 {t("minutes")}</option>
+                    <option value="30">30 {t("minutes")}</option>
+                    <option value="45">45 {t("minutes")}</option>
+                    <option value="60">60 {t("minutes")}</option>
+                    <option value="90">90 {t("minutes")}</option>
+                    <option value="120">120 {t("minutes")}</option>
+                  </select>
                 </div>
                 <div>
                   <label className="form-label-custom">{t("OPD Charge (ETB)")}:</label>
@@ -2176,6 +2260,73 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                     onChange={(e) => setDocApptCharge(e.target.value)}
                   />
                 </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label className="form-label-custom">{t("Address Line 1")}:</label>
+                  <input
+                    placeholder="Street address"
+                    className="form-input-custom"
+                    value={docAddress1}
+                    onChange={(e) => setDocAddress1(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Address Line 2")}:</label>
+                  <input
+                    placeholder="Apartment, suite, unit"
+                    className="form-input-custom"
+                    value={docAddress2}
+                    onChange={(e) => setDocAddress2(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label className="form-label-custom">{t("City")}:</label>
+                  <input
+                    placeholder="City"
+                    className="form-input-custom"
+                    value={docCity}
+                    onChange={(e) => setDocCity(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Zip Code")}:</label>
+                  <input
+                    placeholder="Postal code"
+                    className="form-input-custom"
+                    value={docZip}
+                    onChange={(e) => setDocZip(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label className="form-label-custom">{t("Description / Bio")}:</label>
+                <textarea
+                  rows={2}
+                  placeholder="Doctor description, medical background, notes..."
+                  className="form-textarea-custom"
+                  value={docDescription}
+                  onChange={(e) => setDocDescription(e.target.value)}
+                />
               </div>
 
               <div
@@ -2210,7 +2361,13 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         <div className="modal-backdrop-custom">
           <div
             className="modal-card-custom"
-            style={{ maxWidth: "560px", width: "100%" }}
+            style={{
+              maxWidth: "680px",
+              width: "100%",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
           >
             <div className="modal-header-custom">
               <h3 className="modal-title-custom">
@@ -2223,7 +2380,27 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleUpdateDoctor} className="modal-body-custom">
+            <form
+              onSubmit={handleUpdateDoctor}
+              className="modal-body-custom"
+              style={{ overflowY: "auto", padding: "20px 24px" }}
+            >
+              {apiErrorBanner && (
+                <div
+                  style={{
+                    marginBottom: "16px",
+                    padding: "10px 14px",
+                    background: "rgba(239, 68, 68, 0.15)",
+                    border: "1px solid #ef4444",
+                    borderRadius: "6px",
+                    color: "#fca5a5",
+                    fontSize: "13px",
+                  }}
+                >
+                  {apiErrorBanner}
+                </div>
+              )}
+
               <div
                 style={{
                   display: "grid",
@@ -2277,11 +2454,87 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
+                  <label className="form-label-custom">{t("Designation")}:</label>
+                  <input
+                    className="form-input-custom"
+                    value={editDocDesignation}
+                    onChange={(e) => setEditDocDesignation(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
                   <label className="form-label-custom">{t("Qualification")}:</label>
                   <input
                     className="form-input-custom"
                     value={editDocQual}
                     onChange={(e) => setEditDocQual(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Gender")}:</label>
+                  <select
+                    className="form-select-custom"
+                    value={editDocGender}
+                    onChange={(e) => setEditDocGender(e.target.value)}
+                  >
+                    <option value="">{t("Select Gender")}</option>
+                    <option value="male">{t("Male")}</option>
+                    <option value="female">{t("Female")}</option>
+                    <option value="other">{t("Other")}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label className="form-label-custom">{t("Date of Birth")}:</label>
+                  <input
+                    type="date"
+                    className="form-input-custom"
+                    value={editDocDob}
+                    onChange={(e) => setEditDocDob(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Blood Group")}:</label>
+                  <select
+                    className="form-select-custom"
+                    value={editDocBloodGroup}
+                    onChange={(e) => setEditDocBloodGroup(e.target.value)}
+                  >
+                    <option value="">{t("Select Blood Group")}</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Phone")}:</label>
+                  <input
+                    className="form-input-custom"
+                    value={editDocPhone}
+                    onChange={(e) => setEditDocPhone(e.target.value)}
                   />
                 </div>
               </div>
@@ -2291,16 +2544,23 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr 1fr",
                   gap: "16px",
-                  marginBottom: "20px",
+                  marginBottom: "16px",
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Phone")}:</label>
-                  <input
-                    className="form-input-custom"
-                    value={editDocPhone}
-                    onChange={(e) => setEditDocPhone(e.target.value)}
-                  />
+                  <label className="form-label-custom">{t("Slot Duration")}:</label>
+                  <select
+                    className="form-select-custom"
+                    value={editDocSlotMinutes}
+                    onChange={(e) => setEditDocSlotMinutes(e.target.value)}
+                  >
+                    <option value="15">15 {t("minutes")}</option>
+                    <option value="30">30 {t("minutes")}</option>
+                    <option value="45">45 {t("minutes")}</option>
+                    <option value="60">60 {t("minutes")}</option>
+                    <option value="90">90 {t("minutes")}</option>
+                    <option value="120">120 {t("minutes")}</option>
+                  </select>
                 </div>
                 <div>
                   <label className="form-label-custom">{t("OPD Charge (ETB)")}:</label>
@@ -2324,6 +2584,73 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                     onChange={(e) => setEditDocApptCharge(e.target.value)}
                   />
                 </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label className="form-label-custom">{t("Address Line 1")}:</label>
+                  <input
+                    placeholder="Street address"
+                    className="form-input-custom"
+                    value={editDocAddress1}
+                    onChange={(e) => setEditDocAddress1(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Address Line 2")}:</label>
+                  <input
+                    placeholder="Apartment, suite, unit"
+                    className="form-input-custom"
+                    value={editDocAddress2}
+                    onChange={(e) => setEditDocAddress2(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label className="form-label-custom">{t("City")}:</label>
+                  <input
+                    placeholder="City"
+                    className="form-input-custom"
+                    value={editDocCity}
+                    onChange={(e) => setEditDocCity(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Zip Code")}:</label>
+                  <input
+                    placeholder="Postal code"
+                    className="form-input-custom"
+                    value={editDocZip}
+                    onChange={(e) => setEditDocZip(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label className="form-label-custom">{t("Description / Bio")}:</label>
+                <textarea
+                  rows={2}
+                  placeholder="Doctor description, medical background, notes..."
+                  className="form-textarea-custom"
+                  value={editDocDescription}
+                  onChange={(e) => setEditDocDescription(e.target.value)}
+                />
               </div>
 
               <div
@@ -2358,7 +2685,13 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         <div className="modal-backdrop-custom">
           <div
             className="modal-card-custom"
-            style={{ maxWidth: "560px", width: "100%" }}
+            style={{
+              maxWidth: "620px",
+              width: "100%",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
           >
             <div className="modal-header-custom">
               <h3 className="modal-title-custom">
@@ -2371,7 +2704,10 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 <X size={18} />
               </button>
             </div>
-            <div className="modal-body-custom">
+            <div
+              className="modal-body-custom"
+              style={{ overflowY: "auto", padding: "20px 24px" }}
+            >
               <div
                 style={{
                   display: "flex",
@@ -2394,11 +2730,15 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   {viewingDoctor.initials}
                 </div>
                 <div>
-                  <h4 style={{ margin: "0 0 4px 0", color: "#f8fafc", fontSize: "18px" }}>
+                  <h4
+                    className="doctor-modal-heading"
+                    style={{ margin: "0 0 4px 0", fontSize: "18px" }}
+                  >
                     {viewingDoctor.name}
                   </h4>
-                  <div style={{ color: "#94a3b8", fontSize: "13px" }}>
-                    {viewingDoctor.email} • {viewingDoctor.phone || "No phone"}
+                  <div className="doctor-modal-sub" style={{ fontSize: "13px" }}>
+                    {viewingDoctor.email}{" "}
+                    {viewingDoctor.phone ? `• ${viewingDoctor.phone}` : ""}
                   </div>
                 </div>
               </div>
@@ -2407,60 +2747,134 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 1fr",
-                  gap: "14px",
+                  gap: "12px",
                   fontSize: "13px",
-                  marginBottom: "20px",
+                  marginBottom: "16px",
                 }}
               >
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("Department")}: </span>
-                  <strong style={{ color: "#e2e8f0" }}>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Department")}: </span>
+                  <strong className="doctor-detail-value">
                     {viewingDoctor.department || "General Medicine"}
                   </strong>
                 </div>
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("Specialist")}: </span>
-                  <strong style={{ color: "#e2e8f0" }}>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Specialist")}: </span>
+                  <strong className="doctor-detail-value">
                     {viewingDoctor.specialist || viewingDoctor.qualification || "-"}
                   </strong>
                 </div>
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("Qualification")}: </span>
-                  <strong style={{ color: "#e2e8f0" }}>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Designation")}: </span>
+                  <strong className="doctor-detail-value">
+                    {viewingDoctor.designation || "-"}
+                  </strong>
+                </div>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Qualification")}: </span>
+                  <strong className="doctor-detail-value">
                     {viewingDoctor.qualification || "-"}
                   </strong>
                 </div>
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("Status")}: </span>
-                  <strong style={{ color: viewingDoctor.status ? "#34d399" : "#f87171" }}>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Gender")}: </span>
+                  <strong
+                    className="doctor-detail-value"
+                    style={{ textTransform: "capitalize" }}
+                  >
+                    {viewingDoctor.gender || "-"}
+                  </strong>
+                </div>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Date of Birth")}: </span>
+                  <strong className="doctor-detail-value">
+                    {viewingDoctor.dob || "-"}
+                  </strong>
+                </div>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Blood Group")}: </span>
+                  <strong className="doctor-detail-value">
+                    {viewingDoctor.bloodGroup || "-"}
+                  </strong>
+                </div>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Status")}: </span>
+                  <strong
+                    style={{
+                      color: viewingDoctor.status ? "#10b981" : "#ef4444",
+                    }}
+                  >
                     {viewingDoctor.status ? t("Active") : t("Inactive")}
                   </strong>
                 </div>
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("OPD Consultation Charge")}: </span>
-                  <strong style={{ color: "#34d399" }}>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">
+                    {t("OPD Consultation Charge")}:{" "}
+                  </span>
+                  <strong style={{ color: "#10b981" }}>
                     {viewingDoctor.opdCharge} ETB
                   </strong>
                 </div>
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("Appointment Charge")}: </span>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">
+                    {t("Appointment Charge")}:{" "}
+                  </span>
                   <strong style={{ color: "#38bdf8" }}>
                     {viewingDoctor.appointmentCharge} ETB
                   </strong>
                 </div>
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("Slot Duration")}: </span>
-                  <strong style={{ color: "#e2e8f0" }}>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Slot Duration")}: </span>
+                  <strong className="doctor-detail-value">
                     {viewingDoctor.slotMinutes} {t("minutes")}
                   </strong>
                 </div>
-                <div>
-                  <span style={{ color: "#94a3b8" }}>{t("Account ID")}: </span>
-                  <code style={{ color: "#cbd5e1", fontSize: "11px" }}>
+                <div className="doctor-detail-box">
+                  <span className="doctor-detail-label">{t("Account ID")}: </span>
+                  <code style={{ fontSize: "11px", wordBreak: "break-all" }}>
                     {viewingDoctor.id}
                   </code>
                 </div>
               </div>
+
+              {(viewingDoctor.address1 || viewingDoctor.city) && (
+                <div
+                  className="doctor-detail-box"
+                  style={{ marginBottom: "12px", fontSize: "13px" }}
+                >
+                  <span className="doctor-detail-label">{t("Address")}: </span>
+                  <span className="doctor-detail-value">
+                    {[
+                      viewingDoctor.address1,
+                      viewingDoctor.address2,
+                      viewingDoctor.city,
+                      viewingDoctor.zip,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </span>
+                </div>
+              )}
+
+              {viewingDoctor.description && (
+                <div
+                  className="doctor-detail-box"
+                  style={{ marginBottom: "16px", fontSize: "13px" }}
+                >
+                  <div
+                    className="doctor-detail-label"
+                    style={{ marginBottom: "4px" }}
+                  >
+                    {t("Description / Bio")}:
+                  </div>
+                  <div
+                    className="doctor-detail-value"
+                    style={{ lineHeight: "1.5" }}
+                  >
+                    {viewingDoctor.description}
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button

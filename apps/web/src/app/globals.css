@@ -3794,3 +3794,41 @@ input:checked + .slider:before {
   background: #f8fafc;
   border-color: #cbd5e1;
 }
+
+/* Doctor Details & Modal Theme Tokens */
+.doctor-modal-heading {
+  color: #f8fafc;
+  font-weight: 600;
+}
+.doctor-modal-sub {
+  color: #94a3b8;
+}
+.doctor-detail-label {
+  color: #94a3b8;
+}
+.doctor-detail-value {
+  color: #f1f5f9;
+}
+.doctor-detail-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.legacy-shell:not(.legacy-dark) .doctor-modal-heading {
+  color: #0f172a;
+}
+.legacy-shell:not(.legacy-dark) .doctor-modal-sub {
+  color: #64748b;
+}
+.legacy-shell:not(.legacy-dark) .doctor-detail-label {
+  color: #64748b;
+}
+.legacy-shell:not(.legacy-dark) .doctor-detail-value {
+  color: #0f172a;
+}
+.legacy-shell:not(.legacy-dark) .doctor-detail-box {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
