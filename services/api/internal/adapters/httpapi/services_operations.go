@@ -118,6 +118,9 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 		switch {
 		case r.URL.Path == "/v1/services" && r.Method == "GET":
 			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+			if page < 1 {
+				page = 1
+			}
 			var status *int
 			if qStatus := r.URL.Query().Get("status"); qStatus != "" {
 				st, _ := strconv.Atoi(qStatus)

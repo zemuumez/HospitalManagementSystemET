@@ -42,12 +42,29 @@ interface InsuranceItem {
   totalAmount: number;
 }
 
+interface PackageServiceLine {
+  id?: string;
+  packageId?: string;
+  serviceId: string;
+  serviceName?: string;
+  quantity: number;
+  rateMinor: number;
+  rate: number;
+  amountMinor: number;
+  amount: number;
+}
+
 interface PackageItem {
   id: string;
   name: string;
+  description?: string;
   discount: number;
+  totalAmountMinor: number;
   totalAmount: number;
-  status: boolean;
+  currencySymbol: string;
+  services: PackageServiceLine[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ServiceItem {
@@ -155,47 +172,29 @@ export function ServicesWorkspace({
   >([{ id: "1", name: "", charge: "" }]);
 
   // Packages State
-  const [packages, setPackages] = useState<PackageItem[]>([
-    {
-      id: "PKG-01",
-      name: "Checkup",
-      discount: 15,
-      totalAmount: 350,
-      status: true,
-    },
-    {
-      id: "PKG-02",
-      name: "All in 1",
-      discount: 20,
-      totalAmount: 750,
-      status: true,
-    },
-    {
-      id: "PKG-03",
-      name: "Fever Package",
-      discount: 10,
-      totalAmount: 180,
-      status: true,
-    },
-    {
-      id: "PKG-04",
-      name: "Daat Test",
-      discount: 5,
-      totalAmount: 120,
-      status: true,
-    },
-    {
-      id: "PKG-05",
-      name: "dental",
-      discount: 10,
-      totalAmount: 200,
-      status: true,
-    },
-  ]);
+  const [packages, setPackages] = useState<PackageItem[]>([]);
   const [packageModal, setPackageModal] = useState(false);
+  const [packageEditModal, setPackageEditModal] = useState(false);
+  const [packageDetailModal, setPackageDetailModal] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(
+    null,
+  );
+
+  // New Package Form State
   const [pkgName, setPkgName] = useState("");
-  const [pkgDiscount, setPkgDiscount] = useState("");
-  const [pkgAmount, setPkgAmount] = useState("");
+  const [pkgDescription, setPkgDescription] = useState("");
+  const [pkgDiscount, setPkgDiscount] = useState("0");
+  const [pkgLines, setPkgLines] = useState<
+    { id: string; serviceId: string; quantity: string; rate: string }[]
+  >([{ id: "1", serviceId: "", quantity: "1", rate: "0" }]);
+
+  // Edit Package Form State
+  const [editPkgName, setEditPkgName] = useState("");
+  const [editPkgDescription, setEditPkgDescription] = useState("");
+  const [editPkgDiscount, setEditPkgDiscount] = useState("0");
+  const [editPkgLines, setEditPkgLines] = useState<
+    { id?: string; serviceId: string; quantity: string; rate: string }[]
+  >([]);
 
   // Services State
   const [services, setServices] = useState<ServiceItem[]>([
@@ -344,11 +343,126 @@ export function ServicesWorkspace({
     return acc + (isNaN(val) ? 0 : val);
   }, 0);
 
+  // Dynamic Service Lines Helpers for Packages
+  function resetPackageForm() {
+    setPkgName("");
+    setPkgDescription("");
+    setPkgDiscount("0");
+    setPkgLines([{ id: "1", serviceId: "", quantity: "1", rate: "0" }]);
+  }
+
+  function addPkgLine() {
+    setPkgLines((prev) => [
+      ...prev,
+      { id: String(Date.now()), serviceId: "", quantity: "1", rate: "0" },
+    ]);
+  }
+
+  function removePkgLine(index: number) {
+    if (pkgLines.length <= 1) return;
+    setPkgLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updatePkgLine(
+    index: number,
+    field: "serviceId" | "quantity" | "rate",
+    value: string,
+  ) {
+    setPkgLines((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        if (field === "serviceId") {
+          const selectedSrv = services.find((s) => s.id === value);
+          const defaultRate = selectedSrv ? String(selectedSrv.rate) : row.rate;
+          return { ...row, serviceId: value, rate: defaultRate };
+        }
+        return { ...row, [field]: value };
+      }),
+    );
+  }
+
+  function addEditPkgLine() {
+    setEditPkgLines((prev) => [
+      ...prev,
+      { serviceId: "", quantity: "1", rate: "0" },
+    ]);
+  }
+
+  function removeEditPkgLine(index: number) {
+    if (editPkgLines.length <= 1) return;
+    setEditPkgLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateEditPkgLine(
+    index: number,
+    field: "serviceId" | "quantity" | "rate",
+    value: string,
+  ) {
+    setEditPkgLines((prev) =>
+      prev.map((row, i) => {
+        if (i !== index) return row;
+        if (field === "serviceId") {
+          const selectedSrv = services.find((s) => s.id === value);
+          const defaultRate = selectedSrv ? String(selectedSrv.rate) : row.rate;
+          return { ...row, serviceId: value, rate: defaultRate };
+        }
+        return { ...row, [field]: value };
+      }),
+    );
+  }
+
+  function calculatePreviewTotals(
+    lines: { serviceId: string; quantity: string; rate: string }[],
+    discountPercent: string,
+  ) {
+    let subtotalMinor = 0;
+    for (const line of lines) {
+      const q = Math.max(0, parseInt(line.quantity, 10) || 0);
+      const r = Math.max(0, Math.round((parseFloat(line.rate) || 0) * 100));
+      subtotalMinor += q * r;
+    }
+    const disc = Math.max(0, Math.min(100, parseInt(discountPercent, 10) || 0));
+    const discountAmountMinor = Math.floor((subtotalMinor * disc + 50) / 100);
+    const totalAmountMinor = Math.max(0, subtotalMinor - discountAmountMinor);
+
+    return {
+      subtotal: subtotalMinor / 100,
+      discountAmount: discountAmountMinor / 100,
+      total: totalAmountMinor / 100,
+    };
+  }
+
+  function openPackageEdit(pkg: PackageItem) {
+    setSelectedPackage(pkg);
+    setEditPkgName(pkg.name);
+    setEditPkgDescription(pkg.description || "");
+    setEditPkgDiscount(String(pkg.discount));
+    setEditPkgLines(
+      pkg.services && pkg.services.length > 0
+        ? pkg.services.map((s) => ({
+            id: s.id,
+            serviceId: s.serviceId,
+            quantity: String(s.quantity),
+            rate: String(s.rate),
+          }))
+        : [{ serviceId: "", quantity: "1", rate: "0" }],
+    );
+    setPackageEditModal(true);
+  }
+
+  function openPackageDetail(pkg: PackageItem) {
+    setSelectedPackage(pkg);
+    setPackageDetailModal(true);
+  }
+
+  const createPreview = calculatePreviewTotals(pkgLines, pkgDiscount);
+  const editPreview = calculatePreviewTotals(editPkgLines, editPkgDiscount);
+
   /* -------------------------------------------------------------
      LIVE BACKEND API INTEGRATION (Go / PostgreSQL /v1/services & /v1/ambulances)
      ------------------------------------------------------------- */
   const [apiConnected, setApiConnected] = useState(false);
-  const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [isLoadingApi, setIsLoadingApi] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
@@ -358,7 +472,7 @@ export function ServicesWorkspace({
     let connected = false;
     try {
       const [srvRes, ambRes, callRes, pkgRes, insRes] = await Promise.all([
-        fetch("/api/hms/services"),
+        fetch("/api/hms/services?page=1&limit=100"),
         fetch("/api/hms/ambulances"),
         fetch("/api/hms/ambulance-calls"),
         fetch("/api/hms/packages"),
@@ -373,7 +487,7 @@ export function ServicesWorkspace({
               id: s.id,
               name: s.name,
               quantity: s.quantity || 1,
-              rate: (s.rateMinor || 0) / 100,
+              rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
               status: s.status === 1,
             })),
           );
@@ -429,14 +543,32 @@ export function ServicesWorkspace({
 
       if (pkgRes.ok) {
         const pkgData = await pkgRes.json();
-        if (Array.isArray(pkgData.packages) && pkgData.packages.length > 0) {
+        if (Array.isArray(pkgData.packages)) {
           setPackages(
             pkgData.packages.map((p: any) => ({
               id: p.id,
               name: p.name,
+              description: p.description || "",
               discount: p.discount || 0,
-              totalAmount: (p.totalAmountMinor || 0) / 100,
-              status: p.status === 1,
+              totalAmountMinor: p.total_amount_minor ?? p.totalAmountMinor ?? 0,
+              totalAmount:
+                (p.total_amount_minor ?? p.totalAmountMinor ?? 0) / 100,
+              currencySymbol: p.currency_symbol || p.currencySymbol || "ETB",
+              services: Array.isArray(p.services)
+                ? p.services.map((s: any) => ({
+                    id: s.id,
+                    packageId: s.package_id || s.packageId,
+                    serviceId: s.service_id || s.serviceId,
+                    serviceName: s.service_name || s.serviceName || "",
+                    quantity: s.quantity || 1,
+                    rateMinor: s.rate_minor ?? s.rateMinor ?? 0,
+                    rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
+                    amountMinor: s.amount_minor ?? s.amountMinor ?? 0,
+                    amount: (s.amount_minor ?? s.amountMinor ?? 0) / 100,
+                  }))
+                : [],
+              createdAt: p.created_at || p.createdAt,
+              updatedAt: p.updated_at || p.updatedAt,
             })),
           );
         }
@@ -672,53 +804,160 @@ export function ServicesWorkspace({
 
   async function handleCreatePackage(e: React.FormEvent) {
     e.preventDefault();
-    if (!pkgName.trim()) return;
+    if (!pkgName.trim()) {
+      setApiErrorBanner(t("Package name is required"));
+      return;
+    }
+    const validLines = pkgLines.filter((l) => l.serviceId);
+    if (validLines.length === 0) {
+      setApiErrorBanner(t("Package must contain at least one service"));
+      return;
+    }
+
     setIsSubmitting(true);
     setApiErrorBanner("");
     setApiSuccessBanner("");
-    const amt = parseFloat(pkgAmount) || 0;
-    const disc = parseFloat(pkgDiscount) || 0;
 
     try {
+      const payload = {
+        name: pkgName.trim(),
+        description: pkgDescription.trim(),
+        discount: Math.max(0, Math.min(100, parseInt(pkgDiscount, 10) || 0)),
+        services: validLines.map((l) => ({
+          service_id: l.serviceId,
+          serviceId: l.serviceId,
+          quantity: Math.max(1, parseInt(l.quantity, 10) || 1),
+          rate_minor: Math.round((parseFloat(l.rate) || 0) * 100),
+          rateMinor: Math.round((parseFloat(l.rate) || 0) * 100),
+        })),
+      };
+
       const res = await fetch("/api/hms/packages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: pkgName.trim(),
-          discount: disc,
-          totalAmountMinor: Math.round(amt * 100),
-          status: 1,
-        }),
+        body: JSON.stringify(payload),
       });
+
       if (res.ok) {
         setApiSuccessBanner(t("Medical package registered in catalog"));
-        loadServicesData();
         setPackageModal(false);
-        setPkgName("");
-        setPkgDiscount("");
-        setPkgAmount("");
-        setIsSubmitting(false);
+        resetPackageForm();
+        await loadServicesData();
         return;
       }
+
+      const err = await res.json().catch(() => ({}));
+      setApiErrorBanner(
+        err.message || err.error || t("Failed to save package"),
+      );
     } catch {
-      // Fallback
+      setApiErrorBanner(
+        t("The hospital service is unavailable. Please try again shortly."),
+      );
     } finally {
       setIsSubmitting(false);
     }
-    setPackages((prev) => [
-      {
-        id: `PKG-${prev.length + 1}`,
-        name: pkgName.trim(),
-        discount: disc,
-        totalAmount: amt,
-        status: true,
-      },
-      ...prev,
-    ]);
-    setPackageModal(false);
-    setPkgName("");
-    setPkgDiscount("");
-    setPkgAmount("");
+  }
+
+  async function handleUpdatePackage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedPackage?.id || !editPkgName.trim()) {
+      setApiErrorBanner(t("Package name is required"));
+      return;
+    }
+    const validLines = editPkgLines.filter((l) => l.serviceId);
+    if (validLines.length === 0) {
+      setApiErrorBanner(t("Package must contain at least one service"));
+      return;
+    }
+
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const payload = {
+        name: editPkgName.trim(),
+        description: editPkgDescription.trim(),
+        discount: Math.max(
+          0,
+          Math.min(100, parseInt(editPkgDiscount, 10) || 0),
+        ),
+        services: validLines.map((l) => ({
+          ...(l.id ? { id: l.id } : {}),
+          service_id: l.serviceId,
+          serviceId: l.serviceId,
+          quantity: Math.max(1, parseInt(l.quantity, 10) || 1),
+          rate_minor: Math.round((parseFloat(l.rate) || 0) * 100),
+          rateMinor: Math.round((parseFloat(l.rate) || 0) * 100),
+        })),
+      };
+
+      const res = await fetch(`/api/hms/packages/${selectedPackage.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setApiSuccessBanner(t("Medical package updated successfully"));
+        setPackageEditModal(false);
+        setSelectedPackage(null);
+        await loadServicesData();
+        return;
+      }
+
+      const err = await res.json().catch(() => ({}));
+      setApiErrorBanner(
+        err.message || err.error || t("Failed to update package"),
+      );
+    } catch {
+      setApiErrorBanner(
+        t("The hospital service is unavailable. Please try again shortly."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeletePackage(pkgId: string) {
+    if (!window.confirm(t("Are you sure you want to delete this package?"))) {
+      return;
+    }
+
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch(`/api/hms/packages/${pkgId}`, {
+        method: "DELETE",
+      });
+
+      if (res.status === 204 || res.ok) {
+        setApiSuccessBanner(t("Package removed from catalog"));
+        await loadServicesData();
+        return;
+      }
+
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 409 || err.error === "RECORD_IN_USE") {
+        setApiErrorBanner(
+          err.message ||
+            t("Package is in use by patient admissions and cannot be deleted"),
+        );
+      } else {
+        setApiErrorBanner(
+          err.message || err.error || t("Failed to delete package"),
+        );
+      }
+    } catch {
+      setApiErrorBanner(
+        t("The hospital service is unavailable. Please try again shortly."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function handleSaveInsurance(e: React.FormEvent) {
@@ -1024,7 +1263,10 @@ export function ServicesWorkspace({
      RENDER: STANDARD TABBED LISTING VIEW
      ------------------------------------------------------------- */
   return (
-    <div className="legacy-workspace">
+    <div
+      className="legacy-workspace"
+      data-ready={!isLoadingApi ? "true" : "false"}
+    >
       {/* Top subtabs */}
       <div className="module-subtabs-nav">
         {tabs.map((tab) => (
@@ -1297,8 +1539,12 @@ export function ServicesWorkspace({
             </div>
             <div className="d-flex gap-2">
               <button
+                type="button"
                 className="btn-action-blue"
-                onClick={() => setPackageModal(true)}
+                onClick={() => {
+                  resetPackageForm();
+                  setPackageModal(true);
+                }}
               >
                 {t("New Package")}
               </button>
@@ -1312,58 +1558,64 @@ export function ServicesWorkspace({
                   <th>{t("PACKAGE NAME")} ↕</th>
                   <th>{t("DISCOUNT")} ↕</th>
                   <th>{t("TOTAL AMOUNT")} ↕</th>
-                  <th>{t("STATUS")}</th>
                   <th>{t("ACTION")}</th>
                 </tr>
               </thead>
               <tbody>
                 {packages
-                  .filter((p) =>
-                    p.name.toLowerCase().includes(search.toLowerCase()),
+                  .filter(
+                    (p) =>
+                      p.name.toLowerCase().includes(search.toLowerCase()) ||
+                      (p.description &&
+                        p.description
+                          .toLowerCase()
+                          .includes(search.toLowerCase())),
                   )
                   .map((pkg) => (
                     <tr key={pkg.id}>
                       <td>
-                        <span className="fw-semibold text-primary">
-                          {pkg.name}
-                        </span>
+                        <div>
+                          <span className="fw-semibold text-primary">
+                            {pkg.name}
+                          </span>
+                          {pkg.description && (
+                            <div className="fs-8 text-muted mt-0.5">
+                              {pkg.description}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td>{pkg.discount}%</td>
-                      <td>${pkg.totalAmount.toLocaleString()}</td>
                       <td>
-                        <label className="switch-toggle">
-                          <input
-                            type="checkbox"
-                            checked={pkg.status}
-                            onChange={() =>
-                              setPackages((prev) =>
-                                prev.map((x) =>
-                                  x.id === pkg.id
-                                    ? { ...x, status: !x.status }
-                                    : x,
-                                ),
-                              )
-                            }
-                          />
-                          <span className="slider-toggle"></span>
-                        </label>
+                        ETB{" "}
+                        {pkg.totalAmount.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </td>
                       <td>
                         <div className="d-flex gap-2">
                           <button
+                            type="button"
+                            className="btn-icon-blue-link"
+                            title={t("View")}
+                            onClick={() => openPackageDetail(pkg)}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            type="button"
                             className="btn-icon-blue-link"
                             title={t("Edit")}
+                            onClick={() => openPackageEdit(pkg)}
                           >
                             <Edit2 size={16} />
                           </button>
                           <button
+                            type="button"
                             className="btn-icon-danger"
                             title={t("Delete")}
-                            onClick={() =>
-                              setPackages((prev) =>
-                                prev.filter((x) => x.id !== pkg.id),
-                              )
-                            }
+                            onClick={() => handleDeletePackage(pkg.id)}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -1371,6 +1623,13 @@ export function ServicesWorkspace({
                       </td>
                     </tr>
                   ))}
+                {packages.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="text-center py-4 text-muted">
+                      {t("No medical packages found in catalog")}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1682,7 +1941,7 @@ export function ServicesWorkspace({
       {/* MODAL: NEW PACKAGE */}
       {packageModal && (
         <div className="modal-backdrop-custom">
-          <div className="modal-card-custom" style={{ maxWidth: "500px" }}>
+          <div className="modal-card-custom" style={{ maxWidth: "680px" }}>
             <div className="modal-header-custom d-flex justify-content-between align-items-center">
               <h3>{t("New Package")}</h3>
               <button
@@ -1707,6 +1966,16 @@ export function ServicesWorkspace({
                   />
                 </div>
                 <div className="form-group-custom mb-3">
+                  <label>{t("Description")}:</label>
+                  <textarea
+                    rows={2}
+                    className="form-control-custom w-100"
+                    placeholder={t("Description")}
+                    value={pkgDescription}
+                    onChange={(e) => setPkgDescription(e.target.value)}
+                  />
+                </div>
+                <div className="form-group-custom mb-3">
                   <label>{t("Discount (%)")}:</label>
                   <input
                     type="number"
@@ -1717,18 +1986,134 @@ export function ServicesWorkspace({
                     onChange={(e) => setPkgDiscount(e.target.value)}
                   />
                 </div>
-                <div className="form-group-custom mb-3">
-                  <label>
-                    {t("Total Amount")}: <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    placeholder="0.00"
-                    value={pkgAmount}
-                    onChange={(e) => setPkgAmount(e.target.value)}
-                  />
+
+                <div className="mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <h4 className="fs-6 fw-bold mb-0">{t("Services")}</h4>
+                    <button
+                      type="button"
+                      className="btn-action-blue btn-sm py-1 px-2"
+                      onClick={addPkgLine}
+                    >
+                      <Plus size={14} className="me-1" />
+                      {t("Add Service")}
+                    </button>
+                  </div>
+
+                  <div className="table-responsive">
+                    <table className="billing-table w-100">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "40px" }}>#</th>
+                          <th>
+                            {t("Service")}{" "}
+                            <span className="text-danger">*</span>
+                          </th>
+                          <th style={{ width: "100px" }}>
+                            {t("Quantity")}{" "}
+                            <span className="text-danger">*</span>
+                          </th>
+                          <th style={{ width: "130px" }}>
+                            {t("Rate")} (ETB){" "}
+                            <span className="text-danger">*</span>
+                          </th>
+                          <th style={{ width: "120px" }}>
+                            {t("Amount")} (ETB)
+                          </th>
+                          <th style={{ width: "60px" }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pkgLines.map((row, idx) => {
+                          const lineAmount =
+                            Math.max(0, parseInt(row.quantity, 10) || 0) *
+                            Math.max(0, parseFloat(row.rate) || 0);
+                          return (
+                            <tr key={row.id}>
+                              <td>{idx + 1}</td>
+                              <td>
+                                <select
+                                  required
+                                  className="form-control-custom w-100"
+                                  value={row.serviceId}
+                                  onChange={(e) =>
+                                    updatePkgLine(
+                                      idx,
+                                      "serviceId",
+                                      e.target.value,
+                                    )
+                                  }
+                                >
+                                  <option value="">
+                                    -- {t("Select Service")} --
+                                  </option>
+                                  {services.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name} ({s.rate} ETB)
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  required
+                                  className="form-control-custom w-100"
+                                  value={row.quantity}
+                                  onChange={(e) =>
+                                    updatePkgLine(
+                                      idx,
+                                      "quantity",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  required
+                                  className="form-control-custom w-100"
+                                  value={row.rate}
+                                  onChange={(e) =>
+                                    updatePkgLine(idx, "rate", e.target.value)
+                                  }
+                                />
+                              </td>
+                              <td>ETB {lineAmount.toFixed(2)}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn-icon-danger"
+                                  disabled={pkgLines.length <= 1}
+                                  onClick={() => removePkgLine(idx)}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="d-flex flex-column align-items-end mt-3 gap-1 fs-7">
+                    <div>
+                      {t("Subtotal")}: ETB {createPreview.subtotal.toFixed(2)}
+                    </div>
+                    <div>
+                      {t("Discount (%)")}: -ETB{" "}
+                      {createPreview.discountAmount.toFixed(2)} ({pkgDiscount}%)
+                    </div>
+                    <div className="fs-6 fw-bold text-primary mt-1">
+                      {t("Estimated Total")}: ETB{" "}
+                      {createPreview.total.toFixed(2)}
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="modal-footer-custom d-flex justify-content-end gap-2">
@@ -1756,6 +2141,309 @@ export function ServicesWorkspace({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT PACKAGE */}
+      {packageEditModal && selectedPackage && (
+        <div className="modal-backdrop-custom">
+          <div className="modal-card-custom" style={{ maxWidth: "680px" }}>
+            <div className="modal-header-custom d-flex justify-content-between align-items-center">
+              <h3>{t("Edit Package")}</h3>
+              <button
+                className="btn-close-custom"
+                onClick={() => setPackageEditModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleUpdatePackage}>
+              <div className="modal-body-custom">
+                <div className="form-group-custom mb-3">
+                  <label>
+                    {t("Package Name")}: <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={t("Package Name")}
+                    value={editPkgName}
+                    onChange={(e) => setEditPkgName(e.target.value)}
+                  />
+                </div>
+                <div className="form-group-custom mb-3">
+                  <label>{t("Description")}:</label>
+                  <textarea
+                    rows={2}
+                    className="form-control-custom w-100"
+                    placeholder={t("Description")}
+                    value={editPkgDescription}
+                    onChange={(e) => setEditPkgDescription(e.target.value)}
+                  />
+                </div>
+                <div className="form-group-custom mb-3">
+                  <label>{t("Discount (%)")}:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                    value={editPkgDiscount}
+                    onChange={(e) => setEditPkgDiscount(e.target.value)}
+                  />
+                </div>
+
+                <div className="mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <h4 className="fs-6 fw-bold mb-0">{t("Services")}</h4>
+                    <button
+                      type="button"
+                      className="btn-action-blue btn-sm py-1 px-2"
+                      onClick={addEditPkgLine}
+                    >
+                      <Plus size={14} className="me-1" />
+                      {t("Add Service")}
+                    </button>
+                  </div>
+
+                  <div className="table-responsive">
+                    <table className="billing-table w-100">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "40px" }}>#</th>
+                          <th>
+                            {t("Service")}{" "}
+                            <span className="text-danger">*</span>
+                          </th>
+                          <th style={{ width: "100px" }}>
+                            {t("Quantity")}{" "}
+                            <span className="text-danger">*</span>
+                          </th>
+                          <th style={{ width: "130px" }}>
+                            {t("Rate")} (ETB){" "}
+                            <span className="text-danger">*</span>
+                          </th>
+                          <th style={{ width: "120px" }}>
+                            {t("Amount")} (ETB)
+                          </th>
+                          <th style={{ width: "60px" }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editPkgLines.map((row, idx) => {
+                          const lineAmount =
+                            Math.max(0, parseInt(row.quantity, 10) || 0) *
+                            Math.max(0, parseFloat(row.rate) || 0);
+                          return (
+                            <tr key={row.id || idx}>
+                              <td>{idx + 1}</td>
+                              <td>
+                                <select
+                                  required
+                                  className="form-control-custom w-100"
+                                  value={row.serviceId}
+                                  onChange={(e) =>
+                                    updateEditPkgLine(
+                                      idx,
+                                      "serviceId",
+                                      e.target.value,
+                                    )
+                                  }
+                                >
+                                  <option value="">
+                                    -- {t("Select Service")} --
+                                  </option>
+                                  {services.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name} ({s.rate} ETB)
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  required
+                                  className="form-control-custom w-100"
+                                  value={row.quantity}
+                                  onChange={(e) =>
+                                    updateEditPkgLine(
+                                      idx,
+                                      "quantity",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  required
+                                  className="form-control-custom w-100"
+                                  value={row.rate}
+                                  onChange={(e) =>
+                                    updateEditPkgLine(
+                                      idx,
+                                      "rate",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td>ETB {lineAmount.toFixed(2)}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn-icon-danger"
+                                  disabled={editPkgLines.length <= 1}
+                                  onClick={() => removeEditPkgLine(idx)}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="d-flex flex-column align-items-end mt-3 gap-1 fs-7">
+                    <div>
+                      {t("Subtotal")}: ETB {editPreview.subtotal.toFixed(2)}
+                    </div>
+                    <div>
+                      {t("Discount (%)")}: -ETB{" "}
+                      {editPreview.discountAmount.toFixed(2)} ({editPkgDiscount}
+                      %)
+                    </div>
+                    <div className="fs-6 fw-bold text-primary mt-1">
+                      {t("Estimated Total")}: ETB {editPreview.total.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer-custom d-flex justify-content-end gap-2">
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn-action-grey"
+                  disabled={isSubmitting}
+                  onClick={() => setPackageEditModal(false)}
+                >
+                  {t("Cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PACKAGE DETAILS */}
+      {packageDetailModal && selectedPackage && (
+        <div className="modal-backdrop-custom">
+          <div className="modal-card-custom" style={{ maxWidth: "640px" }}>
+            <div className="modal-header-custom d-flex justify-content-between align-items-center">
+              <h3>{t("Package Details")}</h3>
+              <button
+                className="btn-close-custom"
+                onClick={() => setPackageDetailModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body-custom">
+              <div className="mb-3">
+                <div className="fs-5 fw-bold text-primary mb-1">
+                  {selectedPackage.name}
+                </div>
+                {selectedPackage.description && (
+                  <p className="text-muted fs-7 mb-2">
+                    {selectedPackage.description}
+                  </p>
+                )}
+                <div className="d-flex gap-4 fs-7 bg-light p-2 rounded">
+                  <div>
+                    <span className="text-muted">{t("Discount (%)")}: </span>
+                    <span className="fw-semibold">
+                      {selectedPackage.discount}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted">{t("Total Amount")}: </span>
+                    <span className="fw-semibold text-primary">
+                      ETB {selectedPackage.totalAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <h4 className="fs-6 fw-bold mb-2">{t("Services")}</h4>
+              <div className="table-responsive">
+                <table className="billing-table w-100">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "40px" }}>#</th>
+                      <th>{t("Service")}</th>
+                      <th>{t("Quantity")}</th>
+                      <th>{t("Rate")} (ETB)</th>
+                      <th>{t("Amount")} (ETB)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedPackage.services.map((s, idx) => (
+                      <tr key={s.id || idx}>
+                        <td>{idx + 1}</td>
+                        <td className="fw-semibold">
+                          {s.serviceName ||
+                            services.find((srv) => srv.id === s.serviceId)
+                              ?.name ||
+                            s.serviceId}
+                        </td>
+                        <td>{s.quantity}</td>
+                        <td>ETB {s.rate.toFixed(2)}</td>
+                        <td className="fw-semibold">
+                          ETB {s.amount.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                    {selectedPackage.services.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-2 text-muted">
+                          {t("No services in this package")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer-custom d-flex justify-content-end">
+              <button
+                type="button"
+                className="btn-action-grey"
+                onClick={() => setPackageDetailModal(false)}
+              >
+                {t("Cancel")}
+              </button>
+            </div>
           </div>
         </div>
       )}

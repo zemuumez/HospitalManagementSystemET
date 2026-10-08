@@ -30,10 +30,12 @@ type Package struct {
 }
 
 type PackageServiceLineInput struct {
-	ID        string `json:"id,omitempty"`
-	ServiceID string `json:"service_id"`
-	Quantity  int    `json:"quantity"`
-	RateMinor int64  `json:"rate_minor"`
+	ID           string `json:"id,omitempty"`
+	ServiceID    string `json:"service_id"`
+	AltServiceID string `json:"serviceId,omitempty"`
+	Quantity     int    `json:"quantity"`
+	RateMinor    int64  `json:"rate_minor"`
+	AltRateMinor int64  `json:"rateMinor,omitempty"`
 }
 
 type PackageInput struct {
@@ -46,6 +48,14 @@ type PackageInput struct {
 func (in *PackageInput) Normalize() {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Description = strings.TrimSpace(in.Description)
+	for i := range in.Services {
+		if in.Services[i].ServiceID == "" && in.Services[i].AltServiceID != "" {
+			in.Services[i].ServiceID = in.Services[i].AltServiceID
+		}
+		if in.Services[i].RateMinor == 0 && in.Services[i].AltRateMinor != 0 {
+			in.Services[i].RateMinor = in.Services[i].AltRateMinor
+		}
+	}
 }
 
 func (in *PackageInput) Validate() error {

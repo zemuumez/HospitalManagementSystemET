@@ -292,6 +292,9 @@ func (s Store) Services(ctx context.Context, a domain.Actor, page int, status *i
 		return nil, 0, err
 	}
 
+	if page < 1 {
+		page = 1
+	}
 	limit := 25
 	offset := (page - 1) * limit
 	query := fmt.Sprintf(`

@@ -36,6 +36,7 @@ const allowedRoot = new Set([
   "ambulance-calls",
   "services",
   "packages",
+  "packages-export",
   "insurances",
   "operations",
   "operation-categories",
@@ -261,10 +262,21 @@ async function proxy(
         },
       },
     );
-    return new Response(response.body, {
+    if (response.status === 204) {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+    const contentType =
+      response.headers.get("content-type") || "application/json";
+    const text = await response.text();
+    return new Response(text, {
       status: response.status,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": contentType,
         "Cache-Control": "no-store",
       },
     });
