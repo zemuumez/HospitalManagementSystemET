@@ -302,9 +302,11 @@ const baseScreens: Screen[] = [
             ? "Front CMS"
             : s.id === "services"
               ? "Services"
-              : s.group === "Billing"
-                ? "Billings"
-                : groupNames[s.group] || s.group,
+              : s.id === "doctor-opd-charges"
+                ? "Doctors"
+                : s.group === "Billing"
+                  ? "Billings"
+                  : groupNames[s.group] || s.group,
   title:
     (
       {

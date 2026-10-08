@@ -27,6 +27,7 @@ const firebaseMode = process.argv.includes("--firebase");
 const invitationsMode = process.argv.includes("--invitations");
 const integrationMode = process.argv.includes("--integration");
 const recoveryMode = process.argv.includes("--recovery");
+const doctorWorkspaceMode = process.argv.includes("--doctor-workspace");
 const dsn = new URL(process.env.DATABASE_URL);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
   throw Error("Browser QA requires a loopback PostgreSQL database");
@@ -276,6 +277,25 @@ try {
     });
     process.stdin.pause();
   } else {
+    if (doctorWorkspaceMode) {
+      const { hashPassword } = await import("better-auth/crypto");
+      const email = `qa-admin-${token}@example.test`;
+      const password = randomBytes(24).toString("hex") + "Aa1!";
+      await isolated.query(
+        'INSERT INTO "user"(id,name,email) VALUES($1,$2,$3)',
+        [token, "Isolated QA admin", email],
+      );
+      await isolated.query(
+        `INSERT INTO account(id,"accountId","providerId","userId",password) VALUES($1,$2,'credential',$2,$3)`,
+        [token + "-account", token, await hashPassword(password)],
+      );
+      await isolated.query(
+        "INSERT INTO staff_access(user_id,role) VALUES($1,'admin')",
+        [token],
+      );
+      env.ADMIN_EMAIL = email;
+      env.ADMIN_PASSWORD = password;
+    }
     await new Promise((ok, fail) => {
       const test = spawn(
         process.execPath,
@@ -296,7 +316,9 @@ try {
                         ? "scripts/verify-firebase.mjs"
                         : recoveryMode
                           ? "scripts/verify-recovery.mjs"
-                          : "scripts/verify-connected.mjs",
+                          : doctorWorkspaceMode
+                            ? "scripts/verify-doctor-workspace.mjs"
+                            : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,

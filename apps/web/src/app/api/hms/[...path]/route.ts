@@ -176,7 +176,8 @@ function isAllowedPath(path: string[]): boolean {
       return true;
     }
     if (
-      (path[0] === "prescriptions" ||
+      (path[0] === "doctors" ||
+        path[0] === "prescriptions" ||
         path[0] === "live-consultations" ||
         path[0] === "live-meetings" ||
         path[0] === "insurances") &&

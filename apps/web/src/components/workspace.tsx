@@ -151,6 +151,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                 "/modules/doctor-holidays",
                 "/modules/holidays",
                 "/modules/breaks",
+                "/modules/doctor-opd-charges",
               ].includes(path)
             ? "Doctors"
             : ["/modules/prescriptions"].includes(path)

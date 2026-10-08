@@ -188,7 +188,10 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
-  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{
+    id: string;
+    role: string;
+  } | null>(null);
   const isAdmin = currentUser?.role === "admin";
 
   // Modals & sub-views
@@ -287,9 +290,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
 
   // Add Break form state
   const [breakDoctorId, setBreakDoctorId] = useState("");
-  const [breakDateMode, setBreakDateMode] = useState<"Every Day" | "Single Day">(
-    "Every Day",
-  );
+  const [breakDateMode, setBreakDateMode] = useState<
+    "Every Day" | "Single Day"
+  >("Every Day");
   const [breakSingleDate, setBreakSingleDate] = useState("");
   const [breakFrom, setBreakFrom] = useState("12:00:00");
   const [breakTo, setBreakTo] = useState("13:00:00");
@@ -302,7 +305,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   // Delete target state
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
-    type: "doctor" | "department" | "schedule" | "holiday" | "break" | "opd-charge";
+    type:
+      "doctor" | "department" | "schedule" | "holiday" | "break" | "opd-charge";
     name: string;
   } | null>(null);
 
@@ -724,7 +728,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         } else {
           setApiErrorBanner(
             err.error ||
-              t("Failed to create holiday. Overlapping appointments may exist."),
+              t(
+                "Failed to create holiday. Overlapping appointments may exist.",
+              ),
           );
         }
       }
@@ -775,7 +781,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         const err = await res.json().catch(() => ({}));
         setApiErrorBanner(
           err.error ||
-            t("Failed to save schedule. Check for existing appointment conflicts."),
+            t(
+              "Failed to save schedule. Check for existing appointment conflicts.",
+            ),
         );
       }
     } catch {
@@ -898,7 +906,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         );
         if (res.ok) {
           setApiSuccessBanner(t("Department archived successfully."));
-          setDepartments((prev) => prev.filter((d) => d.id !== deleteTarget.id));
+          setDepartments((prev) =>
+            prev.filter((d) => d.id !== deleteTarget.id),
+          );
         } else {
           const err = await res.json().catch(() => ({}));
           setApiErrorBanner(err.error || t("Failed to archive department."));
@@ -1443,8 +1453,38 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               <tbody>
                 {doctors.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td
+                      colSpan={7}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "#94a3b8",
+                      }}
+                    >
                       {t("No doctor records found in database.")}
+                    </td>
+                  </tr>
+                ) : doctors.filter(
+                    (d) =>
+                      d.name.toLowerCase().includes(search.toLowerCase()) ||
+                      d.department
+                        .toLowerCase()
+                        .includes(search.toLowerCase()) ||
+                      (d.specialist &&
+                        d.specialist
+                          .toLowerCase()
+                          .includes(search.toLowerCase())),
+                  ).length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "#94a3b8",
+                      }}
+                    >
+                      {t("No matching doctor records found.")}
                     </td>
                   </tr>
                 ) : (
@@ -1452,8 +1492,13 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                     .filter(
                       (d) =>
                         d.name.toLowerCase().includes(search.toLowerCase()) ||
-                        d.department.toLowerCase().includes(search.toLowerCase()) ||
-                        (d.specialist && d.specialist.toLowerCase().includes(search.toLowerCase())),
+                        d.department
+                          .toLowerCase()
+                          .includes(search.toLowerCase()) ||
+                        (d.specialist &&
+                          d.specialist
+                            .toLowerCase()
+                            .includes(search.toLowerCase())),
                     )
                     .map((doc) => (
                       <tr key={doc.id}>
@@ -1570,7 +1615,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               <tbody>
                 {departments.length === 0 ? (
                   <tr>
-                    <td colSpan={3} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td
+                      colSpan={3}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "#94a3b8",
+                      }}
+                    >
                       {t("No doctor departments found.")}
                     </td>
                   </tr>
@@ -1635,14 +1687,23 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               <tbody>
                 {schedules.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td
+                      colSpan={4}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "#94a3b8",
+                      }}
+                    >
                       {t("No doctor timetables found.")}
                     </td>
                   </tr>
                 ) : (
                   schedules
                     .filter((sch) =>
-                      sch.doctorName.toLowerCase().includes(search.toLowerCase()),
+                      sch.doctorName
+                        .toLowerCase()
+                        .includes(search.toLowerCase()),
                     )
                     .map((sch) => (
                       <tr key={sch.id}>
@@ -1724,7 +1785,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               <tbody>
                 {holidays.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td
+                      colSpan={4}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "#94a3b8",
+                      }}
+                    >
                       {t("No doctor holidays registered.")}
                     </td>
                   </tr>
@@ -1787,7 +1855,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               <tbody>
                 {breaks.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td
+                      colSpan={5}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "#94a3b8",
+                      }}
+                    >
                       {t("No doctor breaks scheduled.")}
                     </td>
                   </tr>
@@ -1807,7 +1882,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                               {brk.initials}
                             </div>
                             <div className="patient-info">
-                              <span className="link-cyan">{brk.doctorName}</span>
+                              <span className="link-cyan">
+                                {brk.doctorName}
+                              </span>
                               <span className="patient-email">
                                 {brk.doctorEmail}
                               </span>
@@ -1815,13 +1892,17 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                           </div>
                         </td>
                         <td>
-                          <span className="badge-blue-pill">{brk.breakFrom}</span>
+                          <span className="badge-blue-pill">
+                            {brk.breakFrom}
+                          </span>
                         </td>
                         <td>
                           <span className="badge-blue-pill">{brk.breakTo}</span>
                         </td>
                         <td>
-                          <span className="badge-blue-pill">{brk.dateType}</span>
+                          <span className="badge-blue-pill">
+                            {brk.dateType}
+                          </span>
                         </td>
                         <td className="text-end">
                           <div
@@ -1868,7 +1949,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               <tbody>
                 {opdCharges.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td
+                      colSpan={5}
+                      style={{
+                        textAlign: "center",
+                        padding: "32px",
+                        color: "#94a3b8",
+                      }}
+                    >
                       {t("No doctor OPD charges registered.")}
                     </td>
                   </tr>
@@ -1876,8 +1964,12 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   opdCharges
                     .filter(
                       (c) =>
-                        c.doctorName.toLowerCase().includes(search.toLowerCase()) ||
-                        c.doctorDepartment.toLowerCase().includes(search.toLowerCase()),
+                        c.doctorName
+                          .toLowerCase()
+                          .includes(search.toLowerCase()) ||
+                        c.doctorDepartment
+                          .toLowerCase()
+                          .includes(search.toLowerCase()),
                     )
                     .map((charge) => (
                       <tr key={charge.id}>
@@ -1907,7 +1999,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                                 title={t("Edit Charge")}
                                 onClick={() => {
                                   setOpdModalDoctorId(charge.doctorId);
-                                  setOpdModalAmount(String(charge.standardCharge));
+                                  setOpdModalAmount(
+                                    String(charge.standardCharge),
+                                  );
                                   setShowOpdModal(true);
                                 }}
                               >
@@ -2031,7 +2125,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               >
                 <div>
                   <label className="form-label-custom">
-                    {t("Doctor Name")}: <span style={{ color: "#ef4444" }}>*</span>
+                    {t("Doctor Name")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
                     required
@@ -2079,7 +2174,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 </div>
                 <div>
                   <label className="form-label-custom">
-                    {t("Department")}: <span style={{ color: "#ef4444" }}>*</span>
+                    {t("Department")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <select
                     required
@@ -2107,7 +2203,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               >
                 <div>
                   <label className="form-label-custom">
-                    {t("Specialist")}: <span style={{ color: "#ef4444" }}>*</span>
+                    {t("Specialist")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
                     required
@@ -2119,7 +2216,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 </div>
                 <div>
                   <label className="form-label-custom">
-                    {t("Designation")}: <span style={{ color: "#ef4444" }}>*</span>
+                    {t("Designation")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
                     required
@@ -2141,7 +2239,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               >
                 <div>
                   <label className="form-label-custom">
-                    {t("Qualification")}: <span style={{ color: "#ef4444" }}>*</span>
+                    {t("Qualification")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
                     required
@@ -2178,7 +2277,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Date of Birth")}:</label>
+                  <label className="form-label-custom">
+                    {t("Date of Birth")}:
+                  </label>
                   <input
                     type="date"
                     className="form-input-custom"
@@ -2187,7 +2288,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Blood Group")}:</label>
+                  <label className="form-label-custom">
+                    {t("Blood Group")}:
+                  </label>
                   <select
                     className="form-select-custom"
                     value={docBloodGroup}
@@ -2224,7 +2327,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Slot Duration")}:</label>
+                  <label className="form-label-custom">
+                    {t("Slot Duration")}:
+                  </label>
                   <select
                     className="form-select-custom"
                     value={docSlotMinutes}
@@ -2239,7 +2344,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("OPD Charge (ETB)")}:</label>
+                  <label className="form-label-custom">
+                    {t("OPD Charge (ETB)")}:
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -2250,7 +2357,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Appt Charge (ETB)")}:</label>
+                  <label className="form-label-custom">
+                    {t("Appt Charge (ETB)")}:
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -2271,7 +2380,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Address Line 1")}:</label>
+                  <label className="form-label-custom">
+                    {t("Address Line 1")}:
+                  </label>
                   <input
                     placeholder="Street address"
                     className="form-input-custom"
@@ -2280,7 +2391,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Address Line 2")}:</label>
+                  <label className="form-label-custom">
+                    {t("Address Line 2")}:
+                  </label>
                   <input
                     placeholder="Apartment, suite, unit"
                     className="form-input-custom"
@@ -2319,7 +2432,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               </div>
 
               <div style={{ marginBottom: "20px" }}>
-                <label className="form-label-custom">{t("Description / Bio")}:</label>
+                <label className="form-label-custom">
+                  {t("Description / Bio")}:
+                </label>
                 <textarea
                   rows={2}
                   placeholder="Doctor description, medical background, notes..."
@@ -2411,7 +2526,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               >
                 <div>
                   <label className="form-label-custom">
-                    {t("Doctor Name")}: <span style={{ color: "#ef4444" }}>*</span>
+                    {t("Doctor Name")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
                     required
@@ -2421,7 +2537,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Department")}:</label>
+                  <label className="form-label-custom">
+                    {t("Department")}:
+                  </label>
                   <select
                     className="form-select-custom"
                     value={editDocDeptId}
@@ -2446,7 +2564,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Specialist")}:</label>
+                  <label className="form-label-custom">
+                    {t("Specialist")}:
+                  </label>
                   <input
                     className="form-input-custom"
                     value={editDocSpecialist}
@@ -2454,7 +2574,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Designation")}:</label>
+                  <label className="form-label-custom">
+                    {t("Designation")}:
+                  </label>
                   <input
                     className="form-input-custom"
                     value={editDocDesignation}
@@ -2472,7 +2594,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Qualification")}:</label>
+                  <label className="form-label-custom">
+                    {t("Qualification")}:
+                  </label>
                   <input
                     className="form-input-custom"
                     value={editDocQual}
@@ -2503,7 +2627,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Date of Birth")}:</label>
+                  <label className="form-label-custom">
+                    {t("Date of Birth")}:
+                  </label>
                   <input
                     type="date"
                     className="form-input-custom"
@@ -2512,7 +2638,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Blood Group")}:</label>
+                  <label className="form-label-custom">
+                    {t("Blood Group")}:
+                  </label>
                   <select
                     className="form-select-custom"
                     value={editDocBloodGroup}
@@ -2548,7 +2676,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Slot Duration")}:</label>
+                  <label className="form-label-custom">
+                    {t("Slot Duration")}:
+                  </label>
                   <select
                     className="form-select-custom"
                     value={editDocSlotMinutes}
@@ -2563,7 +2693,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("OPD Charge (ETB)")}:</label>
+                  <label className="form-label-custom">
+                    {t("OPD Charge (ETB)")}:
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -2574,7 +2706,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Appt Charge (ETB)")}:</label>
+                  <label className="form-label-custom">
+                    {t("Appt Charge (ETB)")}:
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -2595,7 +2729,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("Address Line 1")}:</label>
+                  <label className="form-label-custom">
+                    {t("Address Line 1")}:
+                  </label>
                   <input
                     placeholder="Street address"
                     className="form-input-custom"
@@ -2604,7 +2740,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Address Line 2")}:</label>
+                  <label className="form-label-custom">
+                    {t("Address Line 2")}:
+                  </label>
                   <input
                     placeholder="Apartment, suite, unit"
                     className="form-input-custom"
@@ -2643,7 +2781,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               </div>
 
               <div style={{ marginBottom: "20px" }}>
-                <label className="form-label-custom">{t("Description / Bio")}:</label>
+                <label className="form-label-custom">
+                  {t("Description / Bio")}:
+                </label>
                 <textarea
                   rows={2}
                   placeholder="Doctor description, medical background, notes..."
@@ -2736,7 +2876,10 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   >
                     {viewingDoctor.name}
                   </h4>
-                  <div className="doctor-modal-sub" style={{ fontSize: "13px" }}>
+                  <div
+                    className="doctor-modal-sub"
+                    style={{ fontSize: "13px" }}
+                  >
                     {viewingDoctor.email}{" "}
                     {viewingDoctor.phone ? `• ${viewingDoctor.phone}` : ""}
                   </div>
@@ -2753,25 +2896,35 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Department")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Department")}:{" "}
+                  </span>
                   <strong className="doctor-detail-value">
                     {viewingDoctor.department || "General Medicine"}
                   </strong>
                 </div>
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Specialist")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Specialist")}:{" "}
+                  </span>
                   <strong className="doctor-detail-value">
-                    {viewingDoctor.specialist || viewingDoctor.qualification || "-"}
+                    {viewingDoctor.specialist ||
+                      viewingDoctor.qualification ||
+                      "-"}
                   </strong>
                 </div>
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Designation")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Designation")}:{" "}
+                  </span>
                   <strong className="doctor-detail-value">
                     {viewingDoctor.designation || "-"}
                   </strong>
                 </div>
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Qualification")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Qualification")}:{" "}
+                  </span>
                   <strong className="doctor-detail-value">
                     {viewingDoctor.qualification || "-"}
                   </strong>
@@ -2786,13 +2939,17 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   </strong>
                 </div>
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Date of Birth")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Date of Birth")}:{" "}
+                  </span>
                   <strong className="doctor-detail-value">
                     {viewingDoctor.dob || "-"}
                   </strong>
                 </div>
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Blood Group")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Blood Group")}:{" "}
+                  </span>
                   <strong className="doctor-detail-value">
                     {viewingDoctor.bloodGroup || "-"}
                   </strong>
@@ -2824,13 +2981,17 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   </strong>
                 </div>
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Slot Duration")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Slot Duration")}:{" "}
+                  </span>
                   <strong className="doctor-detail-value">
                     {viewingDoctor.slotMinutes} {t("minutes")}
                   </strong>
                 </div>
                 <div className="doctor-detail-box">
-                  <span className="doctor-detail-label">{t("Account ID")}: </span>
+                  <span className="doctor-detail-label">
+                    {t("Account ID")}:{" "}
+                  </span>
                   <code style={{ fontSize: "11px", wordBreak: "break-all" }}>
                     {viewingDoctor.id}
                   </code>
@@ -2932,9 +3093,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 className="form-group-custom"
                 style={{ marginBottom: "20px" }}
               >
-                <label className="form-label-custom">
-                  {t("Description")}:
-                </label>
+                <label className="form-label-custom">{t("Description")}:</label>
                 <input
                   placeholder={t("Department Description")}
                   className="form-input-custom"
