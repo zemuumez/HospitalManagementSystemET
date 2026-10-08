@@ -173,6 +173,165 @@ try {
     method: "PATCH",
     body: { id: staffID, active: false },
   });
+
+  // D4: Doctor provisioning coordination, validation, rollback and editing
+  const archivedDept = (
+    await db.query(
+      "INSERT INTO doctor_department (title, description, archived) VALUES ('Archived ENT', 'Old wing', true) RETURNING id",
+    )
+  ).rows[0].id;
+  const activeDept = (
+    await db.query(
+      "INSERT INTO doctor_department (title, description, archived) VALUES ('Cardiology Clinic', 'Heart wing', false) RETURNING id",
+    )
+  ).rows[0].id;
+
+  // 1. Missing required fields for doctor
+  await expectStatus("/api/staff", 422, {
+    cookie: admin.cookie,
+    method: "POST",
+    body: {
+      name: "Dr. Incomplete",
+      email: `doc-incomp-${randomUUID()}@example.test`,
+      role: "doctor",
+      password: randomUUID() + "Aa1!",
+    },
+  });
+
+  // 2. Archived department failure cleanup: ensure complete rollback (no orphan user or staff_access)
+  const failedDocEmail = `doc-fail-${randomUUID()}@example.test`;
+  await expectStatus("/api/staff", 422, {
+    cookie: admin.cookie,
+    method: "POST",
+    body: {
+      name: "Dr. Failed Candidate",
+      email: failedDocEmail,
+      role: "doctor",
+      password: randomUUID() + "Aa1!",
+      departmentId: archivedDept,
+      specialist: "Cardiologist",
+      designation: "Consultant",
+      qualification: "MBBS",
+      gender: "male",
+    },
+  });
+  assert.equal(
+    (
+      await db.query(
+        'SELECT count(*)::int AS count FROM "user" WHERE email=$1',
+        [failedDocEmail],
+      )
+    ).rows[0].count,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT count(*)::int AS count FROM staff_access WHERE user_id IN (SELECT id FROM "user" WHERE email=$1)',
+        [failedDocEmail],
+      )
+    ).rows[0].count,
+    0,
+  );
+
+  // 3. Retry with valid department succeeds and provisions complete profile + 7-day schedule
+  const retryResult = await request("/api/staff", {
+    cookie: admin.cookie,
+    method: "POST",
+    body: {
+      name: "Dr. Coordinated Parity",
+      email: failedDocEmail,
+      role: "doctor",
+      password: randomUUID() + "Aa1!",
+      departmentId: activeDept,
+      specialist: "Cardiologist",
+      designation: "Senior Consultant",
+      qualification: "MBBS, MD",
+      gender: "male",
+      dateOfBirth: "1985-05-15",
+      bloodGroup: "O+",
+      phone: "+251911223344",
+      address1: "Bole Road",
+      city: "Addis Ababa",
+      zip: "1000",
+      appointmentCharge: 500,
+      opdCharge: 300,
+    },
+  });
+  assert.equal(retryResult.status, 201, await retryResult.clone().text());
+  const coordinatedDoctorID = (await retryResult.json()).id;
+  ids.push(coordinatedDoctorID);
+
+  // Verify DB linkage and default 7-day 10:00-19:30 schedule
+  const profileRow = (
+    await db.query(
+      "SELECT specialist, designation, qualification, slot_minutes FROM doctor_profile WHERE user_id=$1",
+      [coordinatedDoctorID],
+    )
+  ).rows[0];
+  assert.equal(profileRow.specialist, "Cardiologist");
+  assert.equal(profileRow.designation, "Senior Consultant");
+  assert.equal(profileRow.qualification, "MBBS, MD");
+  assert.equal(profileRow.slot_minutes, 60);
+
+  const hoursRows = (
+    await db.query(
+      "SELECT weekday, start_minute, end_minute FROM doctor_hours WHERE doctor_id=$1 ORDER BY weekday",
+      [coordinatedDoctorID],
+    )
+  ).rows;
+  assert.equal(hoursRows.length, 7);
+  for (let w = 0; w < 7; w++) {
+    assert.equal(hoursRows[w].weekday, w);
+    assert.equal(hoursRows[w].start_minute, 600);
+    assert.equal(hoursRows[w].end_minute, 1170);
+  }
+
+  // 4. Duplicate email rejection
+  await expectStatus("/api/staff", 409, {
+    cookie: admin.cookie,
+    method: "POST",
+    body: {
+      name: "Dr. Another Candidate",
+      email: failedDocEmail,
+      role: "doctor",
+      password: randomUUID() + "Aa1!",
+      departmentId: activeDept,
+      specialist: "Neurologist",
+      designation: "Consultant",
+      qualification: "MBBS",
+      gender: "female",
+    },
+  });
+
+  // 5. Name and Email editing on PATCH /api/staff
+  const updatedDocEmail = `doc-renamed-${randomUUID()}@example.test`;
+  await expectStatus("/api/staff", 200, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: {
+      id: coordinatedDoctorID,
+      name: "Dr. Coordinated Renamed",
+      email: updatedDocEmail,
+    },
+  });
+  const updatedUserRow = (
+    await db.query('SELECT name, email FROM "user" WHERE id=$1', [
+      coordinatedDoctorID,
+    ])
+  ).rows[0];
+  assert.equal(updatedUserRow.name, "Dr. Coordinated Renamed");
+  assert.equal(updatedUserRow.email, updatedDocEmail);
+
+  // Conflict on email edit
+  await expectStatus("/api/staff", 409, {
+    cookie: admin.cookie,
+    method: "PATCH",
+    body: {
+      id: coordinatedDoctorID,
+      email: admin.email,
+    },
+  });
   const schedule = {
     id: doctor.id,
     name: "",

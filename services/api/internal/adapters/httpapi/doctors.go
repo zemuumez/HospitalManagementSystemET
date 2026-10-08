@@ -10,6 +10,8 @@ import (
 type createDoctorRequest struct {
 	UserID            string               `json:"userId,omitempty"`
 	ID                string               `json:"id,omitempty"`
+	Name              string               `json:"name,omitempty"`
+	Email             string               `json:"email,omitempty"`
 	DepartmentID      string               `json:"departmentId,omitempty"`
 	DepartmentIdSnake string               `json:"department_id,omitempty"`
 	Department        string               `json:"department,omitempty"`
@@ -37,6 +39,8 @@ type createDoctorRequest struct {
 }
 
 type updateDoctorRequest struct {
+	Name              *string              `json:"name,omitempty"`
+	Email             *string              `json:"email,omitempty"`
 	DepartmentID      *string              `json:"departmentId,omitempty"`
 	DepartmentIdSnake *string              `json:"department_id,omitempty"`
 	Specialist        *string              `json:"specialist,omitempty"`
@@ -248,6 +252,8 @@ func (s Server) doctors(w http.ResponseWriter, r *http.Request, a domain.Actor) 
 			photo = req.PhotoUrlSnake
 		}
 		in := domain.UpdateDoctorInput{
+			Name:              req.Name,
+			Email:             req.Email,
 			DepartmentID:      deptID,
 			Specialist:        req.Specialist,
 			Designation:       req.Designation,

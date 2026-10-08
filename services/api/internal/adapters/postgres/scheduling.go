@@ -418,6 +418,20 @@ func (s Store) UpdateDoctorProfile(ctx context.Context, a domain.Actor, id strin
 		return domain.Doctor{}, err
 	}
 
+	if input.Name != nil {
+		if _, err = tx.Exec(ctx, `UPDATE "user" SET name = $1 WHERE id = $2`, *input.Name, id); err != nil {
+			return domain.Doctor{}, err
+		}
+	}
+	if input.Email != nil {
+		if _, err = tx.Exec(ctx, `UPDATE "user" SET email = $1 WHERE id = $2`, *input.Email, id); err != nil {
+			if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key") {
+				return domain.Doctor{}, domain.ErrConflict
+			}
+			return domain.Doctor{}, err
+		}
+	}
+
 	// Update staff_profile details
 	var curDetailsRaw []byte
 	_ = tx.QueryRow(ctx, `SELECT details FROM staff_profile WHERE user_id=$1 FOR UPDATE`, id).Scan(&curDetailsRaw)

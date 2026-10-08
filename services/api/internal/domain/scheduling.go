@@ -148,6 +148,8 @@ func (i *CreateDoctorInput) Validate() error {
 }
 
 type UpdateDoctorInput struct {
+	Name              *string       `json:"name,omitempty"`
+	Email             *string       `json:"email,omitempty"`
 	DepartmentID      *string       `json:"departmentId,omitempty"`
 	Specialist        *string       `json:"specialist,omitempty"`
 	Designation       *string       `json:"designation,omitempty"`
@@ -172,6 +174,18 @@ type UpdateDoctorInput struct {
 func (i *UpdateDoctorInput) Validate() error {
 	if i.Version <= 0 {
 		return ErrValidation
+	}
+	if i.Name != nil {
+		*i.Name = strings.TrimSpace(*i.Name)
+		if *i.Name == "" || len([]rune(*i.Name)) > 120 {
+			return ErrValidation
+		}
+	}
+	if i.Email != nil {
+		*i.Email = strings.TrimSpace(strings.ToLower(*i.Email))
+		if *i.Email == "" || len(*i.Email) > 254 || !strings.Contains(*i.Email, "@") {
+			return ErrValidation
+		}
 	}
 	if i.DepartmentID != nil {
 		*i.DepartmentID = strings.TrimSpace(*i.DepartmentID)

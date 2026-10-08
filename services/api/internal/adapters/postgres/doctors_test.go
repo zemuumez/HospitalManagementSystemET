@@ -723,4 +723,93 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	if !foundDoc1WithPrivate {
 		t.Fatal("expected admin to receive doctor1 with populated private profile fields")
 	}
+
+	// 11. D4: Name and email editing on doctor profile with validation and conflict checks
+	newName := "Dr. Alice M. Smith"
+	newEmail := "alice.smith.updated@hospital.test"
+	updatedIdentityDoc, err := sched.UpdateDoctorProfile(ctx, admin, docUser1, domain.UpdateDoctorInput{
+		Name:    &newName,
+		Email:   &newEmail,
+		Version: 2,
+	})
+	if err != nil {
+		t.Fatalf("expected successful name and email update, got %v", err)
+	}
+	if updatedIdentityDoc.Name != newName {
+		t.Fatalf("expected updated name %q, got %q", newName, updatedIdentityDoc.Name)
+	}
+	if updatedIdentityDoc.Email != newEmail {
+		t.Fatalf("expected updated email %q, got %q", newEmail, updatedIdentityDoc.Email)
+	}
+	if updatedIdentityDoc.Version != 3 {
+		t.Fatalf("expected version 3 after identity update, got %d", updatedIdentityDoc.Version)
+	}
+
+	// Verify database persistence in "user" table
+	var dbUserName, dbUserEmail string
+	err = db.QueryRow(ctx, `SELECT name, email FROM "user" WHERE id=$1`, docUser1).Scan(&dbUserName, &dbUserEmail)
+	if err != nil || dbUserName != newName || dbUserEmail != newEmail {
+		t.Fatalf("expected user table to have updated name/email, got name=%q email=%q err=%v", dbUserName, dbUserEmail, err)
+	}
+
+	// Validation: blank name rejected
+	blankName := "   "
+	_, err = sched.UpdateDoctorProfile(ctx, admin, docUser1, domain.UpdateDoctorInput{
+		Name:    &blankName,
+		Version: 3,
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for blank name update, got %v", err)
+	}
+
+	// Validation: invalid email rejected
+	invalidEmail := "not-an-email"
+	_, err = sched.UpdateDoctorProfile(ctx, admin, docUser1, domain.UpdateDoctorInput{
+		Email:   &invalidEmail,
+		Version: 3,
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for invalid email update, got %v", err)
+	}
+
+	// Conflict: duplicate email of doctor-test-2 rejected
+	dupEmail := docUser2 + "@hospital.test"
+	_, err = sched.UpdateDoctorProfile(ctx, admin, docUser1, domain.UpdateDoctorInput{
+		Email:   &dupEmail,
+		Version: 3,
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict for duplicate email update, got %v", err)
+	}
+
+	// HTTP PUT /v1/doctors/{id} with name and email
+	httpPutBody := `{"name":"Dr. Alice Parity","email":"alice.parity@hospital.test","version":3}`
+	putReq := httptest.NewRequest("PUT", "/v1/doctors/"+docUser1, bytes.NewReader([]byte(httpPutBody)))
+	putReq.Header.Set("Cookie", "session=admin")
+	putReq.Header.Set("Origin", "http://hospital.test")
+	putReq.Header.Set("Content-Type", "application/json")
+	putRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(putRec, putReq)
+	if putRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for HTTP PUT /v1/doctors with name/email, got %d: %s", putRec.Code, putRec.Body.String())
+	}
+	var putDoc domain.Doctor
+	if err := json.Unmarshal(putRec.Body.Bytes(), &putDoc); err != nil {
+		t.Fatalf("failed to decode PUT response: %v", err)
+	}
+	if putDoc.Name != "Dr. Alice Parity" || putDoc.Email != "alice.parity@hospital.test" || putDoc.Version != 4 {
+		t.Fatalf("unexpected PUT response doc: %+v", putDoc)
+	}
+
+	// HTTP PUT duplicate email returns 409
+	dupPutBody := `{"email":"` + docUser2 + `@hospital.test","version":4}`
+	dupPutReq := httptest.NewRequest("PUT", "/v1/doctors/"+docUser1, bytes.NewReader([]byte(dupPutBody)))
+	dupPutReq.Header.Set("Cookie", "session=admin")
+	dupPutReq.Header.Set("Origin", "http://hospital.test")
+	dupPutReq.Header.Set("Content-Type", "application/json")
+	dupPutRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(dupPutRec, dupPutReq)
+	if dupPutRec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for HTTP PUT duplicate email, got %d: %s", dupPutRec.Code, dupPutRec.Body.String())
+	}
 }
