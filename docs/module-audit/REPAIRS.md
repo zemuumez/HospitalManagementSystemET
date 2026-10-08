@@ -29,11 +29,40 @@ These repairs do not establish package/insurance endpoints, complete settings UI
 - Scoped permissions & endpoints: `packages.manage` for `admin` and `receptionist`; `packages.read` for `admin`, `receptionist`, `doctor`, `case_manager`, `patient`. Anonymous access returns 401; unauthorized roles (`nurse`, `accountant`, etc.) receive 403.
 - Verification: isolated-schema PostgreSQL test suite (`TestClinicalTransactions/testPackages`) verified multi-line creation, line update/add/remove, duplicate name rejection, invalid service references, cross-parent line ID rejection, atomic rollback, admission in-use protection, role authorization, concurrency, search, and pagination.
 
+## 2026-10-08: package frontend integration (Step 2)
+
+- Connected `ServicesWorkspace` to live `/v1/packages` API: create, edit, delete, and list operations persist authoritatively in PostgreSQL.
+- Removed synthetic mock arrays and optimistic local saves: table reflects server-calculated totals (102.00 ETB), child service line breakdowns, and discounts.
+- Live modal editing & deletion: package edit modal supports modifying service lines, quantities, rates, and discounts with live recalculation preview. Deletion of in-use packages displays server conflict message (`409 Conflict`), while unreferenced packages delete cleanly (`200 OK`).
+- Multi-context verification: freshly authenticated browser contexts verify persisted records and child lines surviving full page reloads.
+
+## 2026-10-08: insurance backend & frontend integration (Steps 3 & 4)
+
+- Migration `050_insurance_catalog.sql`: implemented `insurance` and `insurance_disease` tables with minor-unit monetary precision (`service_tax_minor`, `hospital_rate_minor`, `disease_charge_minor`, `total_minor`), foreign key linkage to `ipd_admission_details(insurance_id)` with `ON DELETE RESTRICT`, and atomic disease replacement transactions.
+- Authoritative calculation: server recalculates base sum, disease charges, discount amounts with half-up rounding, and net total.
+- Real `/v1/insurances` API integration: full-page creation form, dynamic disease rows, details modal, edit modal with disease line updates, and active/inactive status toggle.
+- In-use deletion protection: deleting an insurance linked to patient admissions is blocked with `409 Conflict` (`RECORD_IN_USE`).
+
+## 2026-10-08: review corrections & hardening (R1–R7)
+
+- **R1 (Child Line Deduplication)**: Validator and repository strictly reject duplicate child-line IDs before any mutations. Persisted child line amounts reconcile exactly to parent totals.
+- **R2 (Checked Monetary Arithmetic)**: Replaced unchecked int64 calculations with checked arithmetic across `packages` and `insurances`, preventing integer overflow even under 100% discounts or extreme values.
+- **R3 (Explicit Zero Rate Preservation)**: Package creation and editing distinguish between omitted rates and explicitly submitted `0` rates; catalog defaults are only applied when rates are genuinely omitted.
+- **R4 (Complete Exports)**: Implemented batched streaming exports (`ExportPackages` and `ExportInsurances`) via `/v1/packages-export` and `/v1/insurances-export` supporting up to 5,000 records without silent truncation to 25 rows. Tested with 35+ records in Go and Playwright.
+- **R5 (Server Pagination & Catalog Lookup)**: Wired server-side `page`, `pageSize`, `search` (300ms debounce), and server-reported `total` across Packages and Insurances tabs. Package modal service selector requests unconstrained active services with client-side filter.
+- **R6 (Failure Isolation & Retry States)**: Separated per-module loading, error, and connection states. Failed requests display visible error alerts with retry triggers without masquerading as empty catalogs.
+- **R7 (Idempotent Status Updates)**: `PATCH /v1/insurances/{id}/status` accepts `{ "status": 0 | 1 }` payload and updates status idempotently; invalid statuses return `422 Unprocessable Entity`; UI disables toggles during in-flight requests and avoids duplicate toggles.
+
+## Retained Coverage & Documentation Gaps
+
+- **Admission UI vs SQL Fixtures**: In-use deletion tests insert `ipd_admission_details` links directly via SQL (including OPD fixtures), verifying database FK restrict behavior. Standalone original patient admission workflows selecting and persisting package/insurance IDs remain an unfinished separate module.
+- **Catalog Visibility Policy**: `packages.read` and `insurances.read` permissions intentionally expose catalog visibility to `admin`, `receptionist`, `doctor`, `case_manager`, and `patient` roles, while modification permissions (`packages.manage`, `insurances.manage`) remain strictly confined to `admin` and `receptionist`.
+- **Concurrency & Version Policy**: Database row locks serialize concurrent mutations under a last-write-wins policy with `clock_timestamp()` updates rather than optimistic concurrency control (no version tags).
+- **Public Development Isolation**: All integration checks ran against transient QA schemas or test databases without altering public development records.
+
 ## Next implementation order
 
-1. Step 2: Package frontend integration (connect ServicesWorkspace forms/lists to real `/v1/packages` API, remove false local saves, test browser create/edit/delete/reload).
-2. Step 3: Insurance backend (exact monetary service tax, disease line replacement transaction, admission-linked protection, role tests).
-3. Step 4: Insurance frontend integration and combined regression.
-4. Doctor workspace: remove remaining preview rows/saves and align doctor account creation, department and absence forms with their actual contracts.
-5. Settings frontend: connect the original field form to the now-available atomic endpoint, including the appropriate image storage contract.
+1. Doctor workspace: remove remaining preview rows/saves and align doctor account creation, department, and absence forms with their actual contracts.
+2. Settings frontend: connect the original field form to the now-available atomic endpoint, including the appropriate image storage contract.
+
 

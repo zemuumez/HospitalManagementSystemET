@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -381,5 +382,152 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	}
 	if insExportPayload.Total != 35 || len(insExportPayload.Insurances) != 35 {
 		t.Fatalf("HTTP export truncated: expected 35 insurances, got total=%d len=%d", insExportPayload.Total, len(insExportPayload.Insurances))
+	}
+
+	// -------------------------------------------------------------
+	// Regression R7: Idempotent status updates, duplicate/retry safety, concurrent updates
+	// -------------------------------------------------------------
+	// 1) Test duplicate/retry setting status to 0 (must not oscillate/flip)
+	st0 := 0
+	for retry := 1; retry <= 3; retry++ {
+		res, err := insurancesService.SetStatus(ctx, admin, createdIns.ID, &st0)
+		if err != nil {
+			t.Fatalf("SetStatus(0) failed on retry %d: %v", retry, err)
+		}
+		if res.Status != 0 {
+			t.Fatalf("expected status 0 on retry %d, got %d", retry, res.Status)
+		}
+	}
+	checkIns, err := insurancesService.Insurance(ctx, admin, createdIns.ID)
+	if err != nil || checkIns.Status != 0 {
+		t.Fatalf("expected persisted status 0, got %d (err: %v)", checkIns.Status, err)
+	}
+
+	// 2) Test duplicate/retry setting status to 1 (must not oscillate/flip)
+	st1 := 1
+	for retry := 1; retry <= 3; retry++ {
+		res, err := insurancesService.SetStatus(ctx, admin, createdIns.ID, &st1)
+		if err != nil {
+			t.Fatalf("SetStatus(1) failed on retry %d: %v", retry, err)
+		}
+		if res.Status != 1 {
+			t.Fatalf("expected status 1 on retry %d, got %d", retry, res.Status)
+		}
+	}
+
+	// 3) Test invalid status rejection in application/service
+	badSt := 2
+	_, err = insurancesService.SetStatus(ctx, admin, createdIns.ID, &badSt)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for status=2, got: %v", err)
+	}
+	badStNeg := -1
+	_, err = insurancesService.SetStatus(ctx, admin, createdIns.ID, &badStNeg)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for status=-1, got: %v", err)
+	}
+
+	// 4) Test invalid status rejection in InsuranceInput.Validate
+	badStatusInput := domain.InsuranceInput{
+		Name:          "Bad Status Insurance",
+		InsuranceNo:   "BAD-ST-001",
+		InsuranceCode: "BAD-ST",
+		Status:        &badSt,
+		Diseases: []domain.InsuranceDiseaseLineInput{
+			{DiseaseName: "Care", DiseaseChargeMinor: 1000},
+		},
+	}
+	_, err = insurancesService.CreateInsurance(ctx, admin, badStatusInput)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation creating insurance with status=2, got: %v", err)
+	}
+
+	// 5) Test concurrent status requests for the same target status (all succeed, remain stable)
+	var wg sync.WaitGroup
+	concurrentErrors := make(chan error, 10)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			target := 0
+			r, e := insurancesService.SetStatus(ctx, admin, createdIns.ID, &target)
+			if e != nil {
+				concurrentErrors <- e
+				return
+			}
+			if r.Status != 0 {
+				concurrentErrors <- fmt.Errorf("unexpected status %d in concurrent update", r.Status)
+			}
+		}()
+	}
+	wg.Wait()
+	close(concurrentErrors)
+	for e := range concurrentErrors {
+		t.Fatalf("concurrent SetStatus error: %v", e)
+	}
+	finalIns, err := insurancesService.Insurance(ctx, admin, createdIns.ID)
+	if err != nil || finalIns.Status != 0 {
+		t.Fatalf("expected final status 0 after concurrent updates, got %d (err: %v)", finalIns.Status, err)
+	}
+
+	// 6) Test HTTP PATCH /v1/insurances/{id}/status endpoint with explicit status & retries
+	for retry := 1; retry <= 2; retry++ {
+		patchPayload, _ := json.Marshal(map[string]int{"status": 1})
+		patchReq := httptest.NewRequest("PATCH", fmt.Sprintf("/v1/insurances/%s/status", createdIns.ID), bytes.NewReader(patchPayload))
+		patchReq.Header.Set("Cookie", "session=admin")
+		patchReq.Header.Set("Origin", "http://hospital.test")
+		patchReq.Header.Set("Content-Type", "application/json")
+		patchRec := httptest.NewRecorder()
+		httpHandler.ServeHTTP(patchRec, patchReq)
+		if patchRec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for HTTP PATCH status on retry %d, got %d: %s", retry, patchRec.Code, patchRec.Body.String())
+		}
+		var patchResp domain.Insurance
+		if err := json.Unmarshal(patchRec.Body.Bytes(), &patchResp); err != nil {
+			t.Fatalf("failed to decode PATCH response: %v", err)
+		}
+		if patchResp.Status != 1 {
+			t.Fatalf("expected status 1 in HTTP response on retry %d, got %d", retry, patchResp.Status)
+		}
+	}
+
+	// 7) Test HTTP PATCH with invalid status (returns 422 Unprocessable Entity)
+	badPatchPayload, _ := json.Marshal(map[string]int{"status": 99})
+	badPatchReq := httptest.NewRequest("PATCH", fmt.Sprintf("/v1/insurances/%s/status", createdIns.ID), bytes.NewReader(badPatchPayload))
+	badPatchReq.Header.Set("Cookie", "session=admin")
+	badPatchReq.Header.Set("Origin", "http://hospital.test")
+	badPatchReq.Header.Set("Content-Type", "application/json")
+	badPatchRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(badPatchRec, badPatchReq)
+	if badPatchRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 Unprocessable Entity for status=99, got %d", badPatchRec.Code)
+	}
+
+	// 8) Comprehensive 9-role authorization coverage for insurances
+	allRoles := []string{"admin", "receptionist", "doctor", "case_manager", "patient", "nurse", "accountant", "pharmacist", "laboratorian"}
+	for _, rName := range allRoles {
+		act := actorMap[rName]
+		if act.ID == "" {
+			act = domain.Actor{ID: rName, Role: rName}
+		}
+		canManageExpected := (rName == "admin" || rName == "receptionist")
+		canReadExpected := (rName == "admin" || rName == "receptionist" || rName == "doctor" || rName == "case_manager" || rName == "patient")
+
+		// Test read
+		_, readErr := insurancesService.Insurance(ctx, act, createdIns.ID)
+		if canReadExpected && readErr != nil {
+			t.Errorf("role %s expected read allowed, got error: %v", rName, readErr)
+		} else if !canReadExpected && !errors.Is(readErr, domain.ErrForbidden) {
+			t.Errorf("role %s expected read forbidden, got: %v", rName, readErr)
+		}
+
+		// Test status update
+		stVal := 1
+		_, stErr := insurancesService.SetStatus(ctx, act, createdIns.ID, &stVal)
+		if canManageExpected && stErr != nil {
+			t.Errorf("role %s expected status manage allowed, got error: %v", rName, stErr)
+		} else if !canManageExpected && !errors.Is(stErr, domain.ErrForbidden) {
+			t.Errorf("role %s expected status manage forbidden, got: %v", rName, stErr)
+		}
 	}
 }

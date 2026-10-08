@@ -315,6 +315,28 @@
     ],
     "doctor_dept.manage": [
       "admin"
+    ],
+    "packages.manage": [
+      "admin",
+      "receptionist"
+    ],
+    "packages.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "case_manager",
+      "patient"
+    ],
+    "insurances.manage": [
+      "admin",
+      "receptionist"
+    ],
+    "insurances.read": [
+      "admin",
+      "receptionist",
+      "doctor",
+      "case_manager",
+      "patient"
     ]
   },
   "not_advertised": [

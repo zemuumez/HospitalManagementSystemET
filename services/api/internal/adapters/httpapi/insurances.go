@@ -59,7 +59,23 @@ func (s Server) insurances(w http.ResponseWriter, r *http.Request, a domain.Acto
 
 	case strings.HasPrefix(r.URL.Path, "/v1/insurances/") && strings.HasSuffix(r.URL.Path, "/status") && r.Method == "PATCH":
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/insurances/"), "/status")
-		ins, err := s.Insurances.ToggleStatus(r.Context(), a, id)
+		var targetStatus *int
+		if r.Body != nil && r.ContentLength > 0 {
+			var body struct {
+				Status *int `json:"status"`
+			}
+			if !decode(w, r, &body) {
+				return true
+			}
+			if body.Status != nil {
+				if *body.Status != 0 && *body.Status != 1 {
+					fail(w, domain.ErrValidation)
+					return true
+				}
+				targetStatus = body.Status
+			}
+		}
+		ins, err := s.Insurances.SetStatus(r.Context(), a, id, targetStatus)
 		if err != nil {
 			fail(w, err)
 			return true
