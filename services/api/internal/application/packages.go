@@ -69,8 +69,34 @@ func (s PackagesService) Packages(ctx context.Context, a domain.Actor, page int,
 	if page < 1 {
 		page = 1
 	}
-	if limit < 1 || limit > 100 {
+	if limit < 1 {
 		limit = 25
+	} else if limit > 100 {
+		limit = 100
 	}
 	return s.Store.Packages(ctx, a, page, limit, search)
+}
+
+func (s PackagesService) ExportPackages(ctx context.Context, a domain.Actor, search string) ([]domain.Package, int, error) {
+	if !a.Can("packages.read") {
+		return nil, 0, domain.ErrForbidden
+	}
+	const maxExport = 5000
+	const batchSize = 100
+	var all []domain.Package
+	page := 1
+	var totalCount int
+	for {
+		batch, total, err := s.Store.Packages(ctx, a, page, batchSize, search)
+		if err != nil {
+			return nil, 0, err
+		}
+		totalCount = total
+		all = append(all, batch...)
+		if len(all) >= total || len(batch) == 0 || len(all) >= maxExport {
+			break
+		}
+		page++
+	}
+	return all, totalCount, nil
 }

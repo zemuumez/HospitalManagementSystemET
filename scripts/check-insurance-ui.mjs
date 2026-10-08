@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
-export async function checkInsuranceUI({ context, db, base, results, browser }) {
+export async function checkInsuranceUI({
+  context,
+  db,
+  base,
+  results,
+  browser,
+}) {
   const page = await context.newPage();
   page.on("dialog", (d) => d.accept());
   page.on("console", (msg) => {
@@ -90,10 +96,15 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
     await page.getByPlaceholder("Insurance No").fill(`POL-${suffix}`);
     await page.getByPlaceholder("Insurance Code").fill(`COD-${suffix}`);
     await page.getByPlaceholder("Hospital Rate").fill("150.00");
-    await page.getByPlaceholder("Remark").fill("Comprehensive corporate coverage");
+    await page
+      .getByPlaceholder("Remark")
+      .fill("Comprehensive corporate coverage");
 
     // Fill first disease line
-    await page.getByPlaceholder("Diseases Name").nth(0).fill("Cardiology Consultation");
+    await page
+      .getByPlaceholder("Diseases Name")
+      .nth(0)
+      .fill("Cardiology Consultation");
     await page.getByPlaceholder("Diseases charge").nth(0).fill("200.00");
 
     // Add and fill second disease line
@@ -122,7 +133,9 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
       await createdRow.getByText("ETB 450.00").isVisible(),
       "total should reflect 450.00 ETB",
     );
-    passed("insurance created with multiple diseases and server-calculated total of 450.00 ETB");
+    passed(
+      "insurance created with multiple diseases and server-calculated total of 450.00 ETB",
+    );
 
     // 4. Test page reload persistence
     console.log("[4/10] Verifying page reload persistence...");
@@ -156,7 +169,9 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
       )
     ).rows;
     assert.equal(dbDiseases.length, 2);
-    passed("insurance policy and disease lines survive reload and persist in database");
+    passed(
+      "insurance policy and disease lines survive reload and persist in database",
+    );
 
     // 5. Test Insurance Details modal
     console.log("[5/10] Verifying insurance details modal...");
@@ -181,7 +196,7 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
     const statusToggle = page
       .locator("tr", { hasText: insName })
       .locator(".switch-toggle");
-    
+
     // Toggle to inactive (0)
     const patch1Promise = page.waitForResponse(
       (r) =>
@@ -245,7 +260,10 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
     await editModal.locator('input[type="number"][max="100"]').fill("20");
     await editModal.getByPlaceholder("Hospital Rate").fill("250.00");
 
-    const saveBtn = editModal.getByRole("button", { name: "Save", exact: true });
+    const saveBtn = editModal.getByRole("button", {
+      name: "Save",
+      exact: true,
+    });
 
     const updateRespPromise = page.waitForResponse(
       (r) =>
@@ -313,7 +331,9 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
     await page.locator('.legacy-workspace[data-ready="true"]').waitFor();
 
     const countCheck = (
-      await db.query("SELECT count(*) FROM insurance WHERE name = $1", [insName])
+      await db.query("SELECT count(*) FROM insurance WHERE name = $1", [
+        insName,
+      ])
     ).rows[0].count;
     assert.equal(Number(countCheck), 1);
     passed(
@@ -375,7 +395,9 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
     );
 
     // 10. Unreferenced Deletion (200 / 204)
-    console.log("[10/10] Testing unreferenced deletion (200/204 No Content)...");
+    console.log(
+      "[10/10] Testing unreferenced deletion (200/204 No Content)...",
+    );
     await db.query(
       "DELETE FROM ipd_admission_details WHERE encounter_id = $1",
       [encId],
@@ -405,14 +427,174 @@ export async function checkInsuranceUI({ context, db, base, results, browser }) 
     assert.equal(deletedDb.length, 0);
 
     const deletedDiseases = (
-      await db.query("SELECT id FROM insurance_disease WHERE insurance_id = $1", [
-        dbIns[0].id,
-      ])
+      await db.query(
+        "SELECT id FROM insurance_disease WHERE insurance_id = $1",
+        [dbIns[0].id],
+      )
     ).rows;
     assert.equal(deletedDiseases.length, 0);
 
     passed(
       "unreferenced insurance deletion succeeds and removes record and disease lines from database",
+    );
+
+    // 11. Pagination, Server Search Across Pages, and Export >25 (R4, R5)
+    console.log(
+      "[11/12] Testing insurance pagination, search across pages, and export with >30 records...",
+    );
+    const bulkInsIds = [];
+    for (let i = 1; i <= 32; i++) {
+      const iId = randomUUID();
+      bulkInsIds.push(iId);
+      const insTitle = `Bulk Insurance Policy ${String(i).padStart(2, "0")} ${suffix}`;
+      await db.query(
+        `INSERT INTO insurance (id, name, service_tax_minor, discount, insurance_no, insurance_code, hospital_rate_minor, remark, status, total_minor, created_at, updated_at)
+         VALUES ($1, $2, 5000, 0, $3, $4, 15000, 'Bulk policy', 1, 20000, now() - interval '${35 - i} minutes', now())`,
+        [
+          iId,
+          insTitle,
+          `POL-BLK-${String(i).padStart(2, "0")}-${suffix}`,
+          `COD-BLK-${String(i).padStart(2, "0")}-${suffix}`,
+        ],
+      );
+      await db.query(
+        `INSERT INTO insurance_disease (id, insurance_id, disease_name, disease_charge_minor)
+         VALUES ($1, $2, 'Consultation', 5000)`,
+        [randomUUID(), iId],
+      );
+    }
+
+    // Reload page to view populated catalog
+    await open();
+
+    // Verify pagination controls on Page 1
+    const paginationText = page.locator(".billing-pagination");
+    await paginationText.waitFor();
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 1 to 10 of 32 Results",
+      ),
+      "should show 1 to 10 of 32 results on page 1",
+    );
+
+    // Switch page size to 25
+    const pageSizeSelect = page.locator(".billing-pagination select");
+    const p25Promise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/insurances") && r.url().includes("limit=25"),
+    );
+    await pageSizeSelect.selectOption("25");
+    await p25Promise;
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 1 to 25 of 32 Results",
+      ),
+      "should show 1 to 25 of 32 results after page size change",
+    );
+
+    // Navigate to Page 2
+    const pPage2Promise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/insurances") && r.url().includes("page=2"),
+    );
+    await page
+      .locator(".billing-pagination-controls button", { hasText: "2" })
+      .click();
+    await pPage2Promise;
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 26 to 32 of 32 Results",
+      ),
+      "page 2 should display records 26 to 32",
+    );
+
+    // Test server search for a record that sorts to later page
+    const targetSearchIns = `Bulk Insurance Policy 31 ${suffix}`;
+    const searchPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/insurances") && r.url().includes("search="),
+    );
+    await page.locator(".billing-toolbar input").fill(targetSearchIns);
+    await searchPromise;
+    await page.locator("tr", { hasText: targetSearchIns }).waitFor();
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 1 to 1 of 1 Results",
+      ),
+      "search results should update total to 1",
+    );
+
+    // Clear search
+    const clearPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/insurances") &&
+        !r.url().includes("search=Bulk+Insurance"),
+    );
+    await page.locator(".billing-toolbar input").fill("");
+    await clearPromise;
+    await page.waitForTimeout(300);
+
+    // Verify complete export returns all 32+ insurances (R4)
+    const exportRes = await page.request.get(
+      `${base}/api/hms/insurances-export`,
+    );
+    assert.equal(exportRes.status(), 200);
+    const exportData = await exportRes.json();
+    assert.ok(
+      exportData.insurances && exportData.insurances.length >= 32,
+      `export must return all 32 records, got ${exportData?.insurances?.length}`,
+    );
+    passed(
+      "insurance pagination, server search across pages, and complete export >25 (R4, R5)",
+    );
+
+    // 12. Error and Failure Isolation (R6)
+    console.log(
+      "[12/12] Testing partial failure isolation, error states, and retry (R6)...",
+    );
+    // Intercept insurances endpoint with HTTP 500
+    await page.route("**/api/hms/insurances*", (route) => {
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Simulated upstream failure in insurances",
+        }),
+      });
+    });
+
+    // Trigger sync / reload
+    await page.getByRole("button", { name: /Sync Backend/ }).click();
+    await page.waitForTimeout(400);
+
+    // Verify error banner is visible
+    const errorBanner = page.locator(".alert-notice", {
+      hasText: "Simulated upstream failure in insurances",
+    });
+    await errorBanner.waitFor();
+
+    // Verify genuine empty notice is NOT visible
+    assert.equal(
+      await page.getByText("No insurance policies found in catalog").count(),
+      0,
+      "failed load must not display genuine empty catalog notice",
+    );
+
+    // Unroute and click Retry
+    await page.unroute("**/api/hms/insurances*");
+    const retryPromise = page.waitForResponse(
+      (r) => r.url().includes("/api/hms/insurances") && r.status() === 200,
+    );
+    await errorBanner.getByRole("button", { name: "Retry" }).click();
+    await retryPromise;
+
+    // Verify table restored
+    await page
+      .locator("tr", { hasText: "Bulk Insurance Policy" })
+      .first()
+      .waitFor();
+    passed(
+      "insurance failure isolation, visible error alerts, and retry state recovery (R6)",
     );
   } finally {
     await page.close();

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -623,5 +624,47 @@ func testPackages(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.A
 	}
 	if pkgOmittedCreated.Services[0].RateMinor != 25000 || pkgOmittedCreated.TotalAmountMinor != 25000 {
 		t.Fatalf("expected omitted rate to default to 25000, got rate=%d total=%d", pkgOmittedCreated.Services[0].RateMinor, pkgOmittedCreated.TotalAmountMinor)
+	}
+
+	// -------------------------------------------------------------
+	// 15. Regression R4: Export must NOT truncate at 25 or 100 rows
+	// -------------------------------------------------------------
+	for pIdx := 1; pIdx <= 35; pIdx++ {
+		_, err = packagesService.CreatePackage(ctx, admin, domain.PackageInput{
+			Name:     fmt.Sprintf("Export Bulk Package %03d", pIdx),
+			Discount: 5,
+			Services: []domain.PackageServiceLineInput{
+				{ServiceID: svc1ID, Quantity: 1, RateMinor: 10000, HasRate: true},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed to seed bulk package %d: %v", pIdx, err)
+		}
+	}
+	expList, expTotal, err := packagesService.ExportPackages(ctx, admin, "Export Bulk Package")
+	if err != nil {
+		t.Fatalf("ExportPackages failed: %v", err)
+	}
+	if expTotal != 35 || len(expList) != 35 {
+		t.Fatalf("expected export to return all 35 bulk packages, got len=%d total=%d", len(expList), expTotal)
+	}
+
+	bulkExportReq := httptest.NewRequest("GET", "/v1/packages-export?search=Export+Bulk+Package", nil)
+	bulkExportReq.Header.Set("Cookie", "session=admin")
+	bulkExportReq.Header.Set("Origin", "http://hospital.test")
+	bulkExportRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(bulkExportRec, bulkExportReq)
+	if bulkExportRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for bulk packages export, got %d", bulkExportRec.Code)
+	}
+	var exportPayload struct {
+		Packages []domain.Package `json:"packages"`
+		Total    int              `json:"total"`
+	}
+	if err := json.Unmarshal(bulkExportRec.Body.Bytes(), &exportPayload); err != nil {
+		t.Fatalf("failed to decode export response: %v", err)
+	}
+	if exportPayload.Total != 35 || len(exportPayload.Packages) != 35 {
+		t.Fatalf("HTTP export truncated: expected 35 records, got total=%d len=%d", exportPayload.Total, len(exportPayload.Packages))
 	}
 }

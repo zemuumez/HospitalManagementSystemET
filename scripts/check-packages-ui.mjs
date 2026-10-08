@@ -385,6 +385,183 @@ export async function checkPackagesUI({ context, db, base, results, browser }) {
     passed(
       "unreferenced package deletion succeeds and removes record from database",
     );
+
+    // 11. Pagination, Server Search Across Pages, Service Picker >30, and Export >25 (R4, R5)
+    console.log(
+      "[11/12] Testing catalog pagination, search across pages, and service picker with >30 records...",
+    );
+    const bulkServiceIds = [];
+    for (let i = 1; i <= 32; i++) {
+      const sId = randomUUID();
+      bulkServiceIds.push(sId);
+      await db.query(
+        `INSERT INTO hospital_service (id, name, description, quantity, rate_minor, status)
+         VALUES ($1, $2, 'Bulk service desc', 1, $3, 1)`,
+        [sId, `Bulk Service ${String(i).padStart(2, "0")} ${suffix}`, i * 1000],
+      );
+    }
+
+    const bulkPkgIds = [];
+    for (let i = 1; i <= 32; i++) {
+      const pId = randomUUID();
+      bulkPkgIds.push(pId);
+      const pkgTitle = `Bulk Checkup Pkg ${String(i).padStart(2, "0")} ${suffix}`;
+      await db.query(
+        `INSERT INTO package (id, name, description, discount, total_amount_minor, currency_symbol, created_at, updated_at)
+         VALUES ($1, $2, 'Bulk pkg desc', 0, 10000, 'ETB', now() - interval '${35 - i} minutes', now())`,
+        [pId, pkgTitle],
+      );
+      await db.query(
+        `INSERT INTO package_service (id, package_id, service_id, quantity, rate_minor, amount_minor)
+         VALUES ($1, $2, $3, 1, 10000, 10000)`,
+        [randomUUID(), pId, bulkServiceIds[0]],
+      );
+    }
+
+    // Reload page to view populated catalog
+    await open();
+
+    // Verify pagination controls on Page 1
+    const paginationText = page.locator(".billing-pagination");
+    await paginationText.waitFor();
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 1 to 10 of 32 Results",
+      ),
+      "should show 1 to 10 of 32 results on page 1",
+    );
+
+    // Switch page size to 25
+    const pageSizeSelect = page.locator(".billing-pagination select");
+    const p25Promise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") && r.url().includes("limit=25"),
+    );
+    await pageSizeSelect.selectOption("25");
+    await p25Promise;
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 1 to 25 of 32 Results",
+      ),
+      "should show 1 to 25 of 32 results after page size change",
+    );
+
+    // Navigate to Page 2
+    const pPage2Promise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") && r.url().includes("page=2"),
+    );
+    await page
+      .locator(".billing-pagination-controls button", { hasText: "2" })
+      .click();
+    await pPage2Promise;
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 26 to 32 of 32 Results",
+      ),
+      "page 2 should display records 26 to 32",
+    );
+
+    // Test server search for a record that was on page 2 / page 3
+    const targetSearchPkg = `Bulk Checkup Pkg 31 ${suffix}`;
+    const searchPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") && r.url().includes("search="),
+    );
+    await page.locator(".billing-toolbar input").fill(targetSearchPkg);
+    await searchPromise;
+    await page.locator("tr", { hasText: targetSearchPkg }).waitFor();
+    assert.ok(
+      (await paginationText.innerText()).includes(
+        "Showing 1 to 1 of 1 Results",
+      ),
+      "search results should update total to 1",
+    );
+
+    // Clear search
+    const clearPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") &&
+        !r.url().includes("search=Bulk+Checkup"),
+    );
+    await page.locator(".billing-toolbar input").fill("");
+    await clearPromise;
+    await page.waitForTimeout(300);
+
+    // Verify service picker in package modal loads all seeded services (>25)
+    await page
+      .locator(".billing-toolbar")
+      .getByRole("button", { name: "New Package" })
+      .click();
+    const pkgModal11 = page.locator(".modal-backdrop-custom");
+    await pkgModal11.waitFor({ state: "visible" });
+    const selectOptionsCount = await pkgModal11
+      .locator("select option")
+      .count();
+    assert.ok(
+      selectOptionsCount >= 33,
+      `package service picker should contain all >30 services, got ${selectOptionsCount}`,
+    );
+    await pkgModal11.getByRole("button", { name: "Cancel" }).click();
+    await pkgModal11.waitFor({ state: "hidden" });
+
+    // Verify complete export returns all 32+ packages (R4)
+    const exportRes = await page.request.get(`${base}/api/hms/packages-export`);
+    assert.equal(exportRes.status(), 200);
+    const exportData = await exportRes.json();
+    assert.ok(
+      exportData.packages && exportData.packages.length >= 32,
+      `export must return all 32 records, got ${exportData?.packages?.length}`,
+    );
+    passed(
+      "catalog pagination, server search across pages, service lookup >30, and complete export >25 (R4, R5)",
+    );
+
+    // 12. Error and Failure Isolation (R6)
+    console.log(
+      "[12/12] Testing partial failure isolation, error states, and retry (R6)...",
+    );
+    // Intercept packages endpoint with HTTP 500 while services remains 200
+    await page.route("**/api/hms/packages*", (route) => {
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Simulated upstream failure in packages",
+        }),
+      });
+    });
+
+    // Trigger sync / reload
+    await page.getByRole("button", { name: /Sync Backend/ }).click();
+    await page.waitForTimeout(400);
+
+    // Verify error banner is visible
+    const errorBanner = page.locator(".alert-notice", {
+      hasText: "Simulated upstream failure in packages",
+    });
+    await errorBanner.waitFor();
+
+    // Verify genuine empty notice is NOT visible
+    assert.equal(
+      await page.getByText("No medical packages found in catalog").count(),
+      0,
+      "failed load must not display genuine empty catalog notice",
+    );
+
+    // Unroute and click Retry
+    await page.unroute("**/api/hms/packages*");
+    const retryPromise = page.waitForResponse(
+      (r) => r.url().includes("/api/hms/packages") && r.status() === 200,
+    );
+    await errorBanner.getByRole("button", { name: "Retry" }).click();
+    await retryPromise;
+
+    // Verify table restored
+    await page.locator("tr", { hasText: "Bulk Checkup Pkg" }).first().waitFor();
+    passed(
+      "partial failure isolation, visible error alerts, and retry state recovery (R6)",
+    );
   } finally {
     await page.close();
   }

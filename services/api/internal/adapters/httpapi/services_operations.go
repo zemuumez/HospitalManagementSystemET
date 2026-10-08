@@ -121,17 +121,22 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 			if page < 1 {
 				page = 1
 			}
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			if limit < 1 || limit > 100 {
+				limit = 25
+			}
+			search := r.URL.Query().Get("search")
 			var status *int
 			if qStatus := r.URL.Query().Get("status"); qStatus != "" {
 				st, _ := strconv.Atoi(qStatus)
 				status = &st
 			}
-			list, total, err := s.ServicesOperations.Services(r.Context(), a, page, status)
+			list, total, err := s.ServicesOperations.Services(r.Context(), a, page, limit, status, search)
 			if err != nil {
 				fail(w, err)
 				return true
 			}
-			write(w, 200, map[string]any{"services": list, "total": total, "page": page})
+			write(w, 200, map[string]any{"services": list, "total": total, "page": page, "limit": limit})
 			return true
 
 		case r.URL.Path == "/v1/services" && r.Method == "POST":

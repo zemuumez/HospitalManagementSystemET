@@ -11,7 +11,8 @@ import (
 func (s Server) insurances(w http.ResponseWriter, r *http.Request, a domain.Actor) bool {
 	// Export endpoint
 	if r.URL.Path == "/v1/insurances-export" && r.Method == "GET" {
-		list, total, err := s.Insurances.Insurances(r.Context(), a, 1, 1000, "")
+		search := r.URL.Query().Get("search")
+		list, total, err := s.Insurances.ExportInsurances(r.Context(), a, search)
 		if err != nil {
 			fail(w, err)
 			return true

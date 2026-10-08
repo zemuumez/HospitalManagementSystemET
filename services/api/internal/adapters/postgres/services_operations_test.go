@@ -51,7 +51,7 @@ func testServicesOperations(t *testing.T, db *pgxpool.Pool, store Store, actors 
 	}
 
 	// Doctor can read services and operations
-	svcList, _, err := srv.Services(ctx, doctor, 1, nil)
+	svcList, _, err := srv.Services(ctx, doctor, 1, 25, nil, "")
 	if err != nil {
 		t.Fatalf("expected doctor to read services, got %v", err)
 	}

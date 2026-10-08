@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -333,5 +334,52 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	_, err = insurancesService.CreateInsurance(ctx, admin, overflowInsIn)
 	if !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("expected ErrValidation for insurance money overflow, got %v", err)
+	}
+
+	// -------------------------------------------------------------
+	// Regression R4: Export must return complete results (> 25 rows)
+	// -------------------------------------------------------------
+	for iIdx := 1; iIdx <= 35; iIdx++ {
+		_, err = insurancesService.CreateInsurance(ctx, admin, domain.InsuranceInput{
+			Name:              fmt.Sprintf("Export Bulk Insurance %03d", iIdx),
+			ServiceTaxMinor:   1000,
+			HospitalRateMinor: 2000,
+			Discount:          5,
+			InsuranceNo:       fmt.Sprintf("EXP-NO-%03d", iIdx),
+			InsuranceCode:     fmt.Sprintf("EXP-CODE-%03d", iIdx),
+			Diseases: []domain.InsuranceDiseaseLineInput{
+				{DiseaseName: "Routine Coverage", DiseaseChargeMinor: 1000},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed to seed bulk insurance %d: %v", iIdx, err)
+		}
+	}
+
+	expInsList, expInsTotal, err := insurancesService.ExportInsurances(ctx, admin, "Export Bulk Insurance")
+	if err != nil {
+		t.Fatalf("ExportInsurances failed: %v", err)
+	}
+	if expInsTotal != 35 || len(expInsList) != 35 {
+		t.Fatalf("expected export to return all 35 bulk insurances, got len=%d total=%d", len(expInsList), expInsTotal)
+	}
+
+	bulkInsExportReq := httptest.NewRequest("GET", "/v1/insurances-export?search=Export+Bulk+Insurance", nil)
+	bulkInsExportReq.Header.Set("Cookie", "session=admin")
+	bulkInsExportReq.Header.Set("Origin", "http://hospital.test")
+	bulkInsExportRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(bulkInsExportRec, bulkInsExportReq)
+	if bulkInsExportRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for bulk insurances export, got %d", bulkInsExportRec.Code)
+	}
+	var insExportPayload struct {
+		Insurances []domain.Insurance `json:"insurances"`
+		Total      int                `json:"total"`
+	}
+	if err := json.Unmarshal(bulkInsExportRec.Body.Bytes(), &insExportPayload); err != nil {
+		t.Fatalf("failed to decode insurances export response: %v", err)
+	}
+	if insExportPayload.Total != 35 || len(insExportPayload.Insurances) != 35 {
+		t.Fatalf("HTTP export truncated: expected 35 insurances, got total=%d len=%d", insExportPayload.Total, len(insExportPayload.Insurances))
 	}
 }

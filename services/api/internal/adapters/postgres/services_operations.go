@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"hms.local/api/internal/domain"
 )
 
@@ -276,13 +278,18 @@ func (s Store) UpdateService(ctx context.Context, a domain.Actor, id string, in 
 	return out, tx.Commit(ctx)
 }
 
-func (s Store) Services(ctx context.Context, a domain.Actor, page int, status *int) ([]domain.HospitalService, int, error) {
+func (s Store) Services(ctx context.Context, a domain.Actor, page int, limit int, status *int, search string) ([]domain.HospitalService, int, error) {
 	whereClause := "WHERE 1=1"
 	args := []any{}
 	argIdx := 1
 	if status != nil {
 		whereClause += fmt.Sprintf(" AND status = $%d", argIdx)
 		args = append(args, *status)
+		argIdx++
+	}
+	if strings.TrimSpace(search) != "" {
+		whereClause += fmt.Sprintf(" AND name ILIKE $%d", argIdx)
+		args = append(args, "%"+strings.TrimSpace(search)+"%")
 		argIdx++
 	}
 
@@ -295,7 +302,9 @@ func (s Store) Services(ctx context.Context, a domain.Actor, page int, status *i
 	if page < 1 {
 		page = 1
 	}
-	limit := 25
+	if limit < 1 {
+		limit = 25
+	}
 	offset := (page - 1) * limit
 	query := fmt.Sprintf(`
 		SELECT id, name, description, quantity, rate_minor, status, created_at, updated_at

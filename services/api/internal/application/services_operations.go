@@ -20,7 +20,7 @@ type ServicesOperationsStore interface {
 
 	CreateService(context.Context, domain.Actor, domain.HospitalServiceInput) (domain.HospitalService, error)
 	UpdateService(context.Context, domain.Actor, string, domain.HospitalServiceInput) (domain.HospitalService, error)
-	Services(context.Context, domain.Actor, int, *int) ([]domain.HospitalService, int, error)
+	Services(context.Context, domain.Actor, int, int, *int, string) ([]domain.HospitalService, int, error)
 	Service(context.Context, domain.Actor, string) (domain.HospitalService, error)
 
 	CreateOperationCategory(context.Context, domain.Actor, domain.OperationCategoryInput) (domain.OperationCategory, error)
@@ -152,14 +152,19 @@ func (s ServicesOperationsService) UpdateService(ctx context.Context, a domain.A
 	return s.Store.UpdateService(ctx, a, id, in)
 }
 
-func (s ServicesOperationsService) Services(ctx context.Context, a domain.Actor, page int, status *int) ([]domain.HospitalService, int, error) {
+func (s ServicesOperationsService) Services(ctx context.Context, a domain.Actor, page int, limit int, status *int, search string) ([]domain.HospitalService, int, error) {
 	if !a.Can("services.read") {
 		return nil, 0, domain.ErrForbidden
 	}
 	if page < 1 {
 		page = 1
 	}
-	return s.Store.Services(ctx, a, page, status)
+	if limit < 1 {
+		limit = 25
+	} else if limit > 100 {
+		limit = 100
+	}
+	return s.Store.Services(ctx, a, page, limit, status, search)
 }
 
 func (s ServicesOperationsService) Service(ctx context.Context, a domain.Actor, id string) (domain.HospitalService, error) {

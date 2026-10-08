@@ -70,10 +70,36 @@ func (s InsurancesService) Insurances(ctx context.Context, a domain.Actor, page 
 	if page < 1 {
 		page = 1
 	}
-	if limit < 1 || limit > 100 {
+	if limit < 1 {
 		limit = 25
+	} else if limit > 100 {
+		limit = 100
 	}
 	return s.Store.Insurances(ctx, a, page, limit, search)
+}
+
+func (s InsurancesService) ExportInsurances(ctx context.Context, a domain.Actor, search string) ([]domain.Insurance, int, error) {
+	if !a.Can("insurances.read") {
+		return nil, 0, domain.ErrForbidden
+	}
+	const maxExport = 5000
+	const batchSize = 100
+	var all []domain.Insurance
+	page := 1
+	var totalCount int
+	for {
+		batch, total, err := s.Store.Insurances(ctx, a, page, batchSize, search)
+		if err != nil {
+			return nil, 0, err
+		}
+		totalCount = total
+		all = append(all, batch...)
+		if len(all) >= total || len(batch) == 0 || len(all) >= maxExport {
+			break
+		}
+		page++
+	}
+	return all, totalCount, nil
 }
 
 func (s InsurancesService) ToggleStatus(ctx context.Context, a domain.Actor, id string) (domain.Insurance, error) {

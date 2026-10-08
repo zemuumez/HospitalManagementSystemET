@@ -1,7 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/components/language";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -114,9 +114,16 @@ export function ServicesWorkspace({
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const isSearchMounted = useRef(false);
 
   // Insurances State
   const [insurances, setInsurances] = useState<InsuranceItem[]>([]);
+  const [insurancesTotal, setInsurancesTotal] = useState(0);
+  const [insurancesLoading, setInsurancesLoading] = useState(false);
+  const [insurancesError, setInsurancesError] = useState<string | null>(null);
+  const [pendingStatusIds, setPendingStatusIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [insuranceEditModal, setInsuranceEditModal] = useState(false);
   const [insuranceDetailModal, setInsuranceDetailModal] = useState(false);
   const [selectedInsurance, setSelectedInsurance] =
@@ -151,12 +158,16 @@ export function ServicesWorkspace({
 
   // Packages State
   const [packages, setPackages] = useState<PackageItem[]>([]);
+  const [packagesTotal, setPackagesTotal] = useState(0);
+  const [packagesLoading, setPackagesLoading] = useState(false);
+  const [packagesError, setPackagesError] = useState<string | null>(null);
   const [packageModal, setPackageModal] = useState(false);
   const [packageEditModal, setPackageEditModal] = useState(false);
   const [packageDetailModal, setPackageDetailModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(
     null,
   );
+  const [modalSrvFilter, setModalSrvFilter] = useState("");
 
   // New Package Form State
   const [pkgName, setPkgName] = useState("");
@@ -212,6 +223,10 @@ export function ServicesWorkspace({
       status: true,
     },
   ]);
+  const [servicesTotal, setServicesTotal] = useState(0);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [servicesError, setServicesError] = useState<string | null>(null);
+  const [catalogServices, setCatalogServices] = useState<ServiceItem[]>([]);
   const [serviceModal, setServiceModal] = useState(false);
   const [srvName, setSrvName] = useState("");
   const [srvQuantity, setSrvQuantity] = useState("1");
@@ -391,14 +406,14 @@ export function ServicesWorkspace({
             serviceTax:
               full.service_tax ??
               full.serviceTax ??
-              ((full.service_tax_minor ?? full.serviceTaxMinor ?? 0) / 100),
+              (full.service_tax_minor ?? full.serviceTaxMinor ?? 0) / 100,
             discount: full.discount ?? 0,
             insuranceNo: full.insurance_no || full.insuranceNo || "",
             insuranceCode: full.insurance_code || full.insuranceCode || "",
             hospitalRate:
               full.hospital_rate ??
               full.hospitalRate ??
-              ((full.hospital_rate_minor ?? full.hospitalRateMinor ?? 0) / 100),
+              (full.hospital_rate_minor ?? full.hospitalRateMinor ?? 0) / 100,
             remark: full.remark || "",
             status: full.status === 1 || full.status === true,
             diseases: Array.isArray(full.diseases)
@@ -408,14 +423,13 @@ export function ServicesWorkspace({
                   charge:
                     d.disease_charge ??
                     d.diseaseCharge ??
-                    ((d.disease_charge_minor ?? d.diseaseChargeMinor ?? 0) /
-                      100),
+                    (d.disease_charge_minor ?? d.diseaseChargeMinor ?? 0) / 100,
                 }))
               : [],
             totalAmount:
               full.total ??
               full.totalAmount ??
-              ((full.total_minor ?? full.totalAmountMinor ?? 0) / 100),
+              (full.total_minor ?? full.totalAmountMinor ?? 0) / 100,
           });
         }
       }
@@ -432,10 +446,7 @@ export function ServicesWorkspace({
   ) {
     const tax = Math.max(0, parseFloat(taxStr) || 0);
     const rate = Math.max(0, parseFloat(rateStr) || 0);
-    const discount = Math.min(
-      100,
-      Math.max(0, parseInt(discountStr, 10) || 0),
-    );
+    const discount = Math.min(100, Math.max(0, parseInt(discountStr, 10) || 0));
     const diseaseSum = diseases.reduce(
       (sum, d) => sum + Math.max(0, parseFloat(d.charge) || 0),
       0,
@@ -485,11 +496,12 @@ export function ServicesWorkspace({
     field: "serviceId" | "quantity" | "rate",
     value: string,
   ) {
+    const srvPool = catalogServices.length > 0 ? catalogServices : services;
     setPkgLines((prev) =>
       prev.map((row, i) => {
         if (i !== index) return row;
         if (field === "serviceId") {
-          const selectedSrv = services.find((s) => s.id === value);
+          const selectedSrv = srvPool.find((s) => s.id === value);
           const defaultRate = selectedSrv ? String(selectedSrv.rate) : row.rate;
           return { ...row, serviceId: value, rate: defaultRate };
         }
@@ -515,11 +527,12 @@ export function ServicesWorkspace({
     field: "serviceId" | "quantity" | "rate",
     value: string,
   ) {
+    const srvPool = catalogServices.length > 0 ? catalogServices : services;
     setEditPkgLines((prev) =>
       prev.map((row, i) => {
         if (i !== index) return row;
         if (field === "serviceId") {
-          const selectedSrv = services.find((s) => s.id === value);
+          const selectedSrv = srvPool.find((s) => s.id === value);
           const defaultRate = selectedSrv ? String(selectedSrv.rate) : row.rate;
           return { ...row, serviceId: value, rate: defaultRate };
         }
@@ -584,40 +597,235 @@ export function ServicesWorkspace({
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
 
-  async function loadServicesData() {
-    setIsLoadingApi(true);
-    let connected = false;
+  async function loadPackagesData(p = page, ps = pageSize, s = search) {
+    setPackagesLoading(true);
+    setPackagesError(null);
     try {
-      const [srvRes, ambRes, callRes, pkgRes, insRes] = await Promise.all([
+      const q = new URLSearchParams({
+        page: String(p),
+        limit: String(ps),
+      });
+      if (s.trim()) q.set("search", s.trim());
+
+      const [pkgRes, srvRes] = await Promise.all([
+        fetch(`/api/hms/packages?${q.toString()}`),
         fetch("/api/hms/services?page=1&limit=100"),
-        fetch("/api/hms/ambulances"),
-        fetch("/api/hms/ambulance-calls"),
-        fetch("/api/hms/packages"),
-        fetch("/api/hms/insurances"),
       ]);
+
+      if (!pkgRes.ok) {
+        setPackages([]);
+        const err = await pkgRes.json().catch(() => ({}));
+        const statusMsg =
+          err.error ||
+          err.message ||
+          (pkgRes.status === 403
+            ? "Access denied: insufficient permissions to view medical packages (HTTP 403)"
+            : pkgRes.status >= 500
+              ? `Server error loading medical packages (HTTP ${pkgRes.status})`
+              : `Failed to load medical packages (HTTP ${pkgRes.status})`);
+        throw new Error(statusMsg);
+      }
+
+      const pkgData = await pkgRes.json();
+      const items = Array.isArray(pkgData.packages) ? pkgData.packages : [];
+      setPackages(
+        items.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description || "",
+          discount: p.discount || 0,
+          totalAmountMinor: p.total_amount_minor ?? p.totalAmountMinor ?? 0,
+          totalAmount: (p.total_amount_minor ?? p.totalAmountMinor ?? 0) / 100,
+          currencySymbol: p.currency_symbol || p.currencySymbol || "ETB",
+          services: Array.isArray(p.services)
+            ? p.services.map((s: any) => ({
+                id: s.id,
+                packageId: s.package_id || s.packageId,
+                serviceId: s.service_id || s.serviceId,
+                serviceName: s.service_name || s.serviceName || "",
+                quantity: s.quantity || 1,
+                rateMinor: s.rate_minor ?? s.rateMinor ?? 0,
+                rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
+                amountMinor: s.amount_minor ?? s.amountMinor ?? 0,
+                amount: (s.amount_minor ?? s.amountMinor ?? 0) / 100,
+              }))
+            : [],
+          createdAt: p.created_at || p.createdAt,
+          updatedAt: p.updated_at || p.updatedAt,
+        })),
+      );
+      setPackagesTotal(
+        typeof pkgData.total === "number" ? pkgData.total : items.length,
+      );
 
       if (srvRes.ok) {
         const srvData = await srvRes.json();
-        if (Array.isArray(srvData.services) && srvData.services.length > 0) {
-          setServices(
-            srvData.services.map((s: any) => ({
-              id: s.id,
-              name: s.name,
-              quantity: s.quantity || 1,
-              rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
-              status: s.status === 1,
-            })),
-          );
+        if (Array.isArray(srvData.services)) {
+          const mapped = srvData.services.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            quantity: s.quantity || 1,
+            rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
+            status: s.status === 1,
+          }));
+          setCatalogServices(mapped);
+          setServices(mapped);
         }
-        connected = true;
+      }
+      setApiConnected(true);
+    } catch (err: any) {
+      setPackages([]);
+      setPackagesError(err?.message || "Failed to load medical packages");
+      setApiConnected(false);
+    } finally {
+      setPackagesLoading(false);
+      setIsLoadingApi(false);
+    }
+  }
+
+  async function loadInsurancesData(p = page, ps = pageSize, s = search) {
+    setInsurancesLoading(true);
+    setInsurancesError(null);
+    try {
+      const q = new URLSearchParams({
+        page: String(p),
+        limit: String(ps),
+      });
+      if (s.trim()) q.set("search", s.trim());
+
+      const insRes = await fetch(`/api/hms/insurances?${q.toString()}`);
+      if (!insRes.ok) {
+        setInsurances([]);
+        const err = await insRes.json().catch(() => ({}));
+        const statusMsg =
+          err.error ||
+          err.message ||
+          (insRes.status === 403
+            ? "Access denied: insufficient permissions to view insurance policies (HTTP 403)"
+            : insRes.status >= 500
+              ? `Server error loading insurance policies (HTTP ${insRes.status})`
+              : `Failed to load insurance policies (HTTP ${insRes.status})`);
+        throw new Error(statusMsg);
       }
 
+      const insData = await insRes.json();
+      const items = Array.isArray(insData.insurances) ? insData.insurances : [];
+      setInsurances(
+        items.map((i: any) => ({
+          id: i.id,
+          name: i.name,
+          serviceTax:
+            i.service_tax ??
+            i.serviceTax ??
+            (i.service_tax_minor ?? i.serviceTaxMinor ?? 0) / 100,
+          serviceTaxMinor:
+            i.service_tax_minor ??
+            i.serviceTaxMinor ??
+            Math.round((i.service_tax ?? i.serviceTax ?? 0) * 100),
+          discount: i.discount ?? 0,
+          insuranceNo: i.insurance_no || i.insuranceNo || "",
+          insuranceCode: i.insurance_code || i.insuranceCode || "",
+          hospitalRate:
+            i.hospital_rate ??
+            i.hospitalRate ??
+            (i.hospital_rate_minor ?? i.hospitalRateMinor ?? 0) / 100,
+          hospitalRateMinor:
+            i.hospital_rate_minor ??
+            i.hospitalRateMinor ??
+            Math.round((i.hospital_rate ?? i.hospitalRate ?? 0) * 100),
+          remark: i.remark || "",
+          status: i.status === 1 || i.status === true,
+          diseases: Array.isArray(i.diseases)
+            ? i.diseases.map((d: any) => ({
+                id: d.id,
+                name: d.disease_name || d.diseaseName || d.name || "",
+                charge:
+                  d.disease_charge ??
+                  d.diseaseCharge ??
+                  (d.disease_charge_minor ?? d.diseaseChargeMinor ?? 0) / 100,
+              }))
+            : [],
+          totalAmount:
+            i.total ??
+            i.totalAmount ??
+            (i.total_minor ?? i.totalAmountMinor ?? 0) / 100,
+          totalAmountMinor:
+            i.total_minor ??
+            i.totalAmountMinor ??
+            Math.round((i.total ?? i.totalAmount ?? 0) * 100),
+        })),
+      );
+      setInsurancesTotal(
+        typeof insData.total === "number" ? insData.total : items.length,
+      );
+      setApiConnected(true);
+    } catch (err: any) {
+      setInsurances([]);
+      setInsurancesError(err?.message || "Failed to load insurance policies");
+      setApiConnected(false);
+    } finally {
+      setInsurancesLoading(false);
+      setIsLoadingApi(false);
+    }
+  }
+
+  async function loadServicesListData(p = page, ps = pageSize, s = search) {
+    setServicesLoading(true);
+    setServicesError(null);
+    try {
+      const q = new URLSearchParams({
+        page: String(p),
+        limit: String(ps),
+      });
+      if (s.trim()) q.set("search", s.trim());
+
+      const srvRes = await fetch(`/api/hms/services?${q.toString()}`);
+      if (!srvRes.ok) {
+        setServices([]);
+        const err = await srvRes.json().catch(() => ({}));
+        const statusMsg =
+          err.error ||
+          err.message ||
+          (srvRes.status === 403
+            ? "Access denied: insufficient permissions to view services (HTTP 403)"
+            : srvRes.status >= 500
+              ? `Server error loading services (HTTP ${srvRes.status})`
+              : `Failed to load services (HTTP ${srvRes.status})`);
+        throw new Error(statusMsg);
+      }
+
+      const srvData = await srvRes.json();
+      const items = Array.isArray(srvData.services) ? srvData.services : [];
+      setServices(
+        items.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          quantity: s.quantity || 1,
+          rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
+          status: s.status === 1,
+        })),
+      );
+      setServicesTotal(
+        typeof srvData.total === "number" ? srvData.total : items.length,
+      );
+      setApiConnected(true);
+    } catch (err: any) {
+      setServices([]);
+      setServicesError(err?.message || "Failed to load services");
+      setApiConnected(false);
+    } finally {
+      setServicesLoading(false);
+      setIsLoadingApi(false);
+    }
+  }
+
+  async function loadAmbulancesData() {
+    setIsLoadingApi(true);
+    try {
+      const ambRes = await fetch("/api/hms/ambulances");
       if (ambRes.ok) {
         const ambData = await ambRes.json();
-        if (
-          Array.isArray(ambData.ambulances) &&
-          ambData.ambulances.length > 0
-        ) {
+        if (Array.isArray(ambData.ambulances)) {
           setAmbulances(
             ambData.ambulances.map((a: any) => ({
               id: a.id,
@@ -633,15 +841,24 @@ export function ServicesWorkspace({
             })),
           );
         }
-        connected = true;
+        setApiConnected(true);
+      } else {
+        setApiConnected(false);
       }
+    } catch {
+      setApiConnected(false);
+    } finally {
+      setIsLoadingApi(false);
+    }
+  }
 
+  async function loadAmbulanceCallsData() {
+    setIsLoadingApi(true);
+    try {
+      const callRes = await fetch("/api/hms/ambulance-calls");
       if (callRes.ok) {
         const callData = await callRes.json();
-        if (
-          Array.isArray(callData.ambulance_calls) &&
-          callData.ambulance_calls.length > 0
-        ) {
+        if (Array.isArray(callData.ambulance_calls)) {
           setAmbulanceCalls(
             callData.ambulance_calls.map((c: any) => ({
               id: c.id,
@@ -655,105 +872,10 @@ export function ServicesWorkspace({
             })),
           );
         }
-        connected = true;
+        setApiConnected(true);
+      } else {
+        setApiConnected(false);
       }
-
-      if (pkgRes.ok) {
-        const pkgData = await pkgRes.json();
-        if (Array.isArray(pkgData.packages)) {
-          setPackages(
-            pkgData.packages.map((p: any) => ({
-              id: p.id,
-              name: p.name,
-              description: p.description || "",
-              discount: p.discount || 0,
-              totalAmountMinor: p.total_amount_minor ?? p.totalAmountMinor ?? 0,
-              totalAmount:
-                (p.total_amount_minor ?? p.totalAmountMinor ?? 0) / 100,
-              currencySymbol: p.currency_symbol || p.currencySymbol || "ETB",
-              services: Array.isArray(p.services)
-                ? p.services.map((s: any) => ({
-                    id: s.id,
-                    packageId: s.package_id || s.packageId,
-                    serviceId: s.service_id || s.serviceId,
-                    serviceName: s.service_name || s.serviceName || "",
-                    quantity: s.quantity || 1,
-                    rateMinor: s.rate_minor ?? s.rateMinor ?? 0,
-                    rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
-                    amountMinor: s.amount_minor ?? s.amountMinor ?? 0,
-                    amount: (s.amount_minor ?? s.amountMinor ?? 0) / 100,
-                  }))
-                : [],
-              createdAt: p.created_at || p.createdAt,
-              updatedAt: p.updated_at || p.updatedAt,
-            })),
-          );
-        }
-        connected = true;
-      }
-
-      if (insRes.ok) {
-        const insData = await insRes.json();
-        if (Array.isArray(insData.insurances)) {
-          setInsurances(
-            insData.insurances.map((i: any) => ({
-              id: i.id,
-              name: i.name,
-              serviceTax:
-                i.service_tax ??
-                i.serviceTax ??
-                ((i.service_tax_minor ?? i.serviceTaxMinor ?? 0) / 100),
-              serviceTaxMinor:
-                i.service_tax_minor ??
-                i.serviceTaxMinor ??
-                Math.round(
-                  (i.service_tax ?? i.serviceTax ?? 0) * 100,
-                ),
-              discount: i.discount ?? 0,
-              insuranceNo: i.insurance_no || i.insuranceNo || "",
-              insuranceCode: i.insurance_code || i.insuranceCode || "",
-              hospitalRate:
-                i.hospital_rate ??
-                i.hospitalRate ??
-                ((i.hospital_rate_minor ?? i.hospitalRateMinor ?? 0) / 100),
-              hospitalRateMinor:
-                i.hospital_rate_minor ??
-                i.hospitalRateMinor ??
-                Math.round(
-                  (i.hospital_rate ?? i.hospitalRate ?? 0) * 100,
-                ),
-              remark: i.remark || "",
-              status: i.status === 1 || i.status === true,
-              diseases: Array.isArray(i.diseases)
-                ? i.diseases.map((d: any) => ({
-                    id: d.id,
-                    name:
-                      d.disease_name || d.diseaseName || d.name || "",
-                    charge:
-                      d.disease_charge ??
-                      d.diseaseCharge ??
-                      ((d.disease_charge_minor ??
-                        d.diseaseChargeMinor ??
-                        0) / 100),
-                  }))
-                : [],
-              totalAmount:
-                i.total ??
-                i.totalAmount ??
-                ((i.total_minor ?? i.totalAmountMinor ?? 0) / 100),
-              totalAmountMinor:
-                i.total_minor ??
-                i.totalAmountMinor ??
-                Math.round(
-                  (i.total ?? i.totalAmount ?? 0) * 100,
-                ),
-            })),
-          );
-        }
-        connected = true;
-      }
-
-      setApiConnected(connected);
     } catch {
       setApiConnected(false);
     } finally {
@@ -761,9 +883,125 @@ export function ServicesWorkspace({
     }
   }
 
+  async function loadServicesData(p = page, ps = pageSize, s = search) {
+    if (currentTab === "packages") {
+      await loadPackagesData(p, ps, s);
+    } else if (currentTab === "insurances") {
+      await loadInsurancesData(p, ps, s);
+    } else if (currentTab === "services") {
+      await loadServicesListData(p, ps, s);
+    } else if (currentTab === "ambulances") {
+      await loadAmbulancesData();
+    } else if (currentTab === "ambulance-calls") {
+      await loadAmbulanceCallsData();
+    } else {
+      await Promise.all([
+        loadPackagesData(p, ps, s),
+        loadInsurancesData(p, ps, s),
+        loadServicesListData(p, ps, s),
+      ]);
+    }
+  }
+
+  function handlePageChange(newPage: number) {
+    setPage(newPage);
+    loadServicesData(newPage, pageSize, search);
+  }
+
+  function handlePageSizeChange(newPageSize: number) {
+    setPageSize(newPageSize);
+    setPage(1);
+    loadServicesData(1, newPageSize, search);
+  }
+
+  function handleRetry() {
+    loadServicesData(page, pageSize, search);
+  }
+
+  function renderPagination(total: number, currentCount: number) {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const startRecord = total > 0 ? (page - 1) * pageSize + 1 : 0;
+    const endRecord = total > 0 ? Math.min(page * pageSize, total) : 0;
+
+    const pageNumbers: number[] = [];
+    const maxButtons = 5;
+    let startPage = Math.max(1, page - 2);
+    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+    if (endPage - startPage < maxButtons - 1) {
+      startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(i);
+    }
+
+    return (
+      <div className="billing-pagination d-flex justify-content-between align-items-center mt-3">
+        <div className="d-flex align-items-center gap-2">
+          <span>{t("Show")}</span>
+          <select
+            className="form-select-custom"
+            value={pageSize}
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <span>
+            {t("Showing")} {startRecord} {t("to")} {endRecord} {t("of")} {total}{" "}
+            {t("Results")}
+          </span>
+        </div>
+        <div className="billing-pagination-controls">
+          <button
+            type="button"
+            className="billing-page-nav-btn"
+            disabled={page <= 1}
+            onClick={() => handlePageChange(page - 1)}
+            aria-label="Previous page"
+          >
+            &laquo;
+          </button>
+          {pageNumbers.map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`billing-page-btn ${p === page ? "active" : ""}`}
+              onClick={() => handlePageChange(p)}
+            >
+              {p}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="billing-page-nav-btn"
+            disabled={page >= totalPages}
+            onClick={() => handlePageChange(page + 1)}
+            aria-label="Next page"
+          >
+            &raquo;
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
-    loadServicesData();
+    loadServicesData(page, pageSize, search);
   }, []);
+
+  useEffect(() => {
+    if (!isSearchMounted.current) {
+      isSearchMounted.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      setPage(1);
+      loadServicesData(1, pageSize, search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   async function handleCreateService(e: React.FormEvent) {
     e.preventDefault();
@@ -1123,16 +1361,9 @@ export function ServicesWorkspace({
     try {
       const payload = {
         name: newInsuranceName.trim(),
-        service_tax_minor: Math.round(
-          (parseFloat(newServiceTax) || 0) * 100,
-        ),
-        serviceTaxMinor: Math.round(
-          (parseFloat(newServiceTax) || 0) * 100,
-        ),
-        discount: Math.max(
-          0,
-          Math.min(100, parseInt(newDiscount, 10) || 0),
-        ),
+        service_tax_minor: Math.round((parseFloat(newServiceTax) || 0) * 100),
+        serviceTaxMinor: Math.round((parseFloat(newServiceTax) || 0) * 100),
+        discount: Math.max(0, Math.min(100, parseInt(newDiscount, 10) || 0)),
         insurance_no: newInsuranceNo.trim(),
         insuranceNo: newInsuranceNo.trim(),
         insurance_code: newInsuranceCode.trim(),
@@ -1140,9 +1371,7 @@ export function ServicesWorkspace({
         hospital_rate_minor: Math.round(
           (parseFloat(newHospitalRate) || 0) * 100,
         ),
-        hospitalRateMinor: Math.round(
-          (parseFloat(newHospitalRate) || 0) * 100,
-        ),
+        hospitalRateMinor: Math.round((parseFloat(newHospitalRate) || 0) * 100),
         remark: newRemark.trim(),
         status: newStatus ? 1 : 0,
         diseases: newDiseases
@@ -1151,12 +1380,8 @@ export function ServicesWorkspace({
             disease_name: d.name.trim(),
             diseaseName: d.name.trim(),
             name: d.name.trim(),
-            disease_charge_minor: Math.round(
-              (parseFloat(d.charge) || 0) * 100,
-            ),
-            diseaseChargeMinor: Math.round(
-              (parseFloat(d.charge) || 0) * 100,
-            ),
+            disease_charge_minor: Math.round((parseFloat(d.charge) || 0) * 100),
+            diseaseChargeMinor: Math.round((parseFloat(d.charge) || 0) * 100),
           })),
       };
 
@@ -1187,9 +1412,7 @@ export function ServicesWorkspace({
     }
   }
 
-  async function handleUpdateInsurance(
-    e?: React.FormEvent | React.MouseEvent,
-  ) {
+  async function handleUpdateInsurance(e?: React.FormEvent | React.MouseEvent) {
     if (e) {
       e.preventDefault();
     }
@@ -1207,16 +1430,9 @@ export function ServicesWorkspace({
     try {
       const payload = {
         name: editInsuranceName.trim(),
-        service_tax_minor: Math.round(
-          (parseFloat(editServiceTax) || 0) * 100,
-        ),
-        serviceTaxMinor: Math.round(
-          (parseFloat(editServiceTax) || 0) * 100,
-        ),
-        discount: Math.max(
-          0,
-          Math.min(100, parseInt(editDiscount, 10) || 0),
-        ),
+        service_tax_minor: Math.round((parseFloat(editServiceTax) || 0) * 100),
+        serviceTaxMinor: Math.round((parseFloat(editServiceTax) || 0) * 100),
+        discount: Math.max(0, Math.min(100, parseInt(editDiscount, 10) || 0)),
         insurance_no: editInsuranceNo.trim(),
         insuranceNo: editInsuranceNo.trim(),
         insurance_code: editInsuranceCode.trim(),
@@ -1238,12 +1454,8 @@ export function ServicesWorkspace({
             disease_name: d.name.trim(),
             diseaseName: d.name.trim(),
             name: d.name.trim(),
-            disease_charge_minor: Math.round(
-              (parseFloat(d.charge) || 0) * 100,
-            ),
-            diseaseChargeMinor: Math.round(
-              (parseFloat(d.charge) || 0) * 100,
-            ),
+            disease_charge_minor: Math.round((parseFloat(d.charge) || 0) * 100),
+            diseaseChargeMinor: Math.round((parseFloat(d.charge) || 0) * 100),
           })),
       };
 
@@ -1274,16 +1486,21 @@ export function ServicesWorkspace({
     }
   }
 
-  async function handleToggleInsuranceStatus(id: string) {
+  async function handleToggleInsuranceStatus(item: InsuranceItem) {
+    if (pendingStatusIds.has(item.id)) return;
     setApiErrorBanner("");
     setApiSuccessBanner("");
+    const targetStatus = item.status ? 0 : 1;
 
+    setPendingStatusIds((prev) => new Set(prev).add(item.id));
     try {
-      const res = await fetch(`/api/hms/insurances/${id}/status`, {
+      const res = await fetch(`/api/hms/insurances/${item.id}/status`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus }),
       });
       if (res.ok) {
-        await loadServicesData();
+        await loadServicesData(page, pageSize, search);
         return;
       }
       const err = await res.json().catch(() => ({}));
@@ -1294,6 +1511,12 @@ export function ServicesWorkspace({
       setApiErrorBanner(
         t("The hospital service is unavailable. Please try again shortly."),
       );
+    } finally {
+      setPendingStatusIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
     }
   }
 
@@ -1321,7 +1544,9 @@ export function ServicesWorkspace({
       if (res.status === 409 || err.error === "RECORD_IN_USE") {
         setApiErrorBanner(
           err.message ||
-            t("Insurance is in use by patient admissions and cannot be deleted"),
+            t(
+              "Insurance is in use by patient admissions and cannot be deleted",
+            ),
         );
       } else {
         setApiErrorBanner(
@@ -1583,8 +1808,7 @@ export function ServicesWorkspace({
                   {createCalculatedPreview.diseaseSum.toFixed(2)}
                 </div>
                 <div>
-                  {t("Subtotal")}: ETB{" "}
-                  {createCalculatedPreview.base.toFixed(2)}
+                  {t("Subtotal")}: ETB {createCalculatedPreview.base.toFixed(2)}
                 </div>
                 <div>
                   {t("Discount (%)")}: -ETB{" "}
@@ -1654,62 +1878,103 @@ export function ServicesWorkspace({
 
       {/* Backend API Connection Banner */}
       <div className="d-flex flex-column gap-2 mb-3">
-        <div
-          className="d-flex align-items-center justify-content-between p-2 px-3 rounded border"
-          style={{
-            backgroundColor: apiConnected
-              ? "rgba(16, 185, 129, 0.08)"
-              : "rgba(59, 130, 246, 0.08)",
-            borderColor: apiConnected
-              ? "rgba(16, 185, 129, 0.3)"
-              : "rgba(59, 130, 246, 0.3)",
-          }}
-        >
-          <div className="d-flex align-items-center gap-2">
-            <span
+        {(() => {
+          const tabLoading =
+            currentTab === "packages"
+              ? packagesLoading
+              : currentTab === "insurances"
+                ? insurancesLoading
+                : currentTab === "services"
+                  ? servicesLoading
+                  : isLoadingApi;
+
+          const tabError =
+            currentTab === "packages"
+              ? packagesError
+              : currentTab === "insurances"
+                ? insurancesError
+                : currentTab === "services"
+                  ? servicesError
+                  : null;
+
+          const isConnected = apiConnected && !tabError;
+
+          return (
+            <div
+              className="d-flex align-items-center justify-content-between p-2 px-3 rounded border"
               style={{
-                display: "inline-block",
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                backgroundColor: apiConnected ? "#10b981" : "#3b82f6",
-              }}
-            />
-            <span className="fs-7 fw-semibold">
-              {apiConnected
-                ? t(
-                    "Connected to Go/PostgreSQL Services & Ambulances (/v1/services, /v1/ambulances, /v1/packages, /v1/insurances)",
-                  )
-                : t("Local preview mode · Syncing locally")}
-            </span>
-            <span
-              className="badge-available-stock fs-8 py-0 px-2"
-              style={{
-                backgroundColor: "#3b82f622",
-                color: "#3b82f6",
-                borderColor: "#3b82f6",
+                backgroundColor: tabError
+                  ? "rgba(239, 68, 68, 0.08)"
+                  : isConnected
+                    ? "rgba(16, 185, 129, 0.08)"
+                    : "rgba(59, 130, 246, 0.08)",
+                borderColor: tabError
+                  ? "rgba(239, 68, 68, 0.3)"
+                  : isConnected
+                    ? "rgba(16, 185, 129, 0.3)"
+                    : "rgba(59, 130, 246, 0.3)",
               }}
             >
-              {t("Services")}: {services.length} | {t("Ambulances")}:{" "}
-              {ambulances.length} | {t("Calls")}: {ambulanceCalls.length} |{" "}
-              {t("Packages")}: {packages.length} | {t("Insurances")}:{" "}
-              {insurances.length}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="btn-icon-link fs-7 d-flex align-items-center gap-1"
-            onClick={loadServicesData}
-            disabled={isLoadingApi}
-            title={t("Refresh services & ambulances from Go API")}
-          >
-            <RefreshCw
-              size={13}
-              className={isLoadingApi ? "animate-spin" : ""}
-            />
-            <span>{isLoadingApi ? t("Syncing...") : t("Sync Backend")}</span>
-          </button>
-        </div>
+              <div className="d-flex align-items-center gap-2">
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    backgroundColor: tabError
+                      ? "#ef4444"
+                      : isConnected
+                        ? "#10b981"
+                        : "#3b82f6",
+                  }}
+                />
+                <span className="fs-7 fw-semibold">
+                  {tabError
+                    ? `${t("Catalog sync error")}: ${tabError}`
+                    : isConnected
+                      ? t(
+                          "Connected to Go/PostgreSQL Services & Ambulances (/v1/services, /v1/ambulances, /v1/packages, /v1/insurances)",
+                        )
+                      : t("Local preview mode · Syncing locally")}
+                </span>
+                <span
+                  className="badge-available-stock fs-8 py-0 px-2"
+                  style={{
+                    backgroundColor: "#3b82f622",
+                    color: "#3b82f6",
+                    borderColor: "#3b82f6",
+                  }}
+                >
+                  {currentTab === "packages"
+                    ? `${t("Packages")}: ${packagesTotal}`
+                    : currentTab === "insurances"
+                      ? `${t("Insurances")}: ${insurancesTotal}`
+                      : currentTab === "services"
+                        ? `${t("Services")}: ${servicesTotal}`
+                        : `${t("Ambulances")}: ${ambulances.length} | ${t("Calls")}: ${ambulanceCalls.length}`}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn-icon-link fs-7 d-flex align-items-center gap-1"
+                onClick={() => loadServicesData(page, pageSize, search)}
+                disabled={isLoadingApi || tabLoading}
+                title={t("Refresh data from Go API")}
+              >
+                <RefreshCw
+                  size={13}
+                  className={isLoadingApi || tabLoading ? "animate-spin" : ""}
+                />
+                <span>
+                  {isLoadingApi || tabLoading
+                    ? t("Syncing...")
+                    : t("Sync Backend")}
+                </span>
+              </button>
+            </div>
+          );
+        })()}
 
         {apiSuccessBanner && (
           <div
@@ -1784,6 +2049,30 @@ export function ServicesWorkspace({
             </div>
           </div>
 
+          {insurancesError && (
+            <div
+              className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded mb-3"
+              style={{
+                borderColor: "#ef4444",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                color: "#ef4444",
+              }}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <AlertCircle size={16} />
+                <span className="fs-7">{insurancesError}</span>
+              </div>
+              <button
+                type="button"
+                className="btn-action-blue btn-sm py-1 px-2 fs-8"
+                onClick={handleRetry}
+              >
+                <RefreshCw size={12} className="me-1 d-inline" />
+                {t("Retry")}
+              </button>
+            </div>
+          )}
+
           <div className="table-responsive">
             <table className="billing-table w-100">
               <thead>
@@ -1800,19 +2089,38 @@ export function ServicesWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {insurances
-                  .filter((item) =>
-                    (
-                      item.name +
-                      " " +
-                      item.insuranceNo +
-                      " " +
-                      item.insuranceCode
-                    )
-                      .toLowerCase()
-                      .includes(search.toLowerCase()),
-                  )
-                  .map((item) => (
+                {insurancesLoading ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-4">
+                      <Loader2
+                        size={18}
+                        className="animate-spin d-inline me-2"
+                      />
+                      {t("Loading insurance policies...")}
+                    </td>
+                  </tr>
+                ) : insurancesError ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-4 text-danger">
+                      <AlertCircle size={18} className="d-inline me-2" />
+                      <span>{insurancesError}</span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger ms-3"
+                        onClick={handleRetry}
+                      >
+                        {t("Retry")}
+                      </button>
+                    </td>
+                  </tr>
+                ) : insurances.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-4 text-muted">
+                      {t("No insurance policies found in catalog")}
+                    </td>
+                  </tr>
+                ) : (
+                  insurances.map((item) => (
                     <tr key={item.id}>
                       <td>
                         <span className="fw-semibold text-primary">
@@ -1849,15 +2157,18 @@ export function ServicesWorkspace({
                       </td>
                       <td>
                         <label
-                          className="switch-toggle"
+                          className={`switch-toggle ${pendingStatusIds.has(item.id) ? "opacity-50 pointer-events-none" : ""}`}
                           onClick={(e) => {
                             e.preventDefault();
-                            handleToggleInsuranceStatus(item.id);
+                            if (!pendingStatusIds.has(item.id)) {
+                              handleToggleInsuranceStatus(item);
+                            }
                           }}
                         >
                           <input
                             type="checkbox"
                             checked={item.status}
+                            disabled={pendingStatusIds.has(item.id)}
                             readOnly
                           />
                           <span className="slider-toggle"></span>
@@ -1893,49 +2204,13 @@ export function ServicesWorkspace({
                         </div>
                       </td>
                     </tr>
-                  ))}
-                {insurances.filter((item) =>
-                  (
-                    item.name +
-                    " " +
-                    item.insuranceNo +
-                    " " +
-                    item.insuranceCode
-                  )
-                    .toLowerCase()
-                    .includes(search.toLowerCase()),
-                ).length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="text-center py-4 text-muted">
-                      {t("No insurance policies found in catalog")}
-                    </td>
-                  </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
 
-          <div className="billing-pagination d-flex justify-content-between align-items-center mt-3">
-            <div className="d-flex align-items-center gap-2">
-              <span>{t("Show")}</span>
-              <select
-                className="form-select-custom"
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-              <span>
-                {t("Showing")} 1 {t("to")} {insurances.length} {t("of")}{" "}
-                {insurances.length} {t("Results")}
-              </span>
-            </div>
-            <div className="pagination-numbers">
-              <button className="page-btn active">1</button>
-            </div>
-          </div>
+          {renderPagination(insurancesTotal, insurances.length)}
         </div>
       )}
 
@@ -1966,6 +2241,30 @@ export function ServicesWorkspace({
             </div>
           </div>
 
+          {packagesError && (
+            <div
+              className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded mb-3"
+              style={{
+                borderColor: "#ef4444",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                color: "#ef4444",
+              }}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <AlertCircle size={16} />
+                <span className="fs-7">{packagesError}</span>
+              </div>
+              <button
+                type="button"
+                className="btn-action-blue btn-sm py-1 px-2 fs-8"
+                onClick={handleRetry}
+              >
+                <RefreshCw size={12} className="me-1 d-inline" />
+                {t("Retry")}
+              </button>
+            </div>
+          )}
+
           <div className="table-responsive">
             <table className="billing-table w-100">
               <thead>
@@ -1977,16 +2276,38 @@ export function ServicesWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {packages
-                  .filter(
-                    (p) =>
-                      p.name.toLowerCase().includes(search.toLowerCase()) ||
-                      (p.description &&
-                        p.description
-                          .toLowerCase()
-                          .includes(search.toLowerCase())),
-                  )
-                  .map((pkg) => (
+                {packagesLoading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-4">
+                      <Loader2
+                        size={18}
+                        className="animate-spin d-inline me-2"
+                      />
+                      {t("Loading medical packages...")}
+                    </td>
+                  </tr>
+                ) : packagesError ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-4 text-danger">
+                      <AlertCircle size={18} className="d-inline me-2" />
+                      <span>{packagesError}</span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger ms-3"
+                        onClick={handleRetry}
+                      >
+                        {t("Retry")}
+                      </button>
+                    </td>
+                  </tr>
+                ) : packages.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-4 text-muted">
+                      {t("No medical packages found in catalog")}
+                    </td>
+                  </tr>
+                ) : (
+                  packages.map((pkg) => (
                     <tr key={pkg.id}>
                       <td>
                         <div>
@@ -2037,17 +2358,13 @@ export function ServicesWorkspace({
                         </div>
                       </td>
                     </tr>
-                  ))}
-                {packages.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="text-center py-4 text-muted">
-                      {t("No medical packages found in catalog")}
-                    </td>
-                  </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
+
+          {renderPagination(packagesTotal, packages.length)}
         </div>
       )}
 
@@ -2074,6 +2391,30 @@ export function ServicesWorkspace({
             </div>
           </div>
 
+          {servicesError && (
+            <div
+              className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded mb-3"
+              style={{
+                borderColor: "#ef4444",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                color: "#ef4444",
+              }}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <AlertCircle size={16} />
+                <span className="fs-7">{servicesError}</span>
+              </div>
+              <button
+                type="button"
+                className="btn-action-blue btn-sm py-1 px-2 fs-8"
+                onClick={handleRetry}
+              >
+                <RefreshCw size={12} className="me-1 d-inline" />
+                {t("Retry")}
+              </button>
+            </div>
+          )}
+
           <div className="table-responsive">
             <table className="billing-table w-100">
               <thead>
@@ -2086,11 +2427,38 @@ export function ServicesWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {services
-                  .filter((s) =>
-                    s.name.toLowerCase().includes(search.toLowerCase()),
-                  )
-                  .map((srv) => (
+                {servicesLoading ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-4">
+                      <Loader2
+                        size={18}
+                        className="animate-spin d-inline me-2"
+                      />
+                      {t("Loading services...")}
+                    </td>
+                  </tr>
+                ) : servicesError ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-4 text-danger">
+                      <AlertCircle size={18} className="d-inline me-2" />
+                      <span>{servicesError}</span>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger ms-3"
+                        onClick={handleRetry}
+                      >
+                        {t("Retry")}
+                      </button>
+                    </td>
+                  </tr>
+                ) : services.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-4 text-muted">
+                      {t("No services found in catalog")}
+                    </td>
+                  </tr>
+                ) : (
+                  services.map((srv) => (
                     <tr key={srv.id}>
                       <td>
                         <span className="fw-semibold text-primary">
@@ -2139,10 +2507,13 @@ export function ServicesWorkspace({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          {renderPagination(servicesTotal, services.length)}
         </div>
       )}
 
@@ -2405,14 +2776,28 @@ export function ServicesWorkspace({
                 <div className="mt-3">
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <h4 className="fs-6 fw-bold mb-0">{t("Services")}</h4>
-                    <button
-                      type="button"
-                      className="btn-action-blue btn-sm py-1 px-2"
-                      onClick={addPkgLine}
-                    >
-                      <Plus size={14} className="me-1" />
-                      {t("Add Service")}
-                    </button>
+                    <div className="d-flex align-items-center gap-2">
+                      <input
+                        type="text"
+                        className="form-control-custom"
+                        style={{
+                          maxWidth: "200px",
+                          height: "30px",
+                          fontSize: "12px",
+                        }}
+                        placeholder={t("Filter services...")}
+                        value={modalSrvFilter}
+                        onChange={(e) => setModalSrvFilter(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn-action-blue btn-sm py-1 px-2"
+                        onClick={addPkgLine}
+                      >
+                        <Plus size={14} className="me-1" />
+                        {t("Add Service")}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="table-responsive">
@@ -2462,11 +2847,25 @@ export function ServicesWorkspace({
                                   <option value="">
                                     -- {t("Select Service")} --
                                   </option>
-                                  {services.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name} ({s.rate} ETB)
-                                    </option>
-                                  ))}
+                                  {(catalogServices.length > 0
+                                    ? catalogServices
+                                    : services
+                                  )
+                                    .filter(
+                                      (s) =>
+                                        !modalSrvFilter.trim() ||
+                                        s.name
+                                          .toLowerCase()
+                                          .includes(
+                                            modalSrvFilter.toLowerCase(),
+                                          ) ||
+                                        s.id === row.serviceId,
+                                    )
+                                    .map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.name} ({s.rate} ETB)
+                                      </option>
+                                    ))}
                                 </select>
                               </td>
                               <td>
@@ -2612,14 +3011,28 @@ export function ServicesWorkspace({
                 <div className="mt-3">
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <h4 className="fs-6 fw-bold mb-0">{t("Services")}</h4>
-                    <button
-                      type="button"
-                      className="btn-action-blue btn-sm py-1 px-2"
-                      onClick={addEditPkgLine}
-                    >
-                      <Plus size={14} className="me-1" />
-                      {t("Add Service")}
-                    </button>
+                    <div className="d-flex align-items-center gap-2">
+                      <input
+                        type="text"
+                        className="form-control-custom"
+                        style={{
+                          maxWidth: "200px",
+                          height: "30px",
+                          fontSize: "12px",
+                        }}
+                        placeholder={t("Filter services...")}
+                        value={modalSrvFilter}
+                        onChange={(e) => setModalSrvFilter(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn-action-blue btn-sm py-1 px-2"
+                        onClick={addEditPkgLine}
+                      >
+                        <Plus size={14} className="me-1" />
+                        {t("Add Service")}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="table-responsive">
@@ -2669,11 +3082,25 @@ export function ServicesWorkspace({
                                   <option value="">
                                     -- {t("Select Service")} --
                                   </option>
-                                  {services.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name} ({s.rate} ETB)
-                                    </option>
-                                  ))}
+                                  {(catalogServices.length > 0
+                                    ? catalogServices
+                                    : services
+                                  )
+                                    .filter(
+                                      (s) =>
+                                        !modalSrvFilter.trim() ||
+                                        s.name
+                                          .toLowerCase()
+                                          .includes(
+                                            modalSrvFilter.toLowerCase(),
+                                          ) ||
+                                        s.id === row.serviceId,
+                                    )
+                                    .map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.name} ({s.rate} ETB)
+                                      </option>
+                                    ))}
                                 </select>
                               </td>
                               <td>
@@ -2945,7 +3372,8 @@ export function ServicesWorkspace({
 
                   <div className="form-group-custom">
                     <label>
-                      {t("Insurance No")}: <span className="text-danger">*</span>
+                      {t("Insurance No")}:{" "}
+                      <span className="text-danger">*</span>
                     </label>
                     <input
                       type="text"
@@ -2958,7 +3386,8 @@ export function ServicesWorkspace({
 
                   <div className="form-group-custom">
                     <label>
-                      {t("Insurance Code")}: <span className="text-danger">*</span>
+                      {t("Insurance Code")}:{" "}
+                      <span className="text-danger">*</span>
                     </label>
                     <input
                       type="text"
@@ -2971,7 +3400,8 @@ export function ServicesWorkspace({
 
                   <div className="form-group-custom">
                     <label>
-                      {t("Hospital Rate")}: <span className="text-danger">*</span>
+                      {t("Hospital Rate")}:{" "}
+                      <span className="text-danger">*</span>
                     </label>
                     <input
                       type="text"
@@ -3010,7 +3440,9 @@ export function ServicesWorkspace({
                 {/* Disease Details Table Section */}
                 <div className="mt-4 pt-3 border-top border-secondary-subtle">
                   <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h4 className="m-0 fs-5 fw-semibold">{t("Disease Details")}</h4>
+                    <h4 className="m-0 fs-5 fw-semibold">
+                      {t("Disease Details")}
+                    </h4>
                     <button
                       type="button"
                       className="btn-action-blue px-3 py-1 fs-6"
