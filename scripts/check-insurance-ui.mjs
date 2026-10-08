@@ -69,12 +69,7 @@ export async function checkInsuranceUI({
       0,
       "empty database must not show Brooke Leblan mock fixture",
     );
-    assert.ok(
-      await page
-        .getByText("No insurance policies found in catalog")
-        .isVisible(),
-      "empty catalog must show empty notice",
-    );
+    await page.getByText("No insurance policies found in catalog").waitFor();
     passed("empty catalog displays zero hardcoded mock fixtures");
 
     // 2. Open full-page New Insurance form

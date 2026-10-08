@@ -51,10 +51,7 @@ export async function checkPackagesUI({ context, db, base, results, browser }) {
       0,
       "empty database must not show Fever Package fixture",
     );
-    assert.ok(
-      await page.getByText("No medical packages found in catalog").isVisible(),
-      "empty catalog must show empty notice",
-    );
+    await page.getByText("No medical packages found in catalog").waitFor();
     passed("empty catalog displays zero hardcoded mock fixtures");
 
     // 2. Ensure at least two active services exist in the database
