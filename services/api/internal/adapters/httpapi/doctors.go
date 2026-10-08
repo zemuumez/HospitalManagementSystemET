@@ -180,14 +180,26 @@ func (s Server) doctors(w http.ResponseWriter, r *http.Request, a domain.Actor) 
 		if !decode(w, r, &req) {
 			return true
 		}
+		if req.Active == nil && req.Status == nil {
+			fail(w, domain.ErrValidation)
+			return true
+		}
+		if req.Status != nil && (*req.Status != 0 && *req.Status != 1) {
+			fail(w, domain.ErrValidation)
+			return true
+		}
+		if req.Active != nil && req.Status != nil {
+			statusActive := (*req.Status == 1)
+			if *req.Active != statusActive {
+				fail(w, domain.ErrValidation)
+				return true
+			}
+		}
 		var active bool
 		if req.Active != nil {
 			active = *req.Active
-		} else if req.Status != nil {
-			active = (*req.Status == 1)
 		} else {
-			fail(w, domain.ErrValidation)
-			return true
+			active = (*req.Status == 1)
 		}
 		err := s.Scheduling.SetDoctorStatus(r.Context(), a, id, active)
 		if err != nil {

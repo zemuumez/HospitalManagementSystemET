@@ -510,6 +510,9 @@ func (s Store) SetDoctorStatus(ctx context.Context, a domain.Actor, id string, a
 	if err != nil {
 		return err
 	}
+	if curActive == active {
+		return nil
+	}
 
 	_, err = tx.Exec(ctx, `UPDATE staff_access SET active=$2 WHERE user_id=$1`, id, active)
 	if err != nil {

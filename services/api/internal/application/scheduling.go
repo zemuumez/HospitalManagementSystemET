@@ -35,7 +35,19 @@ func (s Scheduling) Doctors(ctx context.Context, a domain.Actor) ([]domain.Docto
 	if !a.Can("appointments.read") {
 		return nil, domain.ErrForbidden
 	}
-	return s.Store.Doctors(ctx)
+	docs, err := s.Store.Doctors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if a.Role != "admin" {
+		for i := range docs {
+			if a.Role == "doctor" && a.ID == docs[i].ID {
+				continue
+			}
+			docs[i] = docs[i].PublicDirectory(a.Role)
+		}
+	}
+	return docs, nil
 }
 
 func (s Scheduling) Doctor(ctx context.Context, a domain.Actor, id string) (domain.Doctor, error) {
@@ -88,7 +100,19 @@ func (s Scheduling) ListDoctors(ctx context.Context, a domain.Actor, statusFilte
 	if a.Role != "admin" || (statusFilter != "inactive" && statusFilter != "all") {
 		statusFilter = "active"
 	}
-	return s.Store.ListDoctors(ctx, statusFilter, deptFilter, search)
+	docs, err := s.Store.ListDoctors(ctx, statusFilter, deptFilter, search)
+	if err != nil {
+		return nil, err
+	}
+	if a.Role != "admin" {
+		for i := range docs {
+			if a.Role == "doctor" && a.ID == docs[i].ID {
+				continue
+			}
+			docs[i] = docs[i].PublicDirectory(a.Role)
+		}
+	}
+	return docs, nil
 }
 func (s Scheduling) SaveDoctor(ctx context.Context, a domain.Actor, d domain.Doctor) (domain.Doctor, error) {
 	if a.Role != "admin" && !(a.Role == "doctor" && a.ID == d.ID) {

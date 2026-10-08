@@ -45,6 +45,23 @@ type Doctor struct {
 	Hours             []DoctorHours `json:"hours"`
 }
 
+func (d Doctor) PublicDirectory(actorRole string) Doctor {
+	if actorRole == "admin" {
+		return d
+	}
+	sanitized := d
+	sanitized.DateOfBirth = ""
+	sanitized.BloodGroup = ""
+	sanitized.Address1 = ""
+	sanitized.Address2 = ""
+	sanitized.City = ""
+	sanitized.Zip = ""
+	if actorRole == "patient" {
+		sanitized.Phone = ""
+	}
+	return sanitized
+}
+
 type CreateDoctorInput struct {
 	UserID            string        `json:"userId"`
 	DepartmentID      string        `json:"departmentId"`

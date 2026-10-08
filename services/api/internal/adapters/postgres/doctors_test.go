@@ -20,16 +20,24 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	t.Helper()
 	ctx := context.Background()
 
-	actorMap := make(map[string]domain.Actor)
+	var admin, docActor, otherDocActor, receptionist, patientUser domain.Actor
 	for _, a := range actors {
-		actorMap[a.Role] = a
+		switch a.ID {
+		case "admin":
+			admin = a
+		case "doctor":
+			docActor = a
+		case "other-doctor":
+			otherDocActor = a
+		case "reception":
+			receptionist = a
+		case "patient":
+			patientUser = a
+		}
 	}
-
-	admin := actorMap["admin"]
-	docActor := actorMap["doctor"]
-	otherDocActor := actorMap["other-doctor"]
-	receptionist := actorMap["receptionist"]
-	patientUser := actorMap["patient"]
+	if receptionist.ID == "" {
+		receptionist = domain.Actor{ID: "reception", Role: "receptionist"}
+	}
 	nurse := domain.Actor{ID: "nurse-user", Role: "nurse"}
 	accountant := domain.Actor{ID: "accountant-user", Role: "accountant"}
 
@@ -509,14 +517,151 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 		t.Fatalf("expected 409 for stale version PUT /v1/doctors/{id}, got %d", stalePutRec.Code)
 	}
 
-	// 6. Admin PATCH /v1/doctors/{id}/status -> 200
-	statusPatchReq := httptest.NewRequest("PATCH", "/v1/doctors/"+docUser1+"/status", bytes.NewReader([]byte(`{"active":true}`)))
-	statusPatchReq.Header.Set("Cookie", "session=admin")
-	statusPatchReq.Header.Set("Origin", "http://hospital.test")
-	statusPatchReq.Header.Set("Content-Type", "application/json")
-	statusPatchRec := httptest.NewRecorder()
-	httpHandler.ServeHTTP(statusPatchRec, statusPatchReq)
-	if statusPatchRec.Code != http.StatusOK {
-		t.Fatalf("expected 200 for PATCH /v1/doctors/{id}/status, got %d: %s", statusPatchRec.Code, statusPatchRec.Body.String())
+	// 6. D5 Regression: Invalid / conflicting status payloads MUST return 422 with ZERO mutations
+	auditBeforeInvalid := 0
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.status_changed' AND resource_id=$1`, docUser1).Scan(&auditBeforeInvalid)
+
+	for _, invalidBody := range []string{
+		`{"status":99}`,
+		`{"status":-1}`,
+		`{"status":2}`,
+		`{"active":true,"status":0}`,
+		`{"active":false,"status":1}`,
+		`{}`,
+	} {
+		req := httptest.NewRequest("PATCH", "/v1/doctors/"+docUser1+"/status", bytes.NewReader([]byte(invalidBody)))
+		req.Header.Set("Cookie", "session=admin")
+		req.Header.Set("Origin", "http://hospital.test")
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		httpHandler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422 for invalid status body %s, got %d: %s", invalidBody, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Verify no mutations happened from invalid status requests
+	auditAfterInvalid := 0
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.status_changed' AND resource_id=$1`, docUser1).Scan(&auditAfterInvalid)
+	if auditAfterInvalid != auditBeforeInvalid {
+		t.Fatalf("audit count mutated on invalid status requests: before=%d, after=%d", auditBeforeInvalid, auditAfterInvalid)
+	}
+
+	// 7. Valid status patch with status=0
+	validPatchReq := httptest.NewRequest("PATCH", "/v1/doctors/"+docUser1+"/status", bytes.NewReader([]byte(`{"status":0}`)))
+	validPatchReq.Header.Set("Cookie", "session=admin")
+	validPatchReq.Header.Set("Origin", "http://hospital.test")
+	validPatchReq.Header.Set("Content-Type", "application/json")
+	validPatchRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(validPatchRec, validPatchReq)
+	if validPatchRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for PATCH /v1/doctors/{id}/status with status=0, got %d: %s", validPatchRec.Code, validPatchRec.Body.String())
+	}
+
+	// Idempotent repeat: calling again with status=0
+	auditBeforeIdempotent := 0
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.status_changed' AND resource_id=$1`, docUser1).Scan(&auditBeforeIdempotent)
+	repeatPatchReq := httptest.NewRequest("PATCH", "/v1/doctors/"+docUser1+"/status", bytes.NewReader([]byte(`{"status":0}`)))
+	repeatPatchReq.Header.Set("Cookie", "session=admin")
+	repeatPatchReq.Header.Set("Origin", "http://hospital.test")
+	repeatPatchReq.Header.Set("Content-Type", "application/json")
+	repeatPatchRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(repeatPatchRec, repeatPatchReq)
+	if repeatPatchRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for idempotent repeat PATCH, got %d: %s", repeatPatchRec.Code, repeatPatchRec.Body.String())
+	}
+	auditAfterIdempotent := 0
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.status_changed' AND resource_id=$1`, docUser1).Scan(&auditAfterIdempotent)
+	if auditAfterIdempotent != auditBeforeIdempotent {
+		t.Fatalf("audit event created on idempotent no-op status update")
+	}
+
+	// Restore doctor1 to active for subsequent tests
+	reactReq := httptest.NewRequest("PATCH", "/v1/doctors/"+docUser1+"/status", bytes.NewReader([]byte(`{"active":true}`)))
+	reactReq.Header.Set("Cookie", "session=admin")
+	reactReq.Header.Set("Origin", "http://hospital.test")
+	reactReq.Header.Set("Content-Type", "application/json")
+	reactRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(reactRec, reactReq)
+	if reactRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for restoring doctor active status, got %d", reactRec.Code)
+	}
+
+	// 8. D1 Regression: Patient listing MUST NOT receive doctor DOB, blood group, or address
+	patListReq := httptest.NewRequest("GET", "/v1/doctors", nil)
+	patListReq.Header.Set("Cookie", "session=patient")
+	patListRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(patListRec, patListReq)
+	if patListRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for patient GET /v1/doctors, got %d: %s", patListRec.Code, patListRec.Body.String())
+	}
+	var patListResp struct {
+		Doctors []domain.Doctor `json:"doctors"`
+	}
+	if err := json.Unmarshal(patListRec.Body.Bytes(), &patListResp); err != nil {
+		t.Fatalf("failed to decode patient doctors list: %v", err)
+	}
+	if len(patListResp.Doctors) == 0 {
+		t.Fatal("expected active doctors in patient directory")
+	}
+	for _, d := range patListResp.Doctors {
+		if d.DateOfBirth != "" {
+			t.Fatalf("D1 violation: patient received doctor %s dateOfBirth: %s", d.ID, d.DateOfBirth)
+		}
+		if d.BloodGroup != "" {
+			t.Fatalf("D1 violation: patient received doctor %s bloodGroup: %s", d.ID, d.BloodGroup)
+		}
+		if d.Address1 != "" || d.Address2 != "" || d.City != "" || d.Zip != "" {
+			t.Fatalf("D1 violation: patient received doctor %s home address: %s %s %s", d.ID, d.Address1, d.City, d.Zip)
+		}
+		if d.Phone != "" {
+			t.Fatalf("D1 violation: patient received doctor %s personal phone: %s", d.ID, d.Phone)
+		}
+	}
+
+	// 9. D1 Regression: Doctor listing other doctors MUST NOT receive other doctors' DOB, blood group, address
+	docListReq := httptest.NewRequest("GET", "/v1/doctors", nil)
+	docListReq.Header.Set("Cookie", "session=other-doctor")
+	docListRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(docListRec, docListReq)
+	if docListRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for doctor GET /v1/doctors, got %d: %s", docListRec.Code, docListRec.Body.String())
+	}
+	var docListResp struct {
+		Doctors []domain.Doctor `json:"doctors"`
+	}
+	if err := json.Unmarshal(docListRec.Body.Bytes(), &docListResp); err != nil {
+		t.Fatalf("failed to decode doctor list: %v", err)
+	}
+	for _, d := range docListResp.Doctors {
+		if d.ID == docUser1 {
+			if d.DateOfBirth != "" || d.BloodGroup != "" || d.Address1 != "" {
+				t.Fatalf("D1 violation: doctor %s received other doctor private fields: dob=%s bg=%s addr=%s", otherDocActor.ID, d.DateOfBirth, d.BloodGroup, d.Address1)
+			}
+		}
+	}
+
+	// 10. Admin listing DOES receive private profile fields for administration
+	admListReq := httptest.NewRequest("GET", "/v1/doctors", nil)
+	admListReq.Header.Set("Cookie", "session=admin")
+	admListRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(admListRec, admListReq)
+	if admListRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for admin GET /v1/doctors, got %d: %s", admListRec.Code, admListRec.Body.String())
+	}
+	var admListResp struct {
+		Doctors []domain.Doctor `json:"doctors"`
+	}
+	if err := json.Unmarshal(admListRec.Body.Bytes(), &admListResp); err != nil {
+		t.Fatalf("failed to decode admin doctor list: %v", err)
+	}
+	foundDoc1WithPrivate := false
+	for _, d := range admListResp.Doctors {
+		if d.ID == docUser1 && d.DateOfBirth != "" && d.BloodGroup != "" && d.Address1 != "" {
+			foundDoc1WithPrivate = true
+		}
+	}
+	if !foundDoc1WithPrivate {
+		t.Fatal("expected admin to receive doctor1 with populated private profile fields")
 	}
 }
