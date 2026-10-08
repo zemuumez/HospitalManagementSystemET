@@ -182,7 +182,13 @@ export function ServicesWorkspace({
   const [editPkgDescription, setEditPkgDescription] = useState("");
   const [editPkgDiscount, setEditPkgDiscount] = useState("0");
   const [editPkgLines, setEditPkgLines] = useState<
-    { id?: string; serviceId: string; quantity: string; rate: string }[]
+    {
+      id?: string;
+      serviceId: string;
+      serviceName?: string;
+      quantity: string;
+      rate: string;
+    }[]
   >([]);
 
   // Services State
@@ -227,6 +233,10 @@ export function ServicesWorkspace({
   const [servicesLoading, setServicesLoading] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [catalogServices, setCatalogServices] = useState<ServiceItem[]>([]);
+  const [catalogServicesLoading, setCatalogServicesLoading] = useState(false);
+  const [catalogServicesError, setCatalogServicesError] = useState<
+    string | null
+  >(null);
   const [serviceModal, setServiceModal] = useState(false);
   const [srvName, setSrvName] = useState("");
   const [srvQuantity, setSrvQuantity] = useState("1");
@@ -477,6 +487,10 @@ export function ServicesWorkspace({
     setPkgDescription("");
     setPkgDiscount("0");
     setPkgLines([{ id: "1", serviceId: "", quantity: "1", rate: "0" }]);
+    setModalSrvFilter("");
+    if (catalogServices.length === 0 || catalogServicesError) {
+      loadActiveCatalogServices();
+    }
   }
 
   function addPkgLine() {
@@ -534,7 +548,12 @@ export function ServicesWorkspace({
         if (field === "serviceId") {
           const selectedSrv = srvPool.find((s) => s.id === value);
           const defaultRate = selectedSrv ? String(selectedSrv.rate) : row.rate;
-          return { ...row, serviceId: value, rate: defaultRate };
+          return {
+            ...row,
+            serviceId: value,
+            serviceName: selectedSrv ? selectedSrv.name : row.serviceName,
+            rate: defaultRate,
+          };
         }
         return { ...row, [field]: value };
       }),
@@ -567,16 +586,21 @@ export function ServicesWorkspace({
     setEditPkgName(pkg.name);
     setEditPkgDescription(pkg.description || "");
     setEditPkgDiscount(String(pkg.discount));
+    setModalSrvFilter("");
     setEditPkgLines(
       pkg.services && pkg.services.length > 0
         ? pkg.services.map((s) => ({
             id: s.id,
             serviceId: s.serviceId,
+            serviceName: s.serviceName,
             quantity: String(s.quantity),
             rate: String(s.rate),
           }))
         : [{ serviceId: "", quantity: "1", rate: "0" }],
     );
+    if (catalogServices.length === 0 || catalogServicesError) {
+      loadActiveCatalogServices();
+    }
     setPackageEditModal(true);
   }
 
@@ -597,6 +621,54 @@ export function ServicesWorkspace({
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
 
+  async function loadActiveCatalogServices() {
+    setCatalogServicesLoading(true);
+    setCatalogServicesError(null);
+    try {
+      let currentPage = 1;
+      let all: ServiceItem[] = [];
+      const maxPages = 50; // safe bounded contract: up to 5,000 active services
+      while (currentPage <= maxPages) {
+        const res = await fetch(
+          `/api/hms/services?page=${currentPage}&limit=100&status=1`,
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(
+            err.error ||
+              err.message ||
+              `Failed to load active services catalog (HTTP ${res.status})`,
+          );
+        }
+        const data = await res.json();
+        const items = Array.isArray(data.services) ? data.services : [];
+        const total =
+          typeof data.total === "number" ? data.total : items.length;
+        const mapped: ServiceItem[] = items.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          quantity: s.quantity || 1,
+          rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
+          status: s.status === 1,
+        }));
+        all = all.concat(mapped);
+        setCatalogServices([...all]);
+        if (items.length < 100 || all.length >= total) {
+          break;
+        }
+        currentPage++;
+      }
+      setCatalogServices(all);
+    } catch (err: any) {
+      setCatalogServices([]);
+      setCatalogServicesError(
+        err?.message || "Failed to load active services catalog",
+      );
+    } finally {
+      setCatalogServicesLoading(false);
+    }
+  }
+
   async function loadPackagesData(p = page, ps = pageSize, s = search) {
     setPackagesLoading(true);
     setPackagesError(null);
@@ -607,9 +679,9 @@ export function ServicesWorkspace({
       });
       if (s.trim()) q.set("search", s.trim());
 
-      const [pkgRes, srvRes] = await Promise.all([
+      const [pkgRes] = await Promise.all([
         fetch(`/api/hms/packages?${q.toString()}`),
-        fetch("/api/hms/services?page=1&limit=100"),
+        loadActiveCatalogServices(),
       ]);
 
       if (!pkgRes.ok) {
@@ -657,21 +729,6 @@ export function ServicesWorkspace({
       setPackagesTotal(
         typeof pkgData.total === "number" ? pkgData.total : items.length,
       );
-
-      if (srvRes.ok) {
-        const srvData = await srvRes.json();
-        if (Array.isArray(srvData.services)) {
-          const mapped = srvData.services.map((s: any) => ({
-            id: s.id,
-            name: s.name,
-            quantity: s.quantity || 1,
-            rate: (s.rate_minor ?? s.rateMinor ?? 0) / 100,
-            status: s.status === 1,
-          }));
-          setCatalogServices(mapped);
-          setServices(mapped);
-        }
-      }
       setApiConnected(true);
     } catch (err: any) {
       setPackages([]);
@@ -2773,6 +2830,37 @@ export function ServicesWorkspace({
                   />
                 </div>
 
+                {catalogServicesError && (
+                  <div
+                    className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded mb-3"
+                    style={{
+                      borderColor: "#ef4444",
+                      backgroundColor: "rgba(239, 68, 68, 0.1)",
+                      color: "#ef4444",
+                    }}
+                    data-testid="catalog-services-error"
+                  >
+                    <div className="d-flex align-items-center gap-2">
+                      <AlertCircle size={16} />
+                      <span className="fs-7">{catalogServicesError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-action-blue btn-sm py-1 px-2 fs-8"
+                      onClick={() => loadActiveCatalogServices()}
+                    >
+                      <RefreshCw size={12} className="me-1 d-inline" />
+                      {t("Retry")}
+                    </button>
+                  </div>
+                )}
+                {catalogServicesLoading && (
+                  <div className="text-muted fs-8 mb-2 d-flex align-items-center gap-1">
+                    <RefreshCw size={12} className="spinner-border-sm" />
+                    <span>{t("Loading service catalog...")}</span>
+                  </div>
+                )}
+
                 <div className="mt-3">
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <h4 className="fs-6 fw-bold mb-0">{t("Services")}</h4>
@@ -3008,6 +3096,37 @@ export function ServicesWorkspace({
                   />
                 </div>
 
+                {catalogServicesError && (
+                  <div
+                    className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded mb-3"
+                    style={{
+                      borderColor: "#ef4444",
+                      backgroundColor: "rgba(239, 68, 68, 0.1)",
+                      color: "#ef4444",
+                    }}
+                    data-testid="catalog-services-error"
+                  >
+                    <div className="d-flex align-items-center gap-2">
+                      <AlertCircle size={16} />
+                      <span className="fs-7">{catalogServicesError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-action-blue btn-sm py-1 px-2 fs-8"
+                      onClick={() => loadActiveCatalogServices()}
+                    >
+                      <RefreshCw size={12} className="me-1 d-inline" />
+                      {t("Retry")}
+                    </button>
+                  </div>
+                )}
+                {catalogServicesLoading && (
+                  <div className="text-muted fs-8 mb-2 d-flex align-items-center gap-1">
+                    <RefreshCw size={12} className="spinner-border-sm" />
+                    <span>{t("Loading service catalog...")}</span>
+                  </div>
+                )}
+
                 <div className="mt-3">
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <h4 className="fs-6 fw-bold mb-0">{t("Services")}</h4>
@@ -3082,6 +3201,20 @@ export function ServicesWorkspace({
                                   <option value="">
                                     -- {t("Select Service")} --
                                   </option>
+                                  {/* Preserve existing selected archived reference for display without permitting new invalid selections */}
+                                  {row.serviceId &&
+                                    !catalogServices.some(
+                                      (s) => s.id === row.serviceId,
+                                    ) && (
+                                      <option
+                                        key={row.serviceId}
+                                        value={row.serviceId}
+                                      >
+                                        {row.serviceName
+                                          ? `${row.serviceName} (${t("Archived")})`
+                                          : `${row.serviceId} (${t("Archived")})`}
+                                      </option>
+                                    )}
                                   {(catalogServices.length > 0
                                     ? catalogServices
                                     : services

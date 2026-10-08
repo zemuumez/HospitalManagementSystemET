@@ -169,7 +169,13 @@ func (s Store) UpdatePackage(ctx context.Context, a domain.Actor, id string, in 
 			return out, err
 		}
 		if sStatus != 1 {
-			return out, domain.ErrValidation
+			// Allow existing service lines in this package to remain if archived after creation,
+			// but reject selecting or adding new archived services.
+			var alreadyInPkg int
+			_ = tx.QueryRow(ctx, `SELECT COUNT(*) FROM package_service WHERE package_id = $1 AND service_id = $2`, id, in.Services[i].ServiceID).Scan(&alreadyInPkg)
+			if alreadyInPkg == 0 {
+				return out, domain.ErrValidation
+			}
 		}
 		if !in.Services[i].HasRate && sRate > 0 {
 			in.Services[i].RateMinor = sRate

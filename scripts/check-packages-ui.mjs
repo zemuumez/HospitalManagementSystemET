@@ -514,6 +514,238 @@ export async function checkPackagesUI({ context, db, base, results, browser }) {
       "catalog pagination, server search across pages, service lookup >30, and complete export >25 (R4, R5)",
     );
 
+    // 11b. Multi-Page Active Service Picker (>=106 services), High-Index Selection, Archived Preservation & Retry (C2)
+    console.log(
+      "[11b] Testing service picker with >=105 active services, service >100 selection, edit, archived display, and retry (C2)...",
+    );
+
+    // Seed 106 active services and 1 archived service
+    const bulkActiveIds = [];
+    for (let i = 1; i <= 106; i++) {
+      bulkActiveIds.push(randomUUID());
+    }
+    const service102Id = bulkActiveIds[101]; // 102nd service
+    const archivedSrvId = randomUUID();
+    const archivedSrvName = `Archived Service Test ${suffix}`;
+
+    // Bulk insert active services
+    for (let i = 0; i < bulkActiveIds.length; i++) {
+      await db.query(
+        `INSERT INTO hospital_service (id, name, description, quantity, rate_minor, status)
+         VALUES ($1, $2, 'Auto active service', 1, $3, 1)`,
+        [
+          bulkActiveIds[i],
+          `Bulk Active Service ${String(i + 1).padStart(3, "0")} ${suffix}`,
+          (i + 10) * 100,
+        ],
+      );
+    }
+
+    // Insert archived service (status=0)
+    await db.query(
+      `INSERT INTO hospital_service (id, name, description, quantity, rate_minor, status)
+       VALUES ($1, $2, 'Archived test service', 1, 6000, 0)`,
+      [archivedSrvId, archivedSrvName],
+    );
+
+    // Insert a package referencing the archived service
+    const archivedPkgId = randomUUID();
+    const archivedPkgName = `Legacy Package With Archived Service ${suffix}`;
+    await db.query(
+      `INSERT INTO package (id, name, description, discount, total_amount_minor)
+       VALUES ($1, $2, 'Legacy package description', 0, 6000)`,
+      [archivedPkgId, archivedPkgName],
+    );
+    await db.query(
+      `INSERT INTO package_service (id, package_id, service_id, quantity, rate_minor, amount_minor)
+       VALUES ($1, $2, $3, 1, 6000, 6000)`,
+      [randomUUID(), archivedPkgId, archivedSrvId],
+    );
+
+    // Reload page to refresh catalog
+    await open();
+
+    // Verify service picker in Create Package modal loads all >=106 active services
+    await page
+      .locator(".billing-toolbar")
+      .getByRole("button", { name: "New Package" })
+      .click();
+    const createModalC2 = page.locator(".modal-backdrop-custom");
+    await createModalC2.waitFor({ state: "visible" });
+
+    const totalActiveOptions = await createModalC2
+      .locator("select option")
+      .count();
+    assert.ok(
+      totalActiveOptions >= 106,
+      `active service dropdown must contain >=106 options (got ${totalActiveOptions})`,
+    );
+
+    // Verify service 102 option exists in dropdown
+    const srv102Option = createModalC2.locator(
+      `select option[value="${service102Id}"]`,
+    );
+    await srv102Option.waitFor({ state: "attached" });
+
+    // Select service 102 and save a package with it
+    const highIndexPkgName = `Package High Index 102 ${suffix}`;
+    await createModalC2.getByPlaceholder("Package Name").fill(highIndexPkgName);
+    await createModalC2.locator("select").nth(0).selectOption(service102Id);
+    await createModalC2
+      .locator('input[type="number"][min="1"]')
+      .nth(0)
+      .fill("2");
+
+    const saveHighIndexPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") &&
+        r.request().method() === "POST",
+    );
+    await createModalC2
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    const saveHighIndexRes = await saveHighIndexPromise;
+    assert.equal(saveHighIndexRes.status(), 201);
+    await createModalC2.waitFor({ state: "hidden" });
+
+    // Verify created package in table and edit it
+    const searchHighIndexPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") && r.url().includes("search="),
+    );
+    await page.locator(".billing-toolbar input").fill(highIndexPkgName);
+    await searchHighIndexPromise;
+    const highIndexRow = page.locator("tr", { hasText: highIndexPkgName });
+    await highIndexRow.waitFor();
+
+    // Open Edit modal for this high-index package
+    await highIndexRow.getByTitle("Edit").click();
+    const editModalC2 = page.locator(".modal-backdrop-custom");
+    await editModalC2.waitFor({ state: "visible" });
+
+    // Verify selected value is service 102
+    assert.equal(
+      await editModalC2.locator("select").nth(0).inputValue(),
+      service102Id,
+      "edit modal must preserve service 102 selection",
+    );
+
+    // Update quantity in edit modal from 2 to 3
+    await editModalC2.locator('input[type="number"][min="1"]').nth(0).fill("3");
+    const editSavePromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") &&
+        (r.request().method() === "PUT" || r.request().method() === "PATCH"),
+    );
+    await editModalC2
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
+    const editSaveRes = await editSavePromise;
+    assert.equal(editSaveRes.status(), 200);
+    await editModalC2.waitFor({ state: "hidden" });
+
+    // Verify archived reference preservation in Edit modal
+    // Find the package with archived service
+    const searchArchivedPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/packages") && r.url().includes("search="),
+    );
+    await page.locator(".billing-toolbar input").fill(archivedPkgName);
+    await searchArchivedPromise;
+    const archivedRow = page.locator("tr", { hasText: archivedPkgName });
+    await archivedRow.waitFor();
+    await archivedRow.getByTitle("Edit").click();
+
+    const editArchivedModal = page.locator(".modal-backdrop-custom");
+    await editArchivedModal.waitFor({ state: "visible" });
+
+    // Check the selected option text contains "(Archived)"
+    const archivedSelect = editArchivedModal.locator("select").nth(0);
+    assert.equal(await archivedSelect.inputValue(), archivedSrvId);
+    const selectedOptionText = await archivedSelect
+      .locator(`option[value="${archivedSrvId}"]`)
+      .innerText();
+    assert.ok(
+      selectedOptionText.includes("Archived"),
+      `archived service line must indicate Archived in display, got: ${selectedOptionText}`,
+    );
+
+    // Verify that adding a new line does NOT include the archived service in its options
+    await editArchivedModal
+      .getByRole("button", { name: "Add Service", exact: true })
+      .click();
+    const newLineSelect = editArchivedModal.locator("select").nth(1);
+    const archivedInNewLineCount = await newLineSelect
+      .locator(`option[value="${archivedSrvId}"]`)
+      .count();
+    assert.equal(
+      archivedInNewLineCount,
+      0,
+      "new service line dropdown must not permit selecting archived service",
+    );
+
+    // Close edit modal
+    await editArchivedModal.getByRole("button", { name: "Cancel" }).click();
+    await editArchivedModal.waitFor({ state: "hidden" });
+
+    // Clear search filter
+    await page.locator(".billing-toolbar input").fill("");
+    await page.waitForTimeout(350);
+
+    // Test failed service lookup with retry in modal
+    await page.route("**/api/hms/services*", (route) => {
+      route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Simulated services catalog outage" }),
+      });
+    });
+
+    // Open New Package modal
+    await page
+      .locator(".billing-toolbar")
+      .getByRole("button", { name: "New Package" })
+      .click();
+    const retryModal = page.locator(".modal-backdrop-custom");
+    await retryModal.waitFor({ state: "visible" });
+
+    const catalogErrBanner = retryModal.locator(
+      '[data-testid="catalog-services-error"]',
+    );
+    await catalogErrBanner.waitFor();
+    assert.ok(
+      (await catalogErrBanner.innerText()).includes(
+        "Simulated services catalog outage",
+      ),
+      "modal must display catalog error banner on lookup failure",
+    );
+
+    // Unroute and retry
+    await page.unroute("**/api/hms/services*");
+    const retrySrvPromise = page.waitForResponse(
+      (r) => r.url().includes("/api/hms/services") && r.status() === 200,
+    );
+    await catalogErrBanner.getByRole("button", { name: "Retry" }).click();
+    await retrySrvPromise;
+
+    // Verify error is cleared and options are restored
+    await catalogErrBanner.waitFor({ state: "hidden" });
+    await retryModal
+      .locator("select option")
+      .nth(105)
+      .waitFor({ state: "attached" });
+    const recoveredCount = await retryModal.locator("select option").count();
+    assert.ok(
+      recoveredCount >= 106,
+      `service options should be restored after retry, got ${recoveredCount}`,
+    );
+    await retryModal.getByRole("button", { name: "Cancel" }).click();
+    await retryModal.waitFor({ state: "hidden" });
+
+    passed(
+      "multi-page active catalog lookup (>=106), service >100 create/edit, archived display preservation, and failed lookup retry (C2)",
+    );
+
     // 12. Error and Failure Isolation (R6)
     console.log(
       "[12/12] Testing partial failure isolation, error states, and retry (R6)...",
