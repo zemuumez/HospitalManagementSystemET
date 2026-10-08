@@ -590,3 +590,37 @@ func (i *CreateDoctorBreakInput) Validate() error {
 	return nil
 }
 
+type DoctorOPDCharge struct {
+	ID               string    `json:"id"`
+	DoctorID         string    `json:"doctorId"`
+	DoctorName       string    `json:"doctorName"`
+	DoctorDepartment string    `json:"doctorDepartment"`
+	StandardCharge   float64   `json:"standardCharge"`
+	CurrencySymbol   string    `json:"currencySymbol"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+type SaveDoctorOPDChargeInput struct {
+	DoctorID       string  `json:"doctorId"`
+	StandardCharge float64 `json:"standardCharge"`
+	CurrencySymbol string  `json:"currencySymbol,omitempty"`
+}
+
+func (i *SaveDoctorOPDChargeInput) Validate() error {
+	i.DoctorID = strings.TrimSpace(i.DoctorID)
+	i.CurrencySymbol = strings.TrimSpace(i.CurrencySymbol)
+	if i.DoctorID == "" || len(i.DoctorID) > 128 {
+		return ErrValidation
+	}
+	if i.StandardCharge < 0 {
+		return ErrValidation
+	}
+	if i.CurrencySymbol == "" {
+		i.CurrencySymbol = "ETB"
+	}
+	if len([]rune(i.CurrencySymbol)) > 10 {
+		return ErrValidation
+	}
+	return nil
+}

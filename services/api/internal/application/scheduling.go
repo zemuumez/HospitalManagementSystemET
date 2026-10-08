@@ -36,6 +36,10 @@ type SchedulingRepository interface {
 	DoctorBreaks(context.Context, string) ([]domain.DoctorLunchBreak, error)
 	CreateDoctorBreak(context.Context, domain.Actor, domain.CreateDoctorBreakInput) (domain.DoctorLunchBreak, error)
 	DeleteDoctorBreak(context.Context, domain.Actor, string) error
+	DoctorOPDCharges(context.Context, string) ([]domain.DoctorOPDCharge, error)
+	DoctorOPDCharge(context.Context, string) (domain.DoctorOPDCharge, error)
+	SaveDoctorOPDCharge(context.Context, domain.Actor, domain.SaveDoctorOPDChargeInput) (domain.DoctorOPDCharge, error)
+	DeleteDoctorOPDCharge(context.Context, domain.Actor, string) error
 }
 type Scheduling struct {
 	Store SchedulingRepository
@@ -345,5 +349,38 @@ func (s Scheduling) DeleteDoctorBreak(ctx context.Context, a domain.Actor, id st
 		return domain.ErrForbidden
 	}
 	return s.Store.DeleteDoctorBreak(ctx, a, id)
+}
+
+func (s Scheduling) DoctorOPDCharges(ctx context.Context, a domain.Actor, search string) ([]domain.DoctorOPDCharge, error) {
+	if !a.Can("appointments.read") && a.Role != "accountant" {
+		return nil, domain.ErrForbidden
+	}
+	return s.Store.DoctorOPDCharges(ctx, search)
+}
+
+func (s Scheduling) DoctorOPDCharge(ctx context.Context, a domain.Actor, doctorID string) (domain.DoctorOPDCharge, error) {
+	if a.Role == "doctor" && doctorID != a.ID {
+		return domain.DoctorOPDCharge{}, domain.ErrForbidden
+	} else if !a.Can("appointments.read") && a.Role != "accountant" {
+		return domain.DoctorOPDCharge{}, domain.ErrForbidden
+	}
+	return s.Store.DoctorOPDCharge(ctx, doctorID)
+}
+
+func (s Scheduling) SaveDoctorOPDCharge(ctx context.Context, a domain.Actor, input domain.SaveDoctorOPDChargeInput) (domain.DoctorOPDCharge, error) {
+	if a.Role != "admin" {
+		return domain.DoctorOPDCharge{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+	return s.Store.SaveDoctorOPDCharge(ctx, a, input)
+}
+
+func (s Scheduling) DeleteDoctorOPDCharge(ctx context.Context, a domain.Actor, doctorID string) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	return s.Store.DeleteDoctorOPDCharge(ctx, a, doctorID)
 }
 

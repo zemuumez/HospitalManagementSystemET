@@ -1877,4 +1877,104 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	if respRec.Code != http.StatusOK {
 		t.Fatalf("DELETE /v1/doctor-breaks failed: %d %s", respRec.Code, respRec.Body.String())
 	}
+
+	// -------------------------------------------------------------
+	// Test L: Doctor OPD Charges Master & Flow Connection (Step 4)
+	// -------------------------------------------------------------
+	// 1. Save doctor OPD charge
+	savedCharge, err := sched.SaveDoctorOPDCharge(ctx, admin, domain.SaveDoctorOPDChargeInput{
+		DoctorID:       docSchedUser,
+		StandardCharge: 350.00,
+		CurrencySymbol: "ETB",
+	})
+	if err != nil {
+		t.Fatalf("failed to save doctor OPD charge: %v", err)
+	}
+	if savedCharge.StandardCharge != 350.00 || savedCharge.CurrencySymbol != "ETB" {
+		t.Fatalf("unexpected saved OPD charge: %+v", savedCharge)
+	}
+
+	// Verify database record in doctor_opd_charge
+	var dbStdCharge float64
+	var dbCurr string
+	err = db.QueryRow(ctx, `SELECT standard_charge, currency_symbol FROM doctor_opd_charge WHERE doctor_id=$1`, docSchedUser).Scan(&dbStdCharge, &dbCurr)
+	if err != nil || dbStdCharge != 350.00 || dbCurr != "ETB" {
+		t.Fatalf("database verification failed for doctor_opd_charge: charge=%v curr=%s err=%v", dbStdCharge, dbCurr, err)
+	}
+
+	// Verify synchronization with doctor_profile.opd_charge
+	var profileOpdCharge float64
+	err = db.QueryRow(ctx, `SELECT opd_charge FROM doctor_profile WHERE user_id=$1`, docSchedUser).Scan(&profileOpdCharge)
+	if err != nil || profileOpdCharge != 350.00 {
+		t.Fatalf("doctor_profile.opd_charge not synchronized: expected 350.00 got %v (err: %v)", profileOpdCharge, err)
+	}
+
+	// 2. Fetch single OPD charge
+	fetchedCharge, err := sched.DoctorOPDCharge(ctx, admin, docSchedUser)
+	if err != nil || fetchedCharge.StandardCharge != 350.00 {
+		t.Fatalf("failed to fetch doctor OPD charge: %+v (err: %v)", fetchedCharge, err)
+	}
+
+	// Doctor can view own OPD charge
+	_, err = sched.DoctorOPDCharge(ctx, docSchedActor, docSchedUser)
+	if err != nil {
+		t.Fatalf("doctor should be allowed to view own OPD charge, got %v", err)
+	}
+
+	// 3. List OPD charges with search
+	chargesList, err := sched.DoctorOPDCharges(ctx, admin, "Schedule")
+	if err != nil || len(chargesList) == 0 {
+		t.Fatalf("expected doctor in OPD charges list search, got %d (err: %v)", len(chargesList), err)
+	}
+
+	// 4. Role restrictions: non-admin cannot save or delete OPD charge
+	_, err = sched.SaveDoctorOPDCharge(ctx, docSchedActor, domain.SaveDoctorOPDChargeInput{
+		DoctorID:       docSchedUser,
+		StandardCharge: 500.00,
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("non-admin save OPD charge must be forbidden, got %v", err)
+	}
+	err = sched.DeleteDoctorOPDCharge(ctx, docSchedActor, docSchedUser)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("non-admin delete OPD charge must be forbidden, got %v", err)
+	}
+
+	// 5. Delete OPD charge
+	err = sched.DeleteDoctorOPDCharge(ctx, admin, docSchedUser)
+	if err != nil {
+		t.Fatalf("failed to delete OPD charge: %v", err)
+	}
+	var postDelCnt int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_opd_charge WHERE doctor_id=$1`, docSchedUser).Scan(&postDelCnt)
+	if postDelCnt != 0 {
+		t.Fatalf("expected doctor_opd_charge removed after deletion, got count %d", postDelCnt)
+	}
+	_ = db.QueryRow(ctx, `SELECT opd_charge FROM doctor_profile WHERE user_id=$1`, docSchedUser).Scan(&profileOpdCharge)
+	if profileOpdCharge != 0 {
+		t.Fatalf("expected doctor_profile.opd_charge reset to 0 after deletion, got %v", profileOpdCharge)
+	}
+
+	// Test POST /v1/doctor-opd-charges
+	opdBody, _ := json.Marshal(map[string]any{
+		"doctorId":       docSchedUser,
+		"standardCharge": 420.00,
+		"currencySymbol": "ETB",
+	})
+	respRec = callHTTP("POST", "/v1/doctor-opd-charges", "session=admin", opdBody)
+	if respRec.Code != http.StatusOK {
+		t.Fatalf("POST /v1/doctor-opd-charges failed: %d %s", respRec.Code, respRec.Body.String())
+	}
+
+	// Test GET /v1/doctor-opd-charges/{doctorId}
+	respRec = callHTTP("GET", "/v1/doctor-opd-charges/"+docSchedUser, "session=admin", nil)
+	if respRec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/doctor-opd-charges/{id} failed: %d %s", respRec.Code, respRec.Body.String())
+	}
+
+	// Test DELETE /v1/doctor-opd-charges/{doctorId}
+	respRec = callHTTP("DELETE", "/v1/doctor-opd-charges/"+docSchedUser, "session=admin", nil)
+	if respRec.Code != http.StatusOK {
+		t.Fatalf("DELETE /v1/doctor-opd-charges/{id} failed: %d %s", respRec.Code, respRec.Body.String())
+	}
 }

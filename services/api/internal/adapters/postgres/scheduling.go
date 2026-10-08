@@ -1542,4 +1542,161 @@ func (s Store) DeleteDoctorBreak(ctx context.Context, a domain.Actor, id string)
 	return tx.Commit(ctx)
 }
 
+func (s Store) DoctorOPDCharges(ctx context.Context, search string) ([]domain.DoctorOPDCharge, error) {
+	rows, err := s.DB.Query(ctx, `
+		SELECT COALESCE(c.id::text, p.user_id), p.user_id, u.name, COALESCE(p.department, ''),
+		       COALESCE(c.standard_charge, p.opd_charge, 0)::float8, COALESCE(c.currency_symbol, 'ETB'),
+		       COALESCE(c.created_at, now()), COALESCE(c.updated_at, now())
+		FROM doctor_profile p
+		JOIN "user" u ON u.id = p.user_id
+		LEFT JOIN doctor_opd_charge c ON c.doctor_id = p.user_id
+		WHERE ($1 = '' OR strpos(lower(u.name), lower($1)) > 0 OR strpos(lower(p.department), lower($1)) > 0)
+		ORDER BY u.name ASC
+	`, search)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.DoctorOPDCharge
+	for rows.Next() {
+		var item domain.DoctorOPDCharge
+		if err := rows.Scan(&item.ID, &item.DoctorID, &item.DoctorName, &item.DoctorDepartment, &item.StandardCharge, &item.CurrencySymbol, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s Store) DoctorOPDCharge(ctx context.Context, doctorID string) (domain.DoctorOPDCharge, error) {
+	var item domain.DoctorOPDCharge
+	err := s.DB.QueryRow(ctx, `
+		SELECT c.id::text, c.doctor_id, u.name, COALESCE(p.department, ''),
+		       c.standard_charge::float8, c.currency_symbol, c.created_at, c.updated_at
+		FROM doctor_opd_charge c
+		JOIN "user" u ON u.id = c.doctor_id
+		JOIN doctor_profile p ON p.user_id = c.doctor_id
+		WHERE c.doctor_id = $1
+	`, doctorID).Scan(&item.ID, &item.DoctorID, &item.DoctorName, &item.DoctorDepartment, &item.StandardCharge, &item.CurrencySymbol, &item.CreatedAt, &item.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var name, dept string
+		var opdCharge float64
+		err2 := s.DB.QueryRow(ctx, `
+			SELECT u.name, COALESCE(p.department, ''), p.opd_charge::float8
+			FROM doctor_profile p
+			JOIN "user" u ON u.id = p.user_id
+			WHERE p.user_id = $1
+		`, doctorID).Scan(&name, &dept, &opdCharge)
+		if err2 != nil {
+			return domain.DoctorOPDCharge{}, domain.ErrNotFound
+		}
+		return domain.DoctorOPDCharge{
+			ID:               doctorID,
+			DoctorID:         doctorID,
+			DoctorName:       name,
+			DoctorDepartment: dept,
+			StandardCharge:   opdCharge,
+			CurrencySymbol:   "ETB",
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
+		}, nil
+	}
+	if err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+	return item, nil
+}
+
+func (s Store) SaveDoctorOPDCharge(ctx context.Context, a domain.Actor, input domain.SaveDoctorOPDChargeInput) (domain.DoctorOPDCharge, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var docName, dept string
+	err = tx.QueryRow(ctx, `
+		SELECT u.name, COALESCE(p.department, '')
+		FROM doctor_profile p
+		JOIN "user" u ON u.id = p.user_id
+		WHERE p.user_id = $1
+		FOR UPDATE
+	`, input.DoctorID).Scan(&docName, &dept)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.DoctorOPDCharge{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+
+	var id string
+	var createdAt, updatedAt time.Time
+	err = tx.QueryRow(ctx, `
+		INSERT INTO doctor_opd_charge (doctor_id, standard_charge, currency_symbol, created_by, updated_at)
+		VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (doctor_id) DO UPDATE SET
+			standard_charge = EXCLUDED.standard_charge,
+			currency_symbol = EXCLUDED.currency_symbol,
+			updated_at = now()
+		RETURNING id::text, created_at, updated_at
+	`, input.DoctorID, input.StandardCharge, input.CurrencySymbol, a.ID).Scan(&id, &createdAt, &updatedAt)
+	if err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE doctor_profile SET opd_charge = $2, version = version + 1
+		WHERE user_id = $1
+	`, input.DoctorID, input.StandardCharge)
+	if err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor_opd_charge.saved', $2)`, a.ID, id)
+	if err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.DoctorOPDCharge{}, err
+	}
+
+	return domain.DoctorOPDCharge{
+		ID:               id,
+		DoctorID:         input.DoctorID,
+		DoctorName:       docName,
+		DoctorDepartment: dept,
+		StandardCharge:   input.StandardCharge,
+		CurrencySymbol:   input.CurrencySymbol,
+		CreatedAt:        createdAt,
+		UpdatedAt:        updatedAt,
+	}, nil
+}
+
+func (s Store) DeleteDoctorOPDCharge(ctx context.Context, a domain.Actor, doctorID string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `DELETE FROM doctor_opd_charge WHERE doctor_id = $1`, doctorID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE doctor_profile SET opd_charge = 0, version = version + 1 WHERE user_id = $1`, doctorID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor_opd_charge.deleted', $2)`, a.ID, doctorID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 
