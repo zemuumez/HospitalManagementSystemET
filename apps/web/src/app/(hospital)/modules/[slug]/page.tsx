@@ -93,9 +93,13 @@ export default async function ModulePage({
     [
       "doctors",
       "doctor-departments",
+      "schedules",
+      "doctor-schedules",
       "doctor-holidays",
       "holidays",
       "breaks",
+      "doctor-opd-charges",
+      "opd-charges",
     ].includes(slug)
   )
     return <DoctorsWorkspace key={slug} id={slug} />;
