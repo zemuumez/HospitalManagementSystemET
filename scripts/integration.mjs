@@ -552,6 +552,196 @@ try {
   console.log(
     "PASS: admin-only staff provisioning and disablement; scheduling validation, ownership, concurrent booking, idempotency, schedule conflict, lifecycle and released slots.",
   );
+
+  // --------------------------------------------------------------------------
+  // Doctor deletion protection: authorization, conflict on referenced records,
+  // atomic cleanup on unreferenced records across both Next.js and Go proxy paths
+  // --------------------------------------------------------------------------
+  // 1. Unauthorized deletion attempts
+  await expectStatus(`/api/hms/doctors/${doctor.id}`, 401);
+  await expectStatus("/api/staff", 403, {
+    method: "DELETE",
+    body: { id: doctor.id },
+  });
+  await expectStatus(`/api/hms/doctors/${doctor.id}`, 403, {
+    cookie: patient.cookie,
+    method: "DELETE",
+  });
+  await expectStatus("/api/staff", 403, {
+    cookie: patient.cookie,
+    method: "DELETE",
+    body: { id: doctor.id },
+  });
+
+  // 2. Self-deletion prevention
+  await expectStatus(`/api/hms/doctors/${admin.id}`, 409, {
+    cookie: admin.cookie,
+    method: "DELETE",
+  });
+  await expectStatus("/api/staff", 409, {
+    cookie: admin.cookie,
+    method: "DELETE",
+    body: { id: admin.id },
+  });
+
+  // 3. Non-existent doctor
+  const nonExistentID = randomUUID();
+  await expectStatus(`/api/hms/doctors/${nonExistentID}`, 404, {
+    cookie: admin.cookie,
+    method: "DELETE",
+  });
+  await expectStatus("/api/staff", 404, {
+    cookie: admin.cookie,
+    method: "DELETE",
+    body: { id: nonExistentID },
+  });
+
+  // 4. In-use protection: doctor has clinical appointment records -> 409 Conflict
+  const blockedHmsRes = await request(`/api/hms/doctors/${doctor.id}`, {
+    cookie: admin.cookie,
+    method: "DELETE",
+  });
+  assert.equal(blockedHmsRes.status, 409);
+  const blockedHmsBody = await blockedHmsRes.json();
+  assert.equal(blockedHmsBody.code, "RECORD_IN_USE");
+
+  const blockedStaffRes = await request("/api/staff", {
+    cookie: admin.cookie,
+    method: "DELETE",
+    body: { id: doctor.id },
+  });
+  assert.equal(blockedStaffRes.status, 409);
+  const blockedStaffBody = await blockedStaffRes.json();
+  assert.equal(blockedStaffBody.code, "RECORD_IN_USE");
+
+  // Verify referenced doctor records survive completely unchanged
+  const docProfileCount = (
+    await db.query(
+      "SELECT count(*)::int AS count FROM doctor_profile WHERE user_id=$1",
+      [doctor.id],
+    )
+  ).rows[0].count;
+  assert.equal(docProfileCount, 1);
+
+  // 5. Successful unreferenced doctor deletion via Go proxy (/api/hms/doctors/{id})
+  const unrefDoctor1Res = await request("/api/staff", {
+    cookie: admin.cookie,
+    method: "POST",
+    body: {
+      name: "Dr. Unreferenced One",
+      email: `unref-one-${randomUUID()}@example.test`,
+      role: "doctor",
+      password: randomUUID() + "Aa1!",
+      departmentId: activeDept,
+      specialist: "Neurologist",
+      designation: "Consultant",
+      qualification: "MD",
+      gender: "male",
+    },
+  });
+  assert.equal(unrefDoctor1Res.status, 201);
+  const unrefDoc1 = await unrefDoctor1Res.json();
+
+  const delHmsRes = await request(`/api/hms/doctors/${unrefDoc1.id}`, {
+    cookie: admin.cookie,
+    method: "DELETE",
+  });
+  assert.equal(delHmsRes.status, 200);
+  const delHmsBody = await delHmsRes.json();
+  assert.equal(delHmsBody.deleted, true);
+  assert.equal(delHmsBody.id, unrefDoc1.id);
+
+  // Verify complete database removal for unrefDoc1
+  for (const table of [
+    "user",
+    "staff_access",
+    "staff_profile",
+    "doctor_profile",
+    "doctor_hours",
+  ]) {
+    const col =
+      table === "user"
+        ? "id"
+        : table === "doctor_hours"
+          ? "doctor_id"
+          : "user_id";
+    const count = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM "${table}" WHERE ${col}=$1`,
+        [unrefDoc1.id],
+      )
+    ).rows[0].count;
+    assert.equal(count, 0, `expected 0 rows in ${table} for ${unrefDoc1.id}`);
+  }
+  const auditDelCount1 = (
+    await db.query(
+      "SELECT count(*)::int AS count FROM audit_event WHERE action='doctor.deleted' AND resource_id=$1",
+      [unrefDoc1.id],
+    )
+  ).rows[0].count;
+  assert.equal(auditDelCount1, 1);
+
+  // 6. Successful unreferenced doctor deletion via Next.js staff endpoint (/api/staff)
+  const unrefDoctor2Res = await request("/api/staff", {
+    cookie: admin.cookie,
+    method: "POST",
+    body: {
+      name: "Dr. Unreferenced Two",
+      email: `unref-two-${randomUUID()}@example.test`,
+      role: "doctor",
+      password: randomUUID() + "Aa1!",
+      departmentId: activeDept,
+      specialist: "Surgeon",
+      designation: "Specialist",
+      qualification: "MS",
+      gender: "female",
+    },
+  });
+  assert.equal(unrefDoctor2Res.status, 201);
+  const unrefDoc2 = await unrefDoctor2Res.json();
+
+  const delStaffRes = await request("/api/staff", {
+    cookie: admin.cookie,
+    method: "DELETE",
+    body: { id: unrefDoc2.id },
+  });
+  assert.equal(delStaffRes.status, 200);
+  const delStaffBody = await delStaffRes.json();
+  assert.equal(delStaffBody.deleted, true);
+  assert.equal(delStaffBody.id, unrefDoc2.id);
+
+  // Verify complete database removal for unrefDoc2
+  for (const table of [
+    "user",
+    "staff_access",
+    "staff_profile",
+    "doctor_profile",
+    "doctor_hours",
+  ]) {
+    const col =
+      table === "user"
+        ? "id"
+        : table === "doctor_hours"
+          ? "doctor_id"
+          : "user_id";
+    const count = (
+      await db.query(
+        `SELECT count(*)::int AS count FROM "${table}" WHERE ${col}=$1`,
+        [unrefDoc2.id],
+      )
+    ).rows[0].count;
+    assert.equal(count, 0, `expected 0 rows in ${table} for ${unrefDoc2.id}`);
+  }
+  const auditDelCount2 = (
+    await db.query(
+      "SELECT count(*)::int AS count FROM audit_event WHERE action='doctor.deleted' AND resource_id=$1",
+      [unrefDoc2.id],
+    )
+  ).rows[0].count;
+  assert.equal(auditDelCount2, 1);
+  console.log(
+    "PASS: doctor deletion parity: authorized admin only, in-use conflict on clinical dependencies, unreferenced transactional cleanup, audit events, across both Next.js and Go proxy paths.",
+  );
   await db.query("UPDATE staff_access SET active=false WHERE user_id=$1", [
     patient.id,
   ]);

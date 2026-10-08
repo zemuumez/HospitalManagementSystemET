@@ -547,6 +547,113 @@ func (s Store) SetDoctorStatus(ctx context.Context, a domain.Actor, id string, a
 
 	return tx.Commit(ctx)
 }
+
+func (s Store) DeleteDoctor(ctx context.Context, a domain.Actor, id string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err = staffAdmin(ctx, tx, a); err != nil {
+		return err
+	}
+
+	if a.ID == id {
+		return domain.ErrConflict
+	}
+
+	var role string
+	err = tx.QueryRow(ctx, `SELECT role FROM staff_access WHERE user_id=$1 FOR UPDATE`, id).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if role != "doctor" {
+		return domain.ErrNotFound
+	}
+
+	var hasDocProfile bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM doctor_profile WHERE user_id=$1)`, id).Scan(&hasDocProfile)
+	if err != nil {
+		return err
+	}
+	if !hasDocProfile {
+		return domain.ErrNotFound
+	}
+
+	var inUse bool
+	err = tx.QueryRow(ctx, `
+		SELECT
+			EXISTS(SELECT 1 FROM patient_case WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM encounter WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM appointment WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM birth_report WHERE delivered_by=$1)
+			OR EXISTS(SELECT 1 FROM death_report WHERE certified_by=$1)
+			OR EXISTS(SELECT 1 FROM investigation_report WHERE investigated_by=$1)
+			OR EXISTS(SELECT 1 FROM operation_report WHERE surgeon_id=$1)
+			OR EXISTS(SELECT 1 FROM prescription WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM ipd_admission_details i JOIN encounter e ON e.id=i.encounter_id WHERE e.doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM employee_payroll WHERE user_id=$1)
+			OR EXISTS(SELECT 1 FROM opd_follow_up WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM patient_queue WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM public_appointment_request WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM live_consultation WHERE doctor_id=$1)
+			OR EXISTS(SELECT 1 FROM patient_referral WHERE referred_by=$1)
+			OR EXISTS(SELECT 1 FROM patient_odontogram_entry WHERE diagnosed_by=$1)
+			OR EXISTS(SELECT 1 FROM clinical_note WHERE author_id=$1)
+			OR EXISTS(SELECT 1 FROM patient WHERE user_id=$1 OR clinician_user_id=$1)
+			OR EXISTS(SELECT 1 FROM audit_event WHERE actor_id=$1)
+			OR EXISTS(SELECT 1 FROM message_outbox WHERE actor_id=$1)
+	`, id).Scan(&inUse)
+	if err != nil {
+		return err
+	}
+	if inUse {
+		return domain.ErrInUse
+	}
+
+	if _, err = tx.Exec(ctx, `DELETE FROM doctor_hours WHERE doctor_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM doctor_absence WHERE doctor_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM doctor_profile WHERE user_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM staff_profile_revision WHERE user_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM staff_role_event WHERE user_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM staff_profile WHERE user_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM staff_access WHERE user_id=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM session WHERE "userId"=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM verification WHERE value=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM account WHERE "userId"=$1`, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event(actor_id, action, resource_id) VALUES($1, 'doctor.deleted', $2)`, a.ID, id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM "user" WHERE id=$1`, id); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
 func (s Store) SaveDoctor(ctx context.Context, a domain.Actor, d domain.Doctor) (domain.Doctor, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {

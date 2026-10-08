@@ -281,6 +281,19 @@ func (s Server) doctors(w http.ResponseWriter, r *http.Request, a domain.Actor) 
 		}
 		write(w, 200, out)
 		return true
+
+	case strings.HasPrefix(r.URL.Path, "/v1/doctors/") && r.Method == "DELETE":
+		id := strings.TrimPrefix(r.URL.Path, "/v1/doctors/")
+		if id == "" || strings.Contains(id, "/") {
+			return false
+		}
+		err := s.Scheduling.DeleteDoctor(r.Context(), a, id)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, map[string]any{"deleted": true, "id": id})
+		return true
 	}
 
 	return false

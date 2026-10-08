@@ -1065,4 +1065,499 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	if afterAllAudits != beforeAllAudits {
 		t.Fatalf("audit_event table count changed after post-write rollback: before=%d, after=%d", beforeAllAudits, afterAllAudits)
 	}
+
+	// -------------------------------------------------------------
+	// 14. Doctor Deletion Protection (Step 2 of Parity Plan)
+	// -------------------------------------------------------------
+	seedTestDoctor := func(id, name string) {
+		t.Helper()
+		_, err := db.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,$2,$1||'@hospital.test') ON CONFLICT DO NOTHING`, id, name)
+		if err != nil {
+			t.Fatalf("failed to insert user %s: %v", id, err)
+		}
+		_, err = db.Exec(ctx, `INSERT INTO staff_access(user_id,role,active) VALUES($1,'doctor',true) ON CONFLICT DO NOTHING`, id)
+		if err != nil {
+			t.Fatalf("failed to insert staff_access %s: %v", id, err)
+		}
+		_, err = db.Exec(ctx, `INSERT INTO doctor_profile(user_id,department,timezone,slot_minutes,version) VALUES($1,'General medicine','Africa/Addis_Ababa',60,1) ON CONFLICT DO NOTHING`, id)
+		if err != nil {
+			t.Fatalf("failed to insert doctor_profile %s: %v", id, err)
+		}
+		for wd := 0; wd < 7; wd++ {
+			_, err = db.Exec(ctx, `INSERT INTO doctor_hours(doctor_id,weekday,start_minute,end_minute) VALUES($1,$2,600,1170) ON CONFLICT DO NOTHING`, id, wd)
+			if err != nil {
+				t.Fatalf("failed to insert doctor_hours %s wd %d: %v", id, wd, err)
+			}
+		}
+	}
+
+	deleteDoctorHTTP := func(cookie, docID string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest("DELETE", "/v1/doctors/"+docID, nil)
+		if cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		}
+		req.Header.Set("Origin", "http://hospital.test")
+		rec := httptest.NewRecorder()
+		httpHandler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	var testPatID string
+	err = db.QueryRow(ctx, `INSERT INTO patient(given_name,family_name,date_of_birth,phone) VALUES('Test','Deletions','1990-01-01','+251911999999') RETURNING id::text`).Scan(&testPatID)
+	if err != nil {
+		t.Fatalf("failed to seed test patient: %v", err)
+	}
+
+	// 14a. Unauthorized doctor deletion requests
+	unauthDocID := "doc-unauth-test"
+	seedTestDoctor(unauthDocID, "Dr. Unauthorized Target")
+
+	// No session cookie -> 401
+	rec := deleteDoctorHTTP("", unauthDocID)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated DELETE /v1/doctors, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Doctor session -> 403
+	rec = deleteDoctorHTTP("session=doctor", unauthDocID)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for doctor session DELETE /v1/doctors, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Nurse session -> 403
+	rec = deleteDoctorHTTP("session=nurse", unauthDocID)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for nurse session DELETE /v1/doctors, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Receptionist session -> 403
+	rec = deleteDoctorHTTP("session=receptionist", unauthDocID)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for receptionist session DELETE /v1/doctors, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Patient session -> 403
+	rec = deleteDoctorHTTP("session=patient", unauthDocID)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for patient session DELETE /v1/doctors, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 14b. Admin self-deletion prevention -> 409
+	rec = deleteDoctorHTTP("session=admin", admin.ID)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for admin self-deletion, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 14c. Non-existent doctor -> 404
+	rec = deleteDoctorHTTP("session=admin", "non-existent-doctor-999")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for non-existent doctor deletion, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 14d. Dependency 1: PatientCase (patient_case.doctor_id)
+	depDoc1 := "doc-dep-case"
+	seedTestDoctor(depDoc1, "Dr. Case Dep")
+	var case1ID string
+	err = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES($1, $2, 'Case Dep Test', $3) RETURNING id::text`, testPatID, depDoc1, admin.ID).Scan(&case1ID)
+	if err != nil {
+		t.Fatalf("failed to insert patient_case fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc1)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with patient_case, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var docCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc1).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc1, docCount)
+	}
+	var caseCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM patient_case WHERE id=$1`, case1ID).Scan(&caseCount)
+	if caseCount != 1 {
+		t.Fatalf("expected clinical history preserved for patient_case %s, got count %d", case1ID, caseCount)
+	}
+
+	// 14e. Dependency 2: Encounter (encounter.doctor_id)
+	depDoc2 := "doc-dep-encounter"
+	seedTestDoctor(depDoc2, "Dr. Encounter Dep")
+	var case2ID string
+	err = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES($1, $2, 'Case 2', $3) RETURNING id::text`, testPatID, depDoc2, admin.ID).Scan(&case2ID)
+	if err != nil {
+		t.Fatalf("failed to insert patient_case for encounter: %v", err)
+	}
+	var enc2ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, admitted_at, status, created_by, request_key)
+		VALUES('opd', $1, $2, $3, now(), 'active', $4, 'req-key-enc-2')
+		RETURNING id::text
+	`, case2ID, testPatID, depDoc2, admin.ID).Scan(&enc2ID)
+	if err != nil {
+		t.Fatalf("failed to insert encounter fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc2)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with encounter, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc2).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc2, docCount)
+	}
+	var encCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM encounter WHERE id=$1`, enc2ID).Scan(&encCount)
+	if encCount != 1 {
+		t.Fatalf("expected encounter %s preserved, got count %d", enc2ID, encCount)
+	}
+
+	// 14f. Dependency 3: Appointment (appointment.doctor_id)
+	depDoc3 := "doc-dep-appt"
+	seedTestDoctor(depDoc3, "Dr. Appt Dep")
+	var appt3ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO appointment(patient_id, doctor_id, starts_at, ends_at, status, problem, created_by, request_key)
+		VALUES($1, $2, now() + interval '1 hour', now() + interval '2 hours', 'booked', 'Dep appt test', $3, 'req-key-appt-test-3')
+		RETURNING id::text
+	`, testPatID, depDoc3, admin.ID).Scan(&appt3ID)
+	if err != nil {
+		t.Fatalf("failed to insert appointment fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc3)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with appointment, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc3).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc3, docCount)
+	}
+	var apptCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM appointment WHERE id=$1`, appt3ID).Scan(&apptCount)
+	if apptCount != 1 {
+		t.Fatalf("expected appointment %s preserved, got count %d", appt3ID, apptCount)
+	}
+
+	// 14g. Dependency 4: BirthReport (birth_report.delivered_by)
+	depDoc4 := "doc-dep-birth"
+	seedTestDoctor(depDoc4, "Dr. Birth Dep")
+	var birth4ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO birth_report(report_number, child_name, gender, birth_date, weight_kg, mother_name, delivered_by, created_by)
+		VALUES('BR-TEST-004', 'Baby Dep', 'female', now(), 3.10, 'Mother Dep', $1, $2)
+		RETURNING id::text
+	`, depDoc4, admin.ID).Scan(&birth4ID)
+	if err != nil {
+		t.Fatalf("failed to insert birth_report fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc4)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with birth_report, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc4).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc4, docCount)
+	}
+	var birthCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM birth_report WHERE id=$1`, birth4ID).Scan(&birthCount)
+	if birthCount != 1 {
+		t.Fatalf("expected birth_report %s preserved, got count %d", birth4ID, birthCount)
+	}
+
+	// 14h. Dependency 5: DeathReport (death_report.certified_by)
+	depDoc5 := "doc-dep-death"
+	seedTestDoctor(depDoc5, "Dr. Death Dep")
+	var death5ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO death_report(report_number, patient_id, death_date, cause_of_death, certified_by, created_by)
+		VALUES('DR-TEST-005', $1, now(), 'Cardiac Arrest', $2, $3)
+		RETURNING id::text
+	`, testPatID, depDoc5, admin.ID).Scan(&death5ID)
+	if err != nil {
+		t.Fatalf("failed to insert death_report fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc5)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with death_report, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc5).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc5, docCount)
+	}
+	var deathCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM death_report WHERE id=$1`, death5ID).Scan(&deathCount)
+	if deathCount != 1 {
+		t.Fatalf("expected death_report %s preserved, got count %d", death5ID, deathCount)
+	}
+
+	// 14i. Dependency 6: InvestigationReport (investigation_report.investigated_by)
+	depDoc6 := "doc-dep-inv"
+	seedTestDoctor(depDoc6, "Dr. Inv Dep")
+	var inv6ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO investigation_report(report_number, patient_id, title, investigation_type, investigated_by)
+		VALUES('IR-TEST-006', $1, 'Complete Blood Count', 'pathology', $2)
+		RETURNING id::text
+	`, testPatID, depDoc6).Scan(&inv6ID)
+	if err != nil {
+		t.Fatalf("failed to insert investigation_report fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc6)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with investigation_report, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc6).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc6, docCount)
+	}
+	var invCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM investigation_report WHERE id=$1`, inv6ID).Scan(&invCount)
+	if invCount != 1 {
+		t.Fatalf("expected investigation_report %s preserved, got count %d", inv6ID, invCount)
+	}
+
+	// 14j. Dependency 7: OperationReport (operation_report.surgeon_id)
+	depDoc7 := "doc-dep-op"
+	seedTestDoctor(depDoc7, "Dr. Surgeon Dep")
+	// Use enc2ID (where encounter.doctor_id is depDoc2, not depDoc7) to isolate operation_report
+	var op7ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO operation_report(report_number, encounter_id, patient_id, operation_name, surgeon_id, operation_date, created_by)
+		VALUES('OR-TEST-007', $1, $2, 'Appendectomy', $3, now(), $4)
+		RETURNING id::text
+	`, enc2ID, testPatID, depDoc7, admin.ID).Scan(&op7ID)
+	if err != nil {
+		t.Fatalf("failed to insert operation_report fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc7)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with operation_report, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc7).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc7, docCount)
+	}
+	var opCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM operation_report WHERE id=$1`, op7ID).Scan(&opCount)
+	if opCount != 1 {
+		t.Fatalf("expected operation_report %s preserved, got count %d", op7ID, opCount)
+	}
+
+	// 14k. Dependency 8: Prescription (prescription.doctor_id)
+	depDoc8 := "doc-dep-rx"
+	seedTestDoctor(depDoc8, "Dr. Rx Dep")
+	var rx8ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO prescription(patient_id, doctor_id)
+		VALUES($1, $2)
+		RETURNING id::text
+	`, testPatID, depDoc8).Scan(&rx8ID)
+	if err != nil {
+		t.Fatalf("failed to insert prescription fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc8)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with prescription, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc8).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc8, docCount)
+	}
+	var rxCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM prescription WHERE id=$1`, rx8ID).Scan(&rxCount)
+	if rxCount != 1 {
+		t.Fatalf("expected prescription %s preserved, got count %d", rx8ID, rxCount)
+	}
+
+	// 14l. Dependency 9: IpdPatientDepartment (ipd_admission_details via encounter.doctor_id)
+	depDoc9 := "doc-dep-ipd"
+	seedTestDoctor(depDoc9, "Dr. IPD Dep")
+	var case9ID, bedType9ID, bed9ID, enc9ID string
+	err = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES($1, $2, 'Case 9', $3) RETURNING id::text`, testPatID, depDoc9, admin.ID).Scan(&case9ID)
+	if err != nil {
+		t.Fatalf("failed to insert patient_case for ipd: %v", err)
+	}
+	err = db.QueryRow(ctx, `INSERT INTO bed_type(name) VALUES('Dep Bed Type 9') ON CONFLICT (name) DO UPDATE SET active=true RETURNING id::text`).Scan(&bedType9ID)
+	if err != nil {
+		t.Fatalf("failed to insert bed_type: %v", err)
+	}
+	err = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by) VALUES('IPD Bed 9', 'Dep Bed Type 9', $1, 5000, true, $2) RETURNING id::text`, bedType9ID, admin.ID).Scan(&bed9ID)
+	if err != nil {
+		t.Fatalf("failed to insert hospital_bed for ipd: %v", err)
+	}
+	err = db.QueryRow(ctx, `
+		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, created_by, request_key)
+		VALUES('ipd', $1, $2, $3, $4, now(), 'active', $5, 'req-key-enc-test-9')
+		RETURNING id::text
+	`, case9ID, testPatID, depDoc9, bed9ID, admin.ID).Scan(&enc9ID)
+	if err != nil {
+		t.Fatalf("failed to insert ipd encounter: %v", err)
+	}
+	_, err = db.Exec(ctx, `
+		INSERT INTO ipd_admission_details(encounter_id, package_name, package_charge_minor, guardian_name)
+		VALUES($1, 'Surgical IPD Package', 75000, 'Guardian Test')
+	`, enc9ID)
+	if err != nil {
+		t.Fatalf("failed to insert ipd_admission_details: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc9)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with ipd_admission_details, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc9).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc9, docCount)
+	}
+	var ipdDetailCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM ipd_admission_details WHERE encounter_id=$1`, enc9ID).Scan(&ipdDetailCount)
+	if ipdDetailCount != 1 {
+		t.Fatalf("expected ipd_admission_details preserved, got count %d", ipdDetailCount)
+	}
+
+	// 14m. Dependency 10: EmployeePayroll (employee_payroll.user_id)
+	depDoc10 := "doc-dep-payroll"
+	seedTestDoctor(depDoc10, "Dr. Payroll Dep")
+	var payroll10ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO employee_payroll(payroll_number, user_id, role, month, year, basic_salary_minor, net_salary_minor, created_by)
+		VALUES('PAY-TEST-010', $1, 'doctor', 'October', 2026, 6000000, 5500000, $2)
+		RETURNING id::text
+	`, depDoc10, admin.ID).Scan(&payroll10ID)
+	if err != nil {
+		t.Fatalf("failed to insert employee_payroll fixture: %v", err)
+	}
+	rec = deleteDoctorHTTP("session=admin", depDoc10)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for doctor with employee_payroll, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, depDoc10).Scan(&docCount)
+	if docCount != 1 {
+		t.Fatalf("expected doctor %s preserved after conflict, got count %d", depDoc10, docCount)
+	}
+	var payrollCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM employee_payroll WHERE id=$1`, payroll10ID).Scan(&payrollCount)
+	if payrollCount != 1 {
+		t.Fatalf("expected employee_payroll preserved, got count %d", payrollCount)
+	}
+
+	// 14n. Successful unreferenced doctor deletion
+	cleanDocID := "doc-unreferenced-clean"
+	seedTestDoctor(cleanDocID, "Dr. Clean Unreferenced")
+	_, err = db.Exec(ctx, `INSERT INTO session(id, "expiresAt", token, "userId") VALUES('clean-sess-1', now() + interval '1 hour', 'clean-tok-1', $1)`, cleanDocID)
+	if err != nil {
+		t.Fatalf("failed to seed session for clean doc: %v", err)
+	}
+	_, err = db.Exec(ctx, `INSERT INTO account(id, "accountId", "providerId", "userId") VALUES('clean-acc-1', $1, 'credential', $1)`, cleanDocID)
+	if err != nil {
+		t.Fatalf("failed to seed account for clean doc: %v", err)
+	}
+
+	rec = deleteDoctorHTTP("session=admin", cleanDocID)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for clean unreferenced doctor deletion, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var delResp struct {
+		Deleted bool   `json:"deleted"`
+		ID      string `json:"id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &delResp); err != nil {
+		t.Fatalf("failed to unmarshal deletion response: %v", err)
+	}
+	if !delResp.Deleted || delResp.ID != cleanDocID {
+		t.Fatalf("unexpected deletion response: %+v", delResp)
+	}
+
+	// Verify all records deleted
+	for table, query := range map[string]string{
+		"user":           `SELECT count(*) FROM "user" WHERE id=$1`,
+		"staff_access":   `SELECT count(*) FROM staff_access WHERE user_id=$1`,
+		"staff_profile":  `SELECT count(*) FROM staff_profile WHERE user_id=$1`,
+		"doctor_profile": `SELECT count(*) FROM doctor_profile WHERE user_id=$1`,
+		"doctor_hours":   `SELECT count(*) FROM doctor_hours WHERE doctor_id=$1`,
+		"session":        `SELECT count(*) FROM session WHERE "userId"=$1`,
+		"account":        `SELECT count(*) FROM account WHERE "userId"=$1`,
+	} {
+		var cnt int
+		if err := db.QueryRow(ctx, query, cleanDocID).Scan(&cnt); err != nil {
+			t.Fatalf("failed to query count for %s: %v", table, err)
+		}
+		if cnt != 0 {
+			t.Fatalf("expected 0 rows in %s for deleted doctor %s, got %d", table, cleanDocID, cnt)
+		}
+	}
+
+	// Verify audit_event logged doctor.deleted
+	var delAuditCount int
+	err = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.deleted' AND resource_id=$1 AND actor_id=$2`, cleanDocID, admin.ID).Scan(&delAuditCount)
+	if err != nil || delAuditCount != 1 {
+		t.Fatalf("expected 1 audit_event for doctor.deleted, got %d (err: %v)", delAuditCount, err)
+	}
+
+	// 14o. Doctor deletion transaction rollback test
+	rollbackDocID := "doc-rollback-test"
+	seedTestDoctor(rollbackDocID, "Dr. Rollback Test")
+	_, err = db.Exec(ctx, `INSERT INTO session(id, "expiresAt", token, "userId") VALUES('rb-sess-1', now() + interval '1 hour', 'rb-tok-1', $1)`, rollbackDocID)
+	if err != nil {
+		t.Fatalf("failed to seed session for rollback doc: %v", err)
+	}
+	_, err = db.Exec(ctx, `INSERT INTO account(id, "accountId", "providerId", "userId") VALUES('rb-acc-1', $1, 'credential', $1)`, rollbackDocID)
+	if err != nil {
+		t.Fatalf("failed to seed account for rollback doc: %v", err)
+	}
+
+	// Install trigger on "user" before delete that fails for rollbackDocID
+	_, err = db.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION test_fail_user_delete() RETURNS trigger AS $$
+		BEGIN
+			IF OLD.id = '`+rollbackDocID+`' THEN
+				RAISE EXCEPTION 'injected test failure on user deletion';
+			END IF;
+			RETURN OLD;
+		END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS trg_test_fail_user_delete ON "user";
+		CREATE TRIGGER trg_test_fail_user_delete
+		BEFORE DELETE ON "user"
+		FOR EACH ROW EXECUTE FUNCTION test_fail_user_delete();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install test rollback trigger: %v", err)
+	}
+
+	rec = deleteDoctorHTTP("session=admin", rollbackDocID)
+	if rec.Code == http.StatusOK {
+		t.Fatalf("expected failure from injected trigger, but got 200 OK")
+	}
+
+	// Verify all records survived intact
+	for table, query := range map[string]string{
+		"user":           `SELECT count(*) FROM "user" WHERE id=$1`,
+		"staff_access":   `SELECT count(*) FROM staff_access WHERE user_id=$1`,
+		"doctor_profile": `SELECT count(*) FROM doctor_profile WHERE user_id=$1`,
+		"session":        `SELECT count(*) FROM session WHERE "userId"=$1`,
+		"account":        `SELECT count(*) FROM account WHERE "userId"=$1`,
+	} {
+		var cnt int
+		if err := db.QueryRow(ctx, query, rollbackDocID).Scan(&cnt); err != nil {
+			t.Fatalf("failed to query count for %s after rollback: %v", table, err)
+		}
+		if cnt != 1 {
+			t.Fatalf("expected 1 row in %s after rollback for %s, got %d", table, rollbackDocID, cnt)
+		}
+	}
+	var hoursCnt int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours WHERE doctor_id=$1`, rollbackDocID).Scan(&hoursCnt); err != nil || hoursCnt != 7 {
+		t.Fatalf("expected 7 doctor_hours after rollback, got %d (err: %v)", hoursCnt, err)
+	}
+	var auditCnt int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.deleted' AND resource_id=$1`, rollbackDocID).Scan(&auditCnt); err != nil || auditCnt != 0 {
+		t.Fatalf("expected 0 doctor.deleted audit events after rollback, got %d (err: %v)", auditCnt, err)
+	}
+
+	// Drop trigger and retry deletion successfully
+	_, _ = db.Exec(ctx, `DROP TRIGGER IF EXISTS trg_test_fail_user_delete ON "user"`)
+	_, _ = db.Exec(ctx, `DROP FUNCTION IF EXISTS test_fail_user_delete()`)
+
+	rec = deleteDoctorHTTP("session=admin", rollbackDocID)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on retry after removing trigger, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var finalUserCnt int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM "user" WHERE id=$1`, rollbackDocID).Scan(&finalUserCnt)
+	if finalUserCnt != 0 {
+		t.Fatalf("expected user %s removed on successful retry, got count %d", rollbackDocID, finalUserCnt)
+	}
 }

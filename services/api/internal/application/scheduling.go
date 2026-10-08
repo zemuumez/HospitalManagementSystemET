@@ -19,6 +19,7 @@ type SchedulingRepository interface {
 	CreateDoctorProfile(context.Context, domain.Actor, domain.CreateDoctorInput) (domain.Doctor, error)
 	UpdateDoctorProfile(context.Context, domain.Actor, string, domain.UpdateDoctorInput) (domain.Doctor, error)
 	SetDoctorStatus(context.Context, domain.Actor, string, bool) error
+	DeleteDoctor(context.Context, domain.Actor, string) error
 	ListDoctors(context.Context, string, string, string) ([]domain.Doctor, error)
 	SaveDoctor(context.Context, domain.Actor, domain.Doctor) (domain.Doctor, error)
 	Slots(context.Context, string, time.Time, time.Time) ([]time.Time, error)
@@ -91,6 +92,13 @@ func (s Scheduling) SetDoctorStatus(ctx context.Context, a domain.Actor, id stri
 		return domain.ErrConflict
 	}
 	return s.Store.SetDoctorStatus(ctx, a, id, active)
+}
+
+func (s Scheduling) DeleteDoctor(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	return s.Store.DeleteDoctor(ctx, a, id)
 }
 
 func (s Scheduling) ListDoctors(ctx context.Context, a domain.Actor, statusFilter string, deptFilter string, search string) ([]domain.Doctor, error) {

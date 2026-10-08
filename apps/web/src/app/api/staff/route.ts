@@ -431,4 +431,113 @@ async function mutate(request: Request) {
     return json({ error: "Unable to update hospital users" }, 503);
   }
 }
-export { mutate as POST, mutate as PATCH };
+
+const deleteInput = z
+  .object({
+    id: z.string().min(1).max(128),
+  })
+  .strict();
+
+async function remove(request: Request) {
+  try {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "Invalid JSON" }, 400);
+    }
+    const parsed = deleteInput.safeParse(body);
+    if (!parsed.success) return json({ error: "Valid ID is required" }, 422);
+    const { id } = parsed.data;
+
+    const actor = await administrator(request);
+    if (!actor)
+      return json(
+        { error: "Only administrators can delete staff members" },
+        403,
+      );
+    if (id === actor)
+      return json({ error: "You cannot delete your own account" }, 409);
+
+    const db = await pool.connect();
+    try {
+      await db.query("BEGIN");
+      const target = await db.query(
+        "SELECT role FROM staff_access WHERE user_id=$1 FOR UPDATE",
+        [id],
+      );
+      if (!target.rowCount) {
+        await db.query("ROLLBACK");
+        return json({ error: "Staff member not found" }, 404);
+      }
+
+      // Check clinical and payroll dependencies
+      const inUseCheck = await db.query(
+        `SELECT
+          EXISTS(SELECT 1 FROM patient_case WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM encounter WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM appointment WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM birth_report WHERE delivered_by=$1)
+          OR EXISTS(SELECT 1 FROM death_report WHERE certified_by=$1)
+          OR EXISTS(SELECT 1 FROM investigation_report WHERE investigated_by=$1)
+          OR EXISTS(SELECT 1 FROM operation_report WHERE surgeon_id=$1)
+          OR EXISTS(SELECT 1 FROM prescription WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM ipd_admission_details i JOIN encounter e ON e.id=i.encounter_id WHERE e.doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM employee_payroll WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM opd_follow_up WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM patient_queue WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM public_appointment_request WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM live_consultation WHERE doctor_id=$1)
+          OR EXISTS(SELECT 1 FROM patient_referral WHERE referred_by=$1)
+          OR EXISTS(SELECT 1 FROM patient_odontogram_entry WHERE diagnosed_by=$1)
+          OR EXISTS(SELECT 1 FROM clinical_note WHERE author_id=$1)
+          OR EXISTS(SELECT 1 FROM patient WHERE user_id=$1 OR clinician_user_id=$1)
+          OR EXISTS(SELECT 1 FROM audit_event WHERE actor_id=$1)
+          AS in_use`,
+        [id],
+      );
+      if (inUseCheck.rows[0].in_use) {
+        await db.query("ROLLBACK");
+        return json(
+          {
+            error: "Doctor is in use by clinical records and cannot be deleted",
+            code: "RECORD_IN_USE",
+          },
+          409,
+        );
+      }
+
+      await db.query("DELETE FROM doctor_hours WHERE doctor_id=$1", [id]);
+      await db.query("DELETE FROM doctor_absence WHERE doctor_id=$1", [id]);
+      await db.query("DELETE FROM doctor_profile WHERE user_id=$1", [id]);
+      await db.query("DELETE FROM staff_profile_revision WHERE user_id=$1", [
+        id,
+      ]);
+      await db.query("DELETE FROM staff_role_event WHERE user_id=$1", [id]);
+      await db.query("DELETE FROM staff_profile WHERE user_id=$1", [id]);
+      await db.query("DELETE FROM staff_access WHERE user_id=$1", [id]);
+      await db.query('DELETE FROM session WHERE "userId"=$1', [id]);
+      await db.query(
+        "DELETE FROM verification WHERE value=$1 AND (identifier LIKE '2fa-%' OR identifier LIKE 'trust-device-%')",
+        [id],
+      );
+      await db.query('DELETE FROM account WHERE "userId"=$1', [id]);
+      await db.query(
+        "INSERT INTO audit_event(actor_id, action, resource_id) VALUES($1, 'doctor.deleted', $2)",
+        [actor, id],
+      );
+      await db.query('DELETE FROM "user" WHERE id=$1', [id]);
+      await db.query("COMMIT");
+      return json({ id, deleted: true }, 200);
+    } catch (error) {
+      await db.query("ROLLBACK");
+      throw error;
+    } finally {
+      db.release();
+    }
+  } catch {
+    return json({ error: "Unable to delete staff member" }, 503);
+  }
+}
+
+export { mutate as POST, mutate as PATCH, remove as DELETE };
