@@ -30,7 +30,10 @@ func (s Store) CreateInsurance(ctx context.Context, a domain.Actor, in domain.In
 		CurrencySymbol:    "ETB",
 	}
 
-	_, _, totalMinor := domain.CalculateInsuranceTotals(in.ServiceTaxMinor, in.HospitalRateMinor, in.Discount, in.Diseases)
+	_, _, totalMinor, err := domain.CalculateInsuranceTotals(in.ServiceTaxMinor, in.HospitalRateMinor, in.Discount, in.Diseases)
+	if err != nil {
+		return out, domain.ErrValidation
+	}
 	out.TotalMinor = totalMinor
 	out.Total = float64(totalMinor) / 100.0
 
@@ -103,7 +106,10 @@ func (s Store) UpdateInsurance(ctx context.Context, a domain.Actor, id string, i
 		targetStatus = *in.Status
 	}
 
-	_, _, totalMinor := domain.CalculateInsuranceTotals(in.ServiceTaxMinor, in.HospitalRateMinor, in.Discount, in.Diseases)
+	_, _, totalMinor, err := domain.CalculateInsuranceTotals(in.ServiceTaxMinor, in.HospitalRateMinor, in.Discount, in.Diseases)
+	if err != nil {
+		return out, domain.ErrValidation
+	}
 
 	err = tx.QueryRow(ctx, `
 		UPDATE insurance

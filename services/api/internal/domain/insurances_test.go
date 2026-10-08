@@ -14,7 +14,10 @@ func TestCalculateInsuranceTotals(t *testing.T) {
 		{DiseaseName: "Malaria", DiseaseChargeMinor: 4500},
 		{DiseaseName: "Typhoid", DiseaseChargeMinor: 5500},
 	}
-	base, discountAmt, total := CalculateInsuranceTotals(5000, 15000, 10, diseases)
+	base, discountAmt, total, err := CalculateInsuranceTotals(5000, 15000, 10, diseases)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if base != 30000 {
 		t.Fatalf("expected base 30000, got %d", base)
 	}
@@ -29,7 +32,10 @@ func TestCalculateInsuranceTotals(t *testing.T) {
 	// Base = 125 minor (1.25 ETB), Discount = 15%
 	// Exact discount = 18.75 minor -> rounds to 19 minor
 	// Total = 125 - 19 = 106 minor
-	base, discountAmt, total = CalculateInsuranceTotals(125, 0, 15, nil)
+	base, discountAmt, total, err = CalculateInsuranceTotals(125, 0, 15, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if base != 125 {
 		t.Fatalf("expected base 125, got %d", base)
 	}
@@ -41,7 +47,10 @@ func TestCalculateInsuranceTotals(t *testing.T) {
 	}
 
 	// Test 0% discount
-	base, discountAmt, total = CalculateInsuranceTotals(5000, 10000, 0, diseases)
+	base, discountAmt, total, err = CalculateInsuranceTotals(5000, 10000, 0, diseases)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if discountAmt != 0 {
 		t.Fatalf("expected 0 discount, got %d", discountAmt)
 	}
@@ -110,5 +119,66 @@ func TestInsuranceInputNormalizeAndValidate(t *testing.T) {
 	noDiseases.Diseases = nil
 	if noDiseases.Validate() == nil {
 		t.Fatal("expected error on empty diseases")
+	}
+}
+
+func TestInsuranceTotals_Overflow_RegressionR2(t *testing.T) {
+	// Probe: base = 100000000000000000 with 100% discount
+	// Previously overflowed int64 producing total 184467440737095515
+	diseases := []InsuranceDiseaseLineInput{
+		{DiseaseName: "Malaria", DiseaseChargeMinor: 100000000000000000},
+	}
+	_, _, total, err := CalculateInsuranceTotals(0, 0, 100, diseases)
+	if err == nil && total != 0 {
+		t.Fatalf("expected error or total 0 for 100%% discount, got total=%d err=%v", total, err)
+	}
+
+	in := InsuranceInput{
+		Name:          "Overflow Insurance",
+		InsuranceNo:   "INS-OVF",
+		InsuranceCode: "OVF",
+		Discount:      100,
+		Diseases:      diseases,
+	}
+	if err := in.Validate(); err != ErrValidation {
+		t.Fatalf("expected ErrValidation for overflow amount, got %v", err)
+	}
+
+	// Maximum boundary within limits
+	maxSafeDiseases := []InsuranceDiseaseLineInput{
+		{DiseaseName: "D1", DiseaseChargeMinor: MaxMoneyMinor},
+	}
+	base, disc, tot, err := CalculateInsuranceTotals(0, 0, 100, maxSafeDiseases)
+	if err != nil {
+		t.Fatalf("expected MaxMoneyMinor calculation to succeed without overflow, got %v", err)
+	}
+	if base != MaxMoneyMinor || disc != MaxMoneyMinor || tot != 0 {
+		t.Fatalf("unexpected totals at boundary: base=%d disc=%d tot=%d", base, disc, tot)
+	}
+}
+
+func TestInsuranceInput_InvalidStatusAndDuplicateID(t *testing.T) {
+	statusBad := 2
+	in := InsuranceInput{
+		Name:          "Bad Status Insurance",
+		InsuranceNo:   "INS-BAD",
+		InsuranceCode: "BAD",
+		Status:        &statusBad,
+		Diseases: []InsuranceDiseaseLineInput{
+			{DiseaseName: "D1", DiseaseChargeMinor: 1000},
+		},
+	}
+	if err := in.Validate(); err != ErrValidation {
+		t.Fatalf("expected ErrValidation for status %d, got %v", statusBad, err)
+	}
+
+	statusOK := 1
+	in.Status = &statusOK
+	in.Diseases = []InsuranceDiseaseLineInput{
+		{ID: "line-1", DiseaseName: "D1", DiseaseChargeMinor: 1000},
+		{ID: "line-1", DiseaseName: "D2", DiseaseChargeMinor: 2000},
+	}
+	if err := in.Validate(); err != ErrValidation {
+		t.Fatalf("expected ErrValidation for duplicate disease line ID, got %v", err)
 	}
 }

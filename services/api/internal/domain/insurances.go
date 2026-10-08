@@ -124,36 +124,69 @@ func (in *InsuranceInput) Validate() error {
 	if in.Discount < 0 || in.Discount > 100 {
 		return ErrValidation
 	}
-	if in.ServiceTaxMinor < 0 || in.HospitalRateMinor < 0 {
+	if in.Status != nil && (*in.Status != 0 && *in.Status != 1) {
 		return ErrValidation
 	}
-	if len(in.Diseases) == 0 {
+	if in.ServiceTaxMinor < 0 || in.ServiceTaxMinor > MaxMoneyMinor || in.HospitalRateMinor < 0 || in.HospitalRateMinor > MaxMoneyMinor {
 		return ErrValidation
 	}
+	if len(in.Diseases) == 0 || len(in.Diseases) > MaxLines {
+		return ErrValidation
+	}
+	seenDiseaseIDs := make(map[string]bool)
 	for i := range in.Diseases {
+		in.Diseases[i].DiseaseName = strings.TrimSpace(in.Diseases[i].DiseaseName)
+		in.Diseases[i].ID = strings.TrimSpace(in.Diseases[i].ID)
 		if in.Diseases[i].DiseaseName == "" || len(in.Diseases[i].DiseaseName) > 191 {
 			return ErrValidation
 		}
-		if in.Diseases[i].DiseaseChargeMinor < 0 {
+		if in.Diseases[i].DiseaseChargeMinor < 0 || in.Diseases[i].DiseaseChargeMinor > MaxMoneyMinor {
 			return ErrValidation
 		}
+		if in.Diseases[i].ID != "" {
+			if seenDiseaseIDs[in.Diseases[i].ID] {
+				return ErrValidation
+			}
+			seenDiseaseIDs[in.Diseases[i].ID] = true
+		}
+	}
+	if _, _, _, err := CalculateInsuranceTotals(in.ServiceTaxMinor, in.HospitalRateMinor, in.Discount, in.Diseases); err != nil {
+		return ErrValidation
 	}
 	return nil
 }
 
 // CalculateInsuranceTotals computes base = service_tax + hospital_rate + sum(disease charges),
 // discount amount, and total with half-up rounding.
-func CalculateInsuranceTotals(serviceTaxMinor int64, hospitalRateMinor int64, discount int, diseases []InsuranceDiseaseLineInput) (baseMinor int64, discountAmountMinor int64, totalMinor int64) {
-	baseMinor = serviceTaxMinor + hospitalRateMinor
+func CalculateInsuranceTotals(serviceTaxMinor int64, hospitalRateMinor int64, discount int, diseases []InsuranceDiseaseLineInput) (baseMinor int64, discountAmountMinor int64, totalMinor int64, err error) {
+	if discount < 0 || discount > 100 {
+		return 0, 0, 0, ErrValidation
+	}
+	if serviceTaxMinor < 0 || serviceTaxMinor > MaxMoneyMinor || hospitalRateMinor < 0 || hospitalRateMinor > MaxMoneyMinor {
+		return 0, 0, 0, ErrValidation
+	}
+	baseMinor, err = safeAdd(serviceTaxMinor, hospitalRateMinor)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	for _, d := range diseases {
-		baseMinor += d.DiseaseChargeMinor
+		if d.DiseaseChargeMinor < 0 || d.DiseaseChargeMinor > MaxMoneyMinor {
+			return 0, 0, 0, ErrValidation
+		}
+		baseMinor, err = safeAdd(baseMinor, d.DiseaseChargeMinor)
+		if err != nil {
+			return 0, 0, 0, err
+		}
 	}
 	if discount > 0 {
 		discountAmountMinor = (baseMinor*int64(discount) + 50) / 100
+		if discountAmountMinor > baseMinor {
+			discountAmountMinor = baseMinor
+		}
 	}
 	totalMinor = baseMinor - discountAmountMinor
 	if totalMinor < 0 {
 		totalMinor = 0
 	}
-	return baseMinor, discountAmountMinor, totalMinor
+	return baseMinor, discountAmountMinor, totalMinor, nil
 }

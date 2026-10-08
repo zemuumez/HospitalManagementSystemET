@@ -317,4 +317,21 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	if exportRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for GET /v1/insurances-export, got %d", exportRec.Code)
 	}
+
+	// -------------------------------------------------------------
+	// Regression R2: Money overflow with 100% discount must be rejected
+	// -------------------------------------------------------------
+	overflowInsIn := domain.InsuranceInput{
+		Name:          "Overflow Insurance",
+		InsuranceNo:   "INS-OVF",
+		InsuranceCode: "OVF",
+		Discount:      100,
+		Diseases: []domain.InsuranceDiseaseLineInput{
+			{DiseaseName: "Overflow Disease", DiseaseChargeMinor: 100000000000000000},
+		},
+	}
+	_, err = insurancesService.CreateInsurance(ctx, admin, overflowInsIn)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for insurance money overflow, got %v", err)
+	}
 }

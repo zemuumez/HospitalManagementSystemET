@@ -508,4 +508,120 @@ func testPackages(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.A
 	if exportRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for GET /v1/packages-export, got %d", exportRec.Code)
 	}
+
+	// -------------------------------------------------------------
+	// 12. Regression R1: Duplicate child line ID on update must be rejected
+	// -------------------------------------------------------------
+	pkgR1In := domain.PackageInput{
+		Name:        "R1 Test Package",
+		Description: "Testing duplicate child ID rejection",
+		Discount:    0,
+		Services: []domain.PackageServiceLineInput{
+			{ServiceID: svc1ID, Quantity: 1, RateMinor: 10000, HasRate: true},
+		},
+	}
+	pkgR1Created, err := packagesService.CreatePackage(ctx, admin, pkgR1In)
+	if err != nil {
+		t.Fatalf("failed to create R1 package: %v", err)
+	}
+	childID := pkgR1Created.Services[0].ID
+
+	var auditCountBefore int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action = 'package.updated' AND resource_id = $1`, pkgR1Created.ID).Scan(&auditCountBefore)
+
+	updateDupChild := domain.PackageInput{
+		Name:     "R1 Test Package Mutated",
+		Discount: 0,
+		Services: []domain.PackageServiceLineInput{
+			{ID: childID, ServiceID: svc1ID, Quantity: 1, RateMinor: 100, HasRate: true},
+			{ID: childID, ServiceID: svc2ID, Quantity: 1, RateMinor: 200, HasRate: true},
+		},
+	}
+	_, err = packagesService.UpdatePackage(ctx, admin, pkgR1Created.ID, updateDupChild)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for duplicate child ID, got %v", err)
+	}
+
+	pkgR1Reloaded, err := packagesService.Package(ctx, admin, pkgR1Created.ID)
+	if err != nil {
+		t.Fatalf("failed to reload R1 package: %v", err)
+	}
+	if len(pkgR1Reloaded.Services) != 1 || pkgR1Reloaded.Services[0].RateMinor != 10000 {
+		t.Fatalf("original rows were mutated despite validation failure: %+v", pkgR1Reloaded)
+	}
+	if pkgR1Reloaded.TotalAmountMinor != 10000 {
+		t.Fatalf("parent total corrupted: expected 10000, got %d", pkgR1Reloaded.TotalAmountMinor)
+	}
+
+	var auditCountAfter int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action = 'package.updated' AND resource_id = $1`, pkgR1Created.ID).Scan(&auditCountAfter)
+	if auditCountAfter != auditCountBefore {
+		t.Fatalf("audit event was recorded for failed duplicate child ID update")
+	}
+
+	// -------------------------------------------------------------
+	// 13. Regression R2: Money overflow with 100% discount must be rejected
+	// -------------------------------------------------------------
+	overflowIn := domain.PackageInput{
+		Name:     "Overflow Package",
+		Discount: 100,
+		Services: []domain.PackageServiceLineInput{
+			{ServiceID: svc1ID, Quantity: 1, RateMinor: 100000000000000000, HasRate: true},
+		},
+	}
+	_, err = packagesService.CreatePackage(ctx, admin, overflowIn)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for money overflow, got %v", err)
+	}
+
+	// -------------------------------------------------------------
+	// 14. Regression R3: Explicit zero price must NOT be overwritten by catalog price
+	// -------------------------------------------------------------
+	explicitZeroIn := domain.PackageInput{
+		Name:     "Explicit Zero Rate Package",
+		Discount: 0,
+		Services: []domain.PackageServiceLineInput{
+			{ServiceID: svc1ID, Quantity: 1, RateMinor: 0, HasRate: true},
+		},
+	}
+	pkgZeroCreated, err := packagesService.CreatePackage(ctx, admin, explicitZeroIn)
+	if err != nil {
+		t.Fatalf("failed to create package with explicit zero rate: %v", err)
+	}
+	if len(pkgZeroCreated.Services) != 1 || pkgZeroCreated.Services[0].RateMinor != 0 {
+		t.Fatalf("expected line rate 0, got %d", pkgZeroCreated.Services[0].RateMinor)
+	}
+	if pkgZeroCreated.TotalAmountMinor != 0 {
+		t.Fatalf("expected total 0 for explicit zero rate, got %d", pkgZeroCreated.TotalAmountMinor)
+	}
+
+	updateZeroIn := domain.PackageInput{
+		Name:     "Explicit Zero Rate Package Updated",
+		Discount: 0,
+		Services: []domain.PackageServiceLineInput{
+			{ID: pkgZeroCreated.Services[0].ID, ServiceID: svc1ID, Quantity: 2, RateMinor: 0, HasRate: true},
+		},
+	}
+	pkgZeroUpdated, err := packagesService.UpdatePackage(ctx, admin, pkgZeroCreated.ID, updateZeroIn)
+	if err != nil {
+		t.Fatalf("failed to update package with explicit zero rate: %v", err)
+	}
+	if pkgZeroUpdated.Services[0].RateMinor != 0 || pkgZeroUpdated.TotalAmountMinor != 0 {
+		t.Fatalf("expected line rate 0 and total 0 on update, got rate=%d total=%d", pkgZeroUpdated.Services[0].RateMinor, pkgZeroUpdated.TotalAmountMinor)
+	}
+
+	omittedRateIn := domain.PackageInput{
+		Name:     "Omitted Rate Package",
+		Discount: 0,
+		Services: []domain.PackageServiceLineInput{
+			{ServiceID: svc1ID, Quantity: 1}, // HasRate: false
+		},
+	}
+	pkgOmittedCreated, err := packagesService.CreatePackage(ctx, admin, omittedRateIn)
+	if err != nil {
+		t.Fatalf("failed to create package with omitted rate: %v", err)
+	}
+	if pkgOmittedCreated.Services[0].RateMinor != 25000 || pkgOmittedCreated.TotalAmountMinor != 25000 {
+		t.Fatalf("expected omitted rate to default to 25000, got rate=%d total=%d", pkgOmittedCreated.Services[0].RateMinor, pkgOmittedCreated.TotalAmountMinor)
+	}
 }

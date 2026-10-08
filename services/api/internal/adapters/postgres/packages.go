@@ -41,13 +41,17 @@ func (s Store) CreatePackage(ctx context.Context, a domain.Actor, in domain.Pack
 		if sStatus != 1 {
 			return out, domain.ErrValidation
 		}
-		if in.Services[i].RateMinor == 0 && sRate > 0 {
+		if !in.Services[i].HasRate && sRate > 0 {
 			in.Services[i].RateMinor = sRate
+			in.Services[i].HasRate = true
 		}
 	}
 
 	// Recalculate authoritative totals
-	_, _, totalMinor, lineAmounts := domain.CalculatePackageTotals(in.Discount, in.Services)
+	subtotalMinor, _, totalMinor, lineAmounts, err := domain.CalculatePackageTotals(in.Discount, in.Services)
+	if err != nil {
+		return out, domain.ErrValidation
+	}
 	out.TotalAmountMinor = totalMinor
 
 	err = tx.QueryRow(ctx, `
@@ -92,6 +96,16 @@ func (s Store) CreatePackage(ctx context.Context, a domain.Actor, in domain.Pack
 		out.Services[i] = lineOut
 	}
 
+	// Reconcile persisted line totals
+	var persistedLineSum int64
+	err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(amount_minor), 0) FROM package_service WHERE package_id = $1`, out.ID).Scan(&persistedLineSum)
+	if err != nil {
+		return out, err
+	}
+	if persistedLineSum != subtotalMinor {
+		return out, domain.ErrValidation
+	}
+
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'package.created', $2)`, a.ID, out.ID); err != nil {
 		return out, err
 	}
@@ -118,14 +132,20 @@ func (s Store) UpdatePackage(ctx context.Context, a domain.Actor, id string, in 
 		return out, err
 	}
 
-	// Validate child line ownership: any supplied line ID MUST belong to this package
+	// Validate child line ownership: any supplied line ID MUST belong to this package and cannot be duplicated
+	seenLineIDs := make(map[string]bool)
 	for _, line := range in.Services {
-		if line.ID != "" {
+		lineID := strings.TrimSpace(line.ID)
+		if lineID != "" {
+			if seenLineIDs[lineID] {
+				return out, domain.ErrValidation
+			}
+			seenLineIDs[lineID] = true
 			var ownerPkgID string
-			err = tx.QueryRow(ctx, `SELECT package_id FROM package_service WHERE id = $1`, line.ID).Scan(&ownerPkgID)
+			err = tx.QueryRow(ctx, `SELECT package_id FROM package_service WHERE id = $1`, lineID).Scan(&ownerPkgID)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
-					return out, domain.ErrConflict // Line ID does not exist
+					return out, domain.ErrValidation // Line ID does not exist
 				}
 				return out, err
 			}
@@ -151,13 +171,17 @@ func (s Store) UpdatePackage(ctx context.Context, a domain.Actor, id string, in 
 		if sStatus != 1 {
 			return out, domain.ErrValidation
 		}
-		if in.Services[i].RateMinor == 0 && sRate > 0 {
+		if !in.Services[i].HasRate && sRate > 0 {
 			in.Services[i].RateMinor = sRate
+			in.Services[i].HasRate = true
 		}
 	}
 
 	// Recalculate totals
-	_, _, totalMinor, lineAmounts := domain.CalculatePackageTotals(in.Discount, in.Services)
+	subtotalMinor, _, totalMinor, lineAmounts, err := domain.CalculatePackageTotals(in.Discount, in.Services)
+	if err != nil {
+		return out, domain.ErrValidation
+	}
 
 	err = tx.QueryRow(ctx, `
 		UPDATE package
@@ -241,6 +265,16 @@ func (s Store) UpdatePackage(ctx context.Context, a domain.Actor, id string, in 
 				return out, err
 			}
 		}
+	}
+
+	// Reconcile persisted line totals
+	var persistedLineSum int64
+	err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(amount_minor), 0) FROM package_service WHERE package_id = $1`, id).Scan(&persistedLineSum)
+	if err != nil {
+		return out, err
+	}
+	if persistedLineSum != subtotalMinor {
+		return out, domain.ErrValidation
 	}
 
 	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'package.updated', $2)`, a.ID, out.ID); err != nil {
