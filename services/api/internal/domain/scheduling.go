@@ -11,6 +11,7 @@ import (
 var ErrNotFound = errors.New("record not found")
 var ErrStale = errors.New("record changed or time unavailable")
 var UUIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+var EmailPattern = regexp.MustCompile(`^[a-zA-Z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$`)
 var HospitalLocation, _ = time.LoadLocation("Africa/Addis_Ababa")
 
 type DoctorHours struct {
@@ -183,7 +184,7 @@ func (i *UpdateDoctorInput) Validate() error {
 	}
 	if i.Email != nil {
 		*i.Email = strings.TrimSpace(strings.ToLower(*i.Email))
-		if *i.Email == "" || len(*i.Email) > 254 || !strings.Contains(*i.Email, "@") {
+		if *i.Email == "" || len(*i.Email) > 254 || !EmailPattern.MatchString(*i.Email) {
 			return ErrValidation
 		}
 	}

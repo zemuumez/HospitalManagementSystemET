@@ -249,19 +249,6 @@ async function mutate(request: Request) {
         const deptId = data.departmentId || data.department_id;
 
         if (data.role === "doctor") {
-          const deptCheck = await db.query(
-            "SELECT title, archived FROM doctor_department WHERE id=$1",
-            [deptId],
-          );
-          if (!deptCheck.rowCount || deptCheck.rows[0].archived) {
-            await db.query("ROLLBACK");
-            return json(
-              { error: "Valid non-archived department is required" },
-              422,
-            );
-          }
-          const deptTitle = deptCheck.rows[0].title;
-
           id = randomUUID();
           await db.query('INSERT INTO "user"(id,name,email) VALUES($1,$2,$3)', [
             id,
@@ -276,6 +263,19 @@ async function mutate(request: Request) {
             "INSERT INTO staff_access(user_id,role) VALUES($1,$2)",
             [id, data.role],
           );
+
+          const deptCheck = await db.query(
+            "SELECT title, archived FROM doctor_department WHERE id=$1",
+            [deptId],
+          );
+          if (!deptCheck.rowCount || deptCheck.rows[0].archived) {
+            await db.query("ROLLBACK");
+            return json(
+              { error: "Valid non-archived department is required" },
+              422,
+            );
+          }
+          const deptTitle = deptCheck.rows[0].title;
 
           const slotMinutes = data.slotMinutes || 60;
           await db.query(

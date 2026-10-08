@@ -227,7 +227,52 @@ try {
   assert.equal(
     (
       await db.query(
+        'SELECT count(*)::int AS count FROM account WHERE "userId" IN (SELECT id FROM "user" WHERE email=$1)',
+        [failedDocEmail],
+      )
+    ).rows[0].count,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
         'SELECT count(*)::int AS count FROM staff_access WHERE user_id IN (SELECT id FROM "user" WHERE email=$1)',
+        [failedDocEmail],
+      )
+    ).rows[0].count,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT count(*)::int AS count FROM doctor_profile WHERE user_id IN (SELECT id FROM "user" WHERE email=$1)',
+        [failedDocEmail],
+      )
+    ).rows[0].count,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT count(*)::int AS count FROM staff_profile WHERE user_id IN (SELECT id FROM "user" WHERE email=$1)',
+        [failedDocEmail],
+      )
+    ).rows[0].count,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT count(*)::int AS count FROM doctor_hours WHERE doctor_id IN (SELECT id FROM "user" WHERE email=$1)',
+        [failedDocEmail],
+      )
+    ).rows[0].count,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int AS count FROM audit_event WHERE action='doctor.created' AND resource_id IN (SELECT id FROM \"user\" WHERE email=$1)",
         [failedDocEmail],
       )
     ).rows[0].count,
@@ -332,6 +377,33 @@ try {
       email: admin.email,
     },
   });
+
+  // 6. Strict email validation on PATCH /api/staff: malformed emails rejected with 422
+  for (const badEmail of [
+    "not-an-email",
+    "missingdomain@",
+    "@missinglocal.test",
+    "missingdot@domain",
+    "two@@domain.com",
+    "has spaces@domain.com",
+  ]) {
+    await expectStatus("/api/staff", 422, {
+      cookie: admin.cookie,
+      method: "PATCH",
+      body: {
+        id: coordinatedDoctorID,
+        email: badEmail,
+      },
+    });
+  }
+
+  // Verify email in database remains unchanged
+  const unchangedUserRow = (
+    await db.query('SELECT email FROM "user" WHERE id=$1', [
+      coordinatedDoctorID,
+    ])
+  ).rows[0];
+  assert.equal(unchangedUserRow.email, updatedDocEmail);
   const schedule = {
     id: doctor.id,
     name: "",

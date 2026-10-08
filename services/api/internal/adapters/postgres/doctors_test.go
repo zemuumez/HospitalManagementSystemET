@@ -812,4 +812,89 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	if dupPutRec.Code != http.StatusConflict {
 		t.Fatalf("expected 409 for HTTP PUT duplicate email, got %d: %s", dupPutRec.Code, dupPutRec.Body.String())
 	}
+
+	// 12. Strict email validation: reject malformed emails with 422 without mutating account, profile version, or audit
+	var beforeUserName, beforeUserEmail string
+	_ = db.QueryRow(ctx, `SELECT name, email FROM "user" WHERE id=$1`, docUser1).Scan(&beforeUserName, &beforeUserEmail)
+	var beforeDocVersion int
+	_ = db.QueryRow(ctx, `SELECT version FROM doctor_profile WHERE user_id=$1`, docUser1).Scan(&beforeDocVersion)
+	var beforeAuditCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE resource_id=$1`, docUser1).Scan(&beforeAuditCount)
+
+	for _, malformedEmail := range []string{
+		"not-an-email",
+		"missingdomain@",
+		"@missinglocal.test",
+		"missingdot@domain",
+		"two@@domain.com",
+		"has spaces@domain.com",
+		"trailingdot@domain.com.",
+	} {
+		body := `{"email":"` + malformedEmail + `","version":` + string(rune('0'+beforeDocVersion)) + `}`
+		badReq := httptest.NewRequest("PUT", "/v1/doctors/"+docUser1, bytes.NewReader([]byte(body)))
+		badReq.Header.Set("Cookie", "session=admin")
+		badReq.Header.Set("Origin", "http://hospital.test")
+		badReq.Header.Set("Content-Type", "application/json")
+		badRec := httptest.NewRecorder()
+		httpHandler.ServeHTTP(badRec, badReq)
+		if badRec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422 for malformed email %q, got %d: %s", malformedEmail, badRec.Code, badRec.Body.String())
+		}
+	}
+
+	var afterUserName, afterUserEmail string
+	_ = db.QueryRow(ctx, `SELECT name, email FROM "user" WHERE id=$1`, docUser1).Scan(&afterUserName, &afterUserEmail)
+	var afterDocVersion int
+	_ = db.QueryRow(ctx, `SELECT version FROM doctor_profile WHERE user_id=$1`, docUser1).Scan(&afterDocVersion)
+	var afterAuditCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE resource_id=$1`, docUser1).Scan(&afterAuditCount)
+
+	if afterUserName != beforeUserName || afterUserEmail != beforeUserEmail {
+		t.Fatalf("user account data changed on invalid email: before=(%s,%s), after=(%s,%s)", beforeUserName, beforeUserEmail, afterUserName, afterUserEmail)
+	}
+	if afterDocVersion != beforeDocVersion {
+		t.Fatalf("doctor profile version changed on invalid email: before=%d, after=%d", beforeDocVersion, afterDocVersion)
+	}
+	if afterAuditCount != beforeAuditCount {
+		t.Fatalf("audit event count changed on invalid email: before=%d, after=%d", beforeAuditCount, afterAuditCount)
+	}
+
+	// 13. Transaction rollback test: deliberately fail doctor creation and verify no partial records survive
+	deliberateDocID := "deliberate-fail-doctor"
+	_, err = db.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,$2,$1||'@hospital.test')`, deliberateDocID, "Dr. Deliberate Fail")
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	_, err = db.Exec(ctx, `INSERT INTO staff_access(user_id,role,active) VALUES($1,'doctor',true)`, deliberateDocID)
+	if err != nil {
+		t.Fatalf("failed to insert test staff_access: %v", err)
+	}
+
+	deliberateIn := domain.CreateDoctorInput{
+		UserID:        deliberateDocID,
+		DepartmentID:  archivedDeptID,
+		Specialist:    "Cardiology",
+		Designation:   "Consultant",
+		Qualification: "MBBS",
+		Gender:        "male",
+	}
+	_, err = sched.CreateDoctorProfile(ctx, admin, deliberateIn)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation for archived department, got %v", err)
+	}
+
+	var profileCount, hoursCount, auditDoctorCount int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_profile WHERE user_id=$1`, deliberateDocID).Scan(&profileCount)
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM doctor_hours WHERE doctor_id=$1`, deliberateDocID).Scan(&hoursCount)
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM audit_event WHERE action='doctor.created' AND resource_id=$1`, deliberateDocID).Scan(&auditDoctorCount)
+
+	if profileCount != 0 {
+		t.Fatalf("expected 0 doctor_profile records after rollback, got %d", profileCount)
+	}
+	if hoursCount != 0 {
+		t.Fatalf("expected 0 doctor_hours records after rollback, got %d", hoursCount)
+	}
+	if auditDoctorCount != 0 {
+		t.Fatalf("expected 0 audit_event records after rollback, got %d", auditDoctorCount)
+	}
 }
