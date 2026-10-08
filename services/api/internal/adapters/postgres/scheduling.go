@@ -718,6 +718,14 @@ func (s Store) Slots(ctx context.Context, id string, day, now time.Time) ([]time
 	if err != nil {
 		return nil, err
 	}
+	var isHoliday bool
+	err = s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM doctor_holiday WHERE doctor_id=$1 AND holiday_date=$2::date)`, id, day).Scan(&isHoliday)
+	if err != nil {
+		return nil, err
+	}
+	if isHoliday {
+		return []time.Time{}, nil
+	}
 	rows, err := s.DB.Query(ctx, `SELECT starts_at,ends_at FROM appointment WHERE doctor_id=$1 AND status<>'cancelled' AND starts_at<$3 AND ends_at>$2 UNION ALL SELECT starts_at,ends_at FROM doctor_absence WHERE doctor_id=$1 AND cancelled_at IS NULL AND starts_at<$3 AND ends_at>$2`, id, day, day.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, err
@@ -734,6 +742,29 @@ func (s Store) Slots(ctx context.Context, id string, day, now time.Time) ([]time
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+
+	breakRows, err := s.DB.Query(ctx, `SELECT break_from::text, break_to::text FROM doctor_lunch_break WHERE doctor_id=$1 AND (every_day=true OR break_date=$2::date)`, id, day)
+	if err != nil {
+		return nil, err
+	}
+	defer breakRows.Close()
+	for breakRows.Next() {
+		var bFrom, bTo string
+		if err = breakRows.Scan(&bFrom, &bTo); err != nil {
+			return nil, err
+		}
+		fromMin, e1 := domain.ParseTimeToMinutes(bFrom)
+		toMin, e2 := domain.ParseTimeToMinutes(bTo)
+		if e1 == nil && e2 == nil {
+			bStart := day.Add(time.Duration(fromMin) * time.Minute)
+			bEnd := day.Add(time.Duration(toMin) * time.Minute)
+			busy = append(busy, [2]time.Time{bStart, bEnd})
+		}
+	}
+	if err = breakRows.Err(); err != nil {
+		return nil, err
+	}
+
 	result := []time.Time{}
 	for _, h := range d.Hours {
 		if h.Weekday != int(day.Weekday()) {
@@ -854,6 +885,25 @@ func (s Store) Book(ctx context.Context, actor domain.Actor, i domain.Appointmen
 	if occupied {
 		return empty, domain.ErrStale
 	}
+	var holidayOrBreak bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM doctor_holiday
+			WHERE doctor_id=$1 AND holiday_date=($2 AT TIME ZONE 'Africa/Addis_Ababa')::date
+		) OR EXISTS(
+			SELECT 1 FROM doctor_lunch_break
+			WHERE doctor_id=$1
+			  AND (every_day=true OR break_date=($2 AT TIME ZONE 'Africa/Addis_Ababa')::date)
+			  AND ($2 AT TIME ZONE 'Africa/Addis_Ababa')::time < break_to
+			  AND ($3 AT TIME ZONE 'Africa/Addis_Ababa')::time > break_from
+		)
+	`, i.DoctorID, i.StartsAt, end).Scan(&holidayOrBreak)
+	if err != nil {
+		return empty, err
+	}
+	if holidayOrBreak {
+		return empty, domain.ErrConflict
+	}
 	if i.NotifySMS && !domain.PhonePattern.MatchString(phone) {
 		return empty, domain.ErrValidation
 	}
@@ -906,3 +956,590 @@ func (s Store) ChangeAppointment(ctx context.Context, actor domain.Actor, id str
 	a.Version++
 	return a, tx.Commit(ctx)
 }
+
+func (s Store) DoctorSchedules(ctx context.Context, doctorID string) ([]domain.DoctorSchedule, error) {
+	rows, err := s.DB.Query(ctx, `
+		SELECT p.user_id, u.name, p.slot_minutes
+		FROM doctor_profile p
+		JOIN "user" u ON u.id = p.user_id
+		JOIN staff_access sa ON sa.user_id = p.user_id
+		WHERE sa.active = true AND ($1 = '' OR p.user_id = $1)
+		ORDER BY u.name ASC
+	`, doctorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type docMeta struct {
+		id          string
+		name        string
+		slotMinutes int
+	}
+	var list []docMeta
+	for rows.Next() {
+		var m docMeta
+		if err := rows.Scan(&m.id, &m.name, &m.slotMinutes); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var results []domain.DoctorSchedule
+	for _, m := range list {
+		hourRows, err := s.DB.Query(ctx, `
+			SELECT weekday, start_minute, end_minute
+			FROM doctor_hours
+			WHERE doctor_id = $1
+			ORDER BY weekday ASC, start_minute ASC
+		`, m.id)
+		if err != nil {
+			return nil, err
+		}
+		var days []domain.ScheduleDayRow
+		for hourRows.Next() {
+			var w, sMin, eMin int
+			if err := hourRows.Scan(&w, &sMin, &eMin); err != nil {
+				hourRows.Close()
+				return nil, err
+			}
+			dayName := "Sunday"
+			if w >= 0 && w < 7 {
+				dayName = domain.WeekdayNames[w]
+			}
+			days = append(days, domain.ScheduleDayRow{
+				Day:  dayName,
+				From: domain.FormatMinutesToTime(sMin),
+				To:   domain.FormatMinutesToTime(eMin),
+			})
+		}
+		hourRows.Close()
+		if err := hourRows.Err(); err != nil {
+			return nil, err
+		}
+
+		results = append(results, domain.DoctorSchedule{
+			ID:             m.id,
+			DoctorID:       m.id,
+			DoctorName:     m.name,
+			PerPatientTime: domain.FormatMinutesToTime(m.slotMinutes),
+			SlotMinutes:    m.slotMinutes,
+			Days:           days,
+		})
+	}
+	return results, nil
+}
+
+func (s Store) DoctorSchedule(ctx context.Context, doctorID string) (domain.DoctorSchedule, error) {
+	list, err := s.DoctorSchedules(ctx, doctorID)
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+	if len(list) == 0 {
+		return domain.DoctorSchedule{}, domain.ErrNotFound
+	}
+	return list[0], nil
+}
+
+func (s Store) SaveDoctorSchedule(ctx context.Context, a domain.Actor, input domain.SaveDoctorScheduleInput) (domain.DoctorSchedule, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var docName string
+	err = tx.QueryRow(ctx, `
+		SELECT u.name FROM doctor_profile p
+		JOIN "user" u ON u.id = p.user_id
+		JOIN staff_access sa ON sa.user_id = p.user_id
+		WHERE p.user_id = $1 AND sa.active = true
+		FOR UPDATE
+	`, input.DoctorID).Scan(&docName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.DoctorSchedule{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+
+	type apptTime struct {
+		startsAt time.Time
+		endsAt   time.Time
+	}
+	apptRows, err := tx.Query(ctx, `
+		SELECT starts_at, ends_at FROM appointment
+		WHERE doctor_id = $1 AND status IN ('booked', 'arrived') AND starts_at > now()
+	`, input.DoctorID)
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+	var futureAppts []apptTime
+	for apptRows.Next() {
+		var at apptTime
+		if err := apptRows.Scan(&at.startsAt, &at.endsAt); err != nil {
+			apptRows.Close()
+			return domain.DoctorSchedule{}, err
+		}
+		futureAppts = append(futureAppts, at)
+	}
+	apptRows.Close()
+	if err := apptRows.Err(); err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+
+	type interval struct {
+		start, end int
+	}
+	newHours := make(map[int][]interval)
+	for _, d := range input.Days {
+		w := domain.WeekdayNameToIndex(d.Day)
+		fromMin, _ := domain.ParseTimeToMinutes(d.From)
+		toMin, _ := domain.ParseTimeToMinutes(d.To)
+		if fromMin < toMin {
+			newHours[w] = append(newHours[w], interval{start: fromMin, end: toMin})
+		}
+	}
+
+	for _, appt := range futureAppts {
+		eatStart := appt.startsAt.In(domain.HospitalLocation)
+		eatEnd := appt.endsAt.In(domain.HospitalLocation)
+		w := int(eatStart.Weekday())
+		startMin := eatStart.Hour()*60 + eatStart.Minute()
+		endMin := eatEnd.Hour()*60 + eatEnd.Minute()
+
+		allowed := false
+		for _, iv := range newHours[w] {
+			if iv.start <= startMin && endMin <= iv.end {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return domain.DoctorSchedule{}, domain.ErrConflict
+		}
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE doctor_profile SET slot_minutes = $2, version = version + 1 WHERE user_id = $1`, input.DoctorID, input.SlotMinutes)
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM doctor_hours WHERE doctor_id = $1`, input.DoctorID)
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+
+	var savedDays []domain.ScheduleDayRow
+	for _, d := range input.Days {
+		w := domain.WeekdayNameToIndex(d.Day)
+		fromMin, _ := domain.ParseTimeToMinutes(d.From)
+		toMin, _ := domain.ParseTimeToMinutes(d.To)
+		if fromMin < toMin {
+			_, err = tx.Exec(ctx, `INSERT INTO doctor_hours (doctor_id, weekday, start_minute, end_minute) VALUES ($1, $2, $3, $4)`, input.DoctorID, w, fromMin, toMin)
+			if err != nil {
+				return domain.DoctorSchedule{}, err
+			}
+			savedDays = append(savedDays, domain.ScheduleDayRow{
+				Day:  domain.WeekdayNames[w],
+				From: domain.FormatMinutesToTime(fromMin),
+				To:   domain.FormatMinutesToTime(toMin),
+			})
+		}
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor.schedule_saved', $2)`, a.ID, input.DoctorID)
+	if err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+
+	return domain.DoctorSchedule{
+		ID:             input.DoctorID,
+		DoctorID:       input.DoctorID,
+		DoctorName:     docName,
+		PerPatientTime: domain.FormatMinutesToTime(input.SlotMinutes),
+		SlotMinutes:    input.SlotMinutes,
+		Days:           savedDays,
+	}, nil
+}
+
+func (s Store) DeleteDoctorSchedule(ctx context.Context, a domain.Actor, doctorID string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var hasAppointments bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM appointment WHERE doctor_id = $1)`, doctorID).Scan(&hasAppointments)
+	if err != nil {
+		return err
+	}
+	if hasAppointments {
+		return domain.ErrInUse
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM doctor_hours WHERE doctor_id = $1`, doctorID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor.schedule_deleted', $2)`, a.ID, doctorID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s Store) DoctorHolidays(ctx context.Context, doctorID string) ([]domain.DoctorHoliday, error) {
+	rows, err := s.DB.Query(ctx, `
+		SELECT h.id::text, h.doctor_id, u.name, h.holiday_date::text, h.name, h.created_at
+		FROM doctor_holiday h
+		JOIN "user" u ON u.id = h.doctor_id
+		WHERE ($1 = '' OR h.doctor_id = $1)
+		ORDER BY h.holiday_date DESC, h.created_at DESC
+	`, doctorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.DoctorHoliday
+	for rows.Next() {
+		var item domain.DoctorHoliday
+		if err := rows.Scan(&item.ID, &item.DoctorID, &item.DoctorName, &item.Date, &item.Reason, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s Store) CreateDoctorHoliday(ctx context.Context, a domain.Actor, input domain.CreateDoctorHolidayInput) (domain.DoctorHoliday, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var docName string
+	err = tx.QueryRow(ctx, `
+		SELECT u.name FROM doctor_profile p
+		JOIN "user" u ON u.id = p.user_id
+		WHERE p.user_id = $1
+	`, input.DoctorID).Scan(&docName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.DoctorHoliday{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+
+	var existsHoliday bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM doctor_holiday WHERE doctor_id = $1 AND holiday_date = $2::date)
+	`, input.DoctorID, input.Date).Scan(&existsHoliday)
+	if err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+	if existsHoliday {
+		return domain.DoctorHoliday{}, domain.ErrConflict
+	}
+
+	var hasAppt bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM appointment
+			WHERE doctor_id = $1 AND status NOT IN ('cancelled')
+			AND (starts_at AT TIME ZONE 'Africa/Addis_Ababa')::date = $2::date
+		)
+	`, input.DoctorID, input.Date).Scan(&hasAppt)
+	if err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+	if hasAppt {
+		return domain.DoctorHoliday{}, domain.ErrConflict
+	}
+
+	var id string
+	var createdAt time.Time
+	err = tx.QueryRow(ctx, `
+		INSERT INTO doctor_holiday (doctor_id, holiday_date, name, created_by)
+		VALUES ($1, $2::date, $3, $4)
+		RETURNING id::text, created_at
+	`, input.DoctorID, input.Date, input.Reason, a.ID).Scan(&id, &createdAt)
+	if err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor_holiday.created', $2)`, a.ID, id)
+	if err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+
+	return domain.DoctorHoliday{
+		ID:         id,
+		DoctorID:   input.DoctorID,
+		DoctorName: docName,
+		Date:       input.Date,
+		Reason:     input.Reason,
+		CreatedAt:  createdAt,
+	}, nil
+}
+
+func (s Store) DeleteDoctorHoliday(ctx context.Context, a domain.Actor, id string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var docID string
+	err = tx.QueryRow(ctx, `SELECT doctor_id FROM doctor_holiday WHERE id = $1::uuid`, id).Scan(&docID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if a.Role == "doctor" && docID != a.ID {
+		return domain.ErrForbidden
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM doctor_holiday WHERE id = $1::uuid`, id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor_holiday.deleted', $2)`, a.ID, id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s Store) DoctorBreaks(ctx context.Context, doctorID string) ([]domain.DoctorLunchBreak, error) {
+	rows, err := s.DB.Query(ctx, `
+		SELECT b.id::text, b.doctor_id, u.name, u.email,
+		       b.break_from::text, b.break_to::text, b.every_day,
+		       COALESCE(b.break_date::text, ''), b.created_at
+		FROM doctor_lunch_break b
+		JOIN "user" u ON u.id = b.doctor_id
+		WHERE ($1 = '' OR b.doctor_id = $1)
+		ORDER BY b.created_at DESC
+	`, doctorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.DoctorLunchBreak
+	for rows.Next() {
+		var item domain.DoctorLunchBreak
+		var createdAt time.Time
+		if err := rows.Scan(&item.ID, &item.DoctorID, &item.DoctorName, &item.DoctorEmail, &item.BreakFrom, &item.BreakTo, &item.EveryDay, &item.Date, &createdAt); err != nil {
+			return nil, err
+		}
+		if item.EveryDay {
+			item.DateType = "Every Day"
+		} else {
+			item.DateType = item.Date
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s Store) CreateDoctorBreak(ctx context.Context, a domain.Actor, input domain.CreateDoctorBreakInput) (domain.DoctorLunchBreak, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.DoctorLunchBreak{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var docName, docEmail string
+	err = tx.QueryRow(ctx, `
+		SELECT u.name, u.email FROM doctor_profile p
+		JOIN "user" u ON u.id = p.user_id
+		WHERE p.user_id = $1
+	`, input.DoctorID).Scan(&docName, &docEmail)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.DoctorLunchBreak{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.DoctorLunchBreak{}, err
+	}
+
+	if input.EveryDay {
+		var duplicate bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM doctor_lunch_break
+				WHERE doctor_id = $1 AND every_day = true
+				AND break_from = $2::time AND break_to = $3::time
+			)
+		`, input.DoctorID, input.BreakFrom, input.BreakTo).Scan(&duplicate)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+		if duplicate {
+			return domain.DoctorLunchBreak{}, domain.ErrConflict
+		}
+
+		var hasAppt bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM appointment
+				WHERE doctor_id = $1 AND status NOT IN ('cancelled') AND starts_at > now()
+				AND (starts_at AT TIME ZONE 'Africa/Addis_Ababa')::time < $3::time
+				AND (ends_at AT TIME ZONE 'Africa/Addis_Ababa')::time > $2::time
+			)
+		`, input.DoctorID, input.BreakFrom, input.BreakTo).Scan(&hasAppt)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+		if hasAppt {
+			return domain.DoctorLunchBreak{}, domain.ErrConflict
+		}
+
+		var id string
+		err = tx.QueryRow(ctx, `
+			INSERT INTO doctor_lunch_break (doctor_id, break_from, break_to, every_day, break_date, created_by)
+			VALUES ($1, $2::time, $3::time, true, NULL, $4)
+			RETURNING id::text
+		`, input.DoctorID, input.BreakFrom, input.BreakTo, a.ID).Scan(&id)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+
+		_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor_break.created', $2)`, a.ID, id)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+
+		return domain.DoctorLunchBreak{
+			ID:          id,
+			DoctorID:    input.DoctorID,
+			DoctorName:  docName,
+			DoctorEmail: docEmail,
+			BreakFrom:   input.BreakFrom,
+			BreakTo:     input.BreakTo,
+			EveryDay:    true,
+			DateType:    "Every Day",
+		}, nil
+	} else {
+		var duplicate bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM doctor_lunch_break
+				WHERE doctor_id = $1 AND every_day = false AND break_date = $4::date
+				AND break_from = $2::time AND break_to = $3::time
+			)
+		`, input.DoctorID, input.BreakFrom, input.BreakTo, input.Date).Scan(&duplicate)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+		if duplicate {
+			return domain.DoctorLunchBreak{}, domain.ErrConflict
+		}
+
+		var hasAppt bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM appointment
+				WHERE doctor_id = $1 AND status NOT IN ('cancelled')
+				AND (starts_at AT TIME ZONE 'Africa/Addis_Ababa')::date = $4::date
+				AND (starts_at AT TIME ZONE 'Africa/Addis_Ababa')::time < $3::time
+				AND (ends_at AT TIME ZONE 'Africa/Addis_Ababa')::time > $2::time
+			)
+		`, input.DoctorID, input.BreakFrom, input.BreakTo, input.Date).Scan(&hasAppt)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+		if hasAppt {
+			return domain.DoctorLunchBreak{}, domain.ErrConflict
+		}
+
+		var id string
+		err = tx.QueryRow(ctx, `
+			INSERT INTO doctor_lunch_break (doctor_id, break_from, break_to, every_day, break_date, created_by)
+			VALUES ($1, $2::time, $3::time, false, $4::date, $5)
+			RETURNING id::text
+		`, input.DoctorID, input.BreakFrom, input.BreakTo, input.Date, a.ID).Scan(&id)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+
+		_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor_break.created', $2)`, a.ID, id)
+		if err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return domain.DoctorLunchBreak{}, err
+		}
+
+		return domain.DoctorLunchBreak{
+			ID:          id,
+			DoctorID:    input.DoctorID,
+			DoctorName:  docName,
+			DoctorEmail: docEmail,
+			BreakFrom:   input.BreakFrom,
+			BreakTo:     input.BreakTo,
+			EveryDay:    false,
+			Date:        input.Date,
+			DateType:    input.Date,
+		}, nil
+	}
+}
+
+func (s Store) DeleteDoctorBreak(ctx context.Context, a domain.Actor, id string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var docID string
+	err = tx.QueryRow(ctx, `SELECT doctor_id FROM doctor_lunch_break WHERE id = $1::uuid`, id).Scan(&docID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if a.Role == "doctor" && docID != a.ID {
+		return domain.ErrForbidden
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM doctor_lunch_break WHERE id = $1::uuid`, id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'doctor_break.deleted', $2)`, a.ID, id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+

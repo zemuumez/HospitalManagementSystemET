@@ -271,6 +271,10 @@ func (s Server) Handler() http.Handler {
 		if s.doctors(w, r, a) {
 			return
 		}
+		if s.doctorSchedules(w, r, a) {
+			return
+		}
+		// Step 4: s.doctorOPDCharges
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/v1/patients/") && r.Method == "PATCH":
 			var access domain.PatientAccess

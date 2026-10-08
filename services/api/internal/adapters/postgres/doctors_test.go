@@ -1560,4 +1560,321 @@ func testDoctors(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Ac
 	if finalUserCnt != 0 {
 		t.Fatalf("expected user %s removed on successful retry, got count %d", rollbackDocID, finalUserCnt)
 	}
+
+	// -------------------------------------------------------------
+	// Test K: Doctor Schedules, Holidays, and Breaks Parity (Step 3)
+	// -------------------------------------------------------------
+	docSchedUser := "doctor-sched-test"
+	_, _ = db.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,'Dr. Schedule Test',$1||'@hospital.test') ON CONFLICT DO NOTHING`, docSchedUser)
+	_, _ = db.Exec(ctx, `INSERT INTO staff_access(user_id,role,active) VALUES($1,'doctor',true) ON CONFLICT DO NOTHING`, docSchedUser)
+
+	_, err = sched.CreateDoctorProfile(ctx, admin, domain.CreateDoctorInput{
+		UserID:            docSchedUser,
+		DepartmentID:      activeDeptID,
+		Specialist:        "Scheduling Specialist",
+		Designation:       "Associate Professor",
+		Qualification:     "MD",
+		Gender:            "male",
+		SlotMinutes:       60,
+		AppointmentCharge: 200,
+		OpdCharge:         150,
+	})
+	if err != nil {
+		t.Fatalf("failed to create docSchedUser profile: %v", err)
+	}
+
+	docSchedActor := domain.Actor{ID: docSchedUser, Role: "doctor"}
+
+	// 1. Fetch default schedule
+	schedulesList, err := sched.DoctorSchedules(ctx, admin, docSchedUser)
+	if err != nil || len(schedulesList) != 1 {
+		t.Fatalf("expected 1 schedule for doctor, got %d (err: %v)", len(schedulesList), err)
+	}
+	if len(schedulesList[0].Days) != 7 {
+		t.Fatalf("expected default 7 days in schedule, got %d", len(schedulesList[0].Days))
+	}
+
+	// Doctor viewing own schedule allowed; doctor viewing another doctor's schedule forbidden
+	_, err = sched.DoctorSchedules(ctx, docSchedActor, docSchedUser)
+	if err != nil {
+		t.Fatalf("doctor viewing own schedule should succeed, got %v", err)
+	}
+	_, err = sched.DoctorSchedule(ctx, docSchedActor, docUser1)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("doctor viewing other doctor's schedule must be forbidden, got %v", err)
+	}
+
+	// 2. Save custom schedule
+	newScheduleDays := []domain.ScheduleDayRow{
+		{Day: "Monday", From: "09:00:00", To: "17:00:00"},
+		{Day: "Wednesday", From: "09:00:00", To: "17:00:00"},
+		{Day: "Friday", From: "09:00:00", To: "17:00:00"},
+	}
+	savedSched, err := sched.SaveDoctorSchedule(ctx, admin, domain.SaveDoctorScheduleInput{
+		DoctorID:    docSchedUser,
+		SlotMinutes: 30,
+		Days:        newScheduleDays,
+	})
+	if err != nil {
+		t.Fatalf("failed to save custom doctor schedule: %v", err)
+	}
+	if savedSched.SlotMinutes != 30 || len(savedSched.Days) != 3 {
+		t.Fatalf("saved schedule mismatch: slotMinutes=%d days=%d", savedSched.SlotMinutes, len(savedSched.Days))
+	}
+
+	// 3. Schedule change conflict protection with future active appointment
+	// Find the next upcoming Wednesday at 10:00
+	nowTime := time.Now().In(domain.HospitalLocation)
+	daysUntilWed := (int(time.Wednesday) - int(nowTime.Weekday()) + 7) % 7
+	if daysUntilWed == 0 {
+		daysUntilWed = 7
+	}
+	targetWed := nowTime.AddDate(0, 0, daysUntilWed)
+	apptStartTime := time.Date(targetWed.Year(), targetWed.Month(), targetWed.Day(), 10, 0, 0, 0, domain.HospitalLocation).UTC()
+
+	// Seed patient for appointment
+	schedPatUser := "sched-pat-test"
+	_, _ = db.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,'Sched Pat',$1||'@patient.test') ON CONFLICT DO NOTHING`, schedPatUser)
+	var schedPatID string
+	_ = db.QueryRow(ctx, `INSERT INTO patient(given_name,family_name,date_of_birth,phone) VALUES('Sched','Pat','1995-05-05','+251911999999') RETURNING id`).Scan(&schedPatID)
+
+	bookedAppt, err := sched.Book(ctx, admin, domain.AppointmentInput{
+		PatientID: schedPatID,
+		DoctorID:  docSchedUser,
+		StartsAt:  apptStartTime,
+		Problem:   "Routine Checkup",
+	}, "test-sched-book-key-01")
+	if err != nil {
+		t.Fatalf("failed to book appointment on Wednesday: %v", err)
+	}
+
+	// Now attempt to change doctor schedule to ONLY Tuesday & Thursday (dropping Wednesday)
+	// Must fail with ErrConflict because active appointment on Wednesday falls outside new schedule!
+	_, err = sched.SaveDoctorSchedule(ctx, admin, domain.SaveDoctorScheduleInput{
+		DoctorID:    docSchedUser,
+		SlotMinutes: 30,
+		Days: []domain.ScheduleDayRow{
+			{Day: "Tuesday", From: "09:00:00", To: "17:00:00"},
+			{Day: "Thursday", From: "09:00:00", To: "17:00:00"},
+		},
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict when changing schedule drops active appointment day, got %v", err)
+	}
+
+	// DeleteDoctorSchedule must fail with ErrInUse because doctor has active appointments
+	err = sched.DeleteDoctorSchedule(ctx, admin, docSchedUser)
+	if !errors.Is(err, domain.ErrInUse) {
+		t.Fatalf("expected ErrInUse when deleting schedule of doctor with appointments, got %v", err)
+	}
+
+	// 4. Doctor Holidays: creation, duplicates, active appointment conflict, and slot exclusion
+	holidayDateStr := targetWed.AddDate(0, 0, 7).Format("2006-01-02") // Next Wednesday
+	createdHol, err := sched.CreateDoctorHoliday(ctx, admin, domain.CreateDoctorHolidayInput{
+		DoctorID: docSchedUser,
+		Date:     holidayDateStr,
+		Reason:   "Medical Conference",
+	})
+	if err != nil {
+		t.Fatalf("failed to create doctor holiday: %v", err)
+	}
+	if createdHol.DoctorID != docSchedUser || createdHol.Date != holidayDateStr {
+		t.Fatalf("unexpected holiday output: %+v", createdHol)
+	}
+
+	// Duplicate holiday on same date must be rejected
+	_, err = sched.CreateDoctorHoliday(ctx, admin, domain.CreateDoctorHolidayInput{
+		DoctorID: docSchedUser,
+		Date:     holidayDateStr,
+		Reason:   "Duplicate attempt",
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict for duplicate holiday, got %v", err)
+	}
+
+	// Attempt to create holiday on date of booked appointment (targetWed) must be rejected
+	wedDateStr := targetWed.Format("2006-01-02")
+	_, err = sched.CreateDoctorHoliday(ctx, admin, domain.CreateDoctorHolidayInput{
+		DoctorID: docSchedUser,
+		Date:     wedDateStr,
+		Reason:   "Conflict attempt",
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict when creating holiday on date with active appointment, got %v", err)
+	}
+
+	// Slot generation on holiday date must return 0 slots
+	holSlots, err := sched.Slots(ctx, admin, docSchedUser, holidayDateStr)
+	if err != nil {
+		t.Fatalf("failed to fetch slots on holiday date: %v", err)
+	}
+	if len(holSlots) != 0 {
+		t.Fatalf("expected 0 slots on doctor holiday date, got %d", len(holSlots))
+	}
+
+	// Booking on holiday date must be rejected
+	holDayTime := time.Date(targetWed.AddDate(0, 0, 7).Year(), targetWed.AddDate(0, 0, 7).Month(), targetWed.AddDate(0, 0, 7).Day(), 10, 0, 0, 0, domain.HospitalLocation).UTC()
+	_, err = sched.Book(ctx, admin, domain.AppointmentInput{
+		PatientID: schedPatID,
+		DoctorID:  docSchedUser,
+		StartsAt:  holDayTime,
+		Problem:   "Book on holiday",
+	}, "test-book-on-holiday-key")
+	if !errors.Is(err, domain.ErrConflict) && !errors.Is(err, domain.ErrStale) {
+		t.Fatalf("expected conflict booking on holiday date, got %v", err)
+	}
+
+	// Rescheduling to holiday date must be rejected
+	_, err = sched.Reschedule(ctx, admin, bookedAppt.ID, domain.RescheduleInput{
+		StartsAt: holDayTime,
+		Reason:   "Reschedule to holiday",
+		Version:  bookedAppt.Version,
+	})
+	if !errors.Is(err, domain.ErrConflict) && !errors.Is(err, domain.ErrStale) {
+		t.Fatalf("expected conflict rescheduling to holiday date, got %v", err)
+	}
+
+	// Delete doctor holiday
+	err = sched.DeleteDoctorHoliday(ctx, admin, createdHol.ID)
+	if err != nil {
+		t.Fatalf("failed to delete doctor holiday: %v", err)
+	}
+
+	// Slots after deleting holiday should now be available
+	afterHolSlots, err := sched.Slots(ctx, admin, docSchedUser, holidayDateStr)
+	if err != nil {
+		t.Fatalf("failed to fetch slots after holiday deletion: %v", err)
+	}
+	if len(afterHolSlots) == 0 {
+		t.Fatalf("expected slots available after holiday deletion, got 0")
+	}
+
+	// 5. Lunch Breaks: creation, duplicate, appointment overlap conflict, slot exclusion
+	createdBreak, err := sched.CreateDoctorBreak(ctx, admin, domain.CreateDoctorBreakInput{
+		DoctorID:  docSchedUser,
+		BreakFrom: "12:00:00",
+		BreakTo:   "13:00:00",
+		EveryDay:  true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create lunch break: %v", err)
+	}
+	if !createdBreak.EveryDay || createdBreak.BreakFrom != "12:00:00" {
+		t.Fatalf("unexpected break output: %+v", createdBreak)
+	}
+
+	// Duplicate break must be rejected
+	_, err = sched.CreateDoctorBreak(ctx, admin, domain.CreateDoctorBreakInput{
+		DoctorID:  docSchedUser,
+		BreakFrom: "12:00:00",
+		BreakTo:   "13:00:00",
+		EveryDay:  true,
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict for duplicate break, got %v", err)
+	}
+
+	// Slots must not include lunch break hours (12:00 - 13:00)
+	checkSlots, err := sched.Slots(ctx, admin, docSchedUser, holidayDateStr)
+	if err != nil {
+		t.Fatalf("failed to query slots: %v", err)
+	}
+	for _, sl := range checkSlots {
+		eatTime := sl.In(domain.HospitalLocation)
+		if eatTime.Hour() == 12 {
+			t.Fatalf("slot %v generated during lunch break (12:00-13:00)!", eatTime)
+		}
+	}
+
+	// Attempting to book during lunch break must be rejected
+	lunchSlotTime := time.Date(targetWed.AddDate(0, 0, 7).Year(), targetWed.AddDate(0, 0, 7).Month(), targetWed.AddDate(0, 0, 7).Day(), 12, 0, 0, 0, domain.HospitalLocation).UTC()
+	_, err = sched.Book(ctx, admin, domain.AppointmentInput{
+		PatientID: schedPatID,
+		DoctorID:  docSchedUser,
+		StartsAt:  lunchSlotTime,
+		Problem:   "Book during lunch break",
+	}, "test-book-during-break-key")
+	if !errors.Is(err, domain.ErrConflict) && !errors.Is(err, domain.ErrStale) {
+		t.Fatalf("expected conflict booking during lunch break, got %v", err)
+	}
+
+	// Attempting to create lunch break overlapping an active appointment (at 10:00) must be rejected
+	_, err = sched.CreateDoctorBreak(ctx, admin, domain.CreateDoctorBreakInput{
+		DoctorID:  docSchedUser,
+		BreakFrom: "09:30:00",
+		BreakTo:   "10:30:00",
+		EveryDay:  true,
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict when break overlaps active appointment, got %v", err)
+	}
+
+	// Delete lunch break
+	err = sched.DeleteDoctorBreak(ctx, admin, createdBreak.ID)
+	if err != nil {
+		t.Fatalf("failed to delete lunch break: %v", err)
+	}
+
+	// 6. Test HTTP endpoints for schedules, holidays, and breaks
+	serverHandler := httpHandler
+
+	callHTTP := func(method, path, sessionCookie string, body []byte) *httptest.ResponseRecorder {
+		var req *http.Request
+		if len(body) > 0 {
+			req = httptest.NewRequest(method, path, bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+		} else {
+			req = httptest.NewRequest(method, path, nil)
+		}
+		req.Header.Set("Origin", "http://hospital.test")
+		req.Header.Set("Cookie", sessionCookie)
+		w := httptest.NewRecorder()
+		serverHandler.ServeHTTP(w, req)
+		return w
+	}
+
+	// Test GET /v1/doctor-schedules
+	respRec := callHTTP("GET", "/v1/doctor-schedules?doctorId="+docSchedUser, "session=admin", nil)
+	if respRec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/doctor-schedules failed: %d %s", respRec.Code, respRec.Body.String())
+	}
+
+	// Test POST /v1/doctor-holidays
+	holBody, _ := json.Marshal(map[string]any{
+		"doctorId": docSchedUser,
+		"date":     "2026-12-25",
+		"reason":   "Christmas Holiday",
+	})
+	respRec = callHTTP("POST", "/v1/doctor-holidays", "session=admin", holBody)
+	if respRec.Code != http.StatusCreated {
+		t.Fatalf("POST /v1/doctor-holidays failed: %d %s", respRec.Code, respRec.Body.String())
+	}
+	var createdHolHTTP domain.DoctorHoliday
+	_ = json.Unmarshal(respRec.Body.Bytes(), &createdHolHTTP)
+
+	// Test DELETE /v1/doctor-holidays/{id}
+	respRec = callHTTP("DELETE", "/v1/doctor-holidays/"+createdHolHTTP.ID, "session=admin", nil)
+	if respRec.Code != http.StatusOK {
+		t.Fatalf("DELETE /v1/doctor-holidays failed: %d %s", respRec.Code, respRec.Body.String())
+	}
+
+	// Test POST /v1/doctor-breaks
+	breakBody, _ := json.Marshal(map[string]any{
+		"doctorId":  docSchedUser,
+		"breakFrom": "13:00:00",
+		"breakTo":   "14:00:00",
+		"everyDay":  true,
+	})
+	respRec = callHTTP("POST", "/v1/doctor-breaks", "session=admin", breakBody)
+	if respRec.Code != http.StatusCreated {
+		t.Fatalf("POST /v1/doctor-breaks failed: %d %s", respRec.Code, respRec.Body.String())
+	}
+	var createdBreakHTTP domain.DoctorLunchBreak
+	_ = json.Unmarshal(respRec.Body.Bytes(), &createdBreakHTTP)
+
+	// Test DELETE /v1/doctor-breaks/{id}
+	respRec = callHTTP("DELETE", "/v1/doctor-breaks/"+createdBreakHTTP.ID, "session=admin", nil)
+	if respRec.Code != http.StatusOK {
+		t.Fatalf("DELETE /v1/doctor-breaks failed: %d %s", respRec.Code, respRec.Body.String())
+	}
 }

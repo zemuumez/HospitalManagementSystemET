@@ -70,6 +70,7 @@ const allowedRoot = new Set([
   "hospital-schedules",
   "reviews",
   "doctor-departments",
+  "doctor-schedules",
   "doctor-holidays",
   "doctor-breaks",
   "doctor-absences",

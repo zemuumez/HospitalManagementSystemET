@@ -26,6 +26,16 @@ type SchedulingRepository interface {
 	Appointments(context.Context, domain.Actor, int) ([]domain.Appointment, error)
 	Book(context.Context, domain.Actor, domain.AppointmentInput, string, time.Time) (domain.Appointment, error)
 	ChangeAppointment(context.Context, domain.Actor, string, domain.AppointmentChange, time.Time) (domain.Appointment, error)
+	DoctorSchedules(context.Context, string) ([]domain.DoctorSchedule, error)
+	DoctorSchedule(context.Context, string) (domain.DoctorSchedule, error)
+	SaveDoctorSchedule(context.Context, domain.Actor, domain.SaveDoctorScheduleInput) (domain.DoctorSchedule, error)
+	DeleteDoctorSchedule(context.Context, domain.Actor, string) error
+	DoctorHolidays(context.Context, string) ([]domain.DoctorHoliday, error)
+	CreateDoctorHoliday(context.Context, domain.Actor, domain.CreateDoctorHolidayInput) (domain.DoctorHoliday, error)
+	DeleteDoctorHoliday(context.Context, domain.Actor, string) error
+	DoctorBreaks(context.Context, string) ([]domain.DoctorLunchBreak, error)
+	CreateDoctorBreak(context.Context, domain.Actor, domain.CreateDoctorBreakInput) (domain.DoctorLunchBreak, error)
+	DeleteDoctorBreak(context.Context, domain.Actor, string) error
 }
 type Scheduling struct {
 	Store SchedulingRepository
@@ -234,3 +244,106 @@ func (s Scheduling) StatusHistory(ctx context.Context, a domain.Actor, id string
 	}
 	return s.Store.AppointmentStatusHistory(ctx, a, id, page)
 }
+
+func (s Scheduling) DoctorSchedules(ctx context.Context, a domain.Actor, doctorID string) ([]domain.DoctorSchedule, error) {
+	if a.Role == "doctor" {
+		if doctorID != "" && doctorID != a.ID {
+			return nil, domain.ErrForbidden
+		}
+		doctorID = a.ID
+	} else if a.Role != "admin" && a.Role != "receptionist" && a.Role != "nurse" {
+		return nil, domain.ErrForbidden
+	}
+	return s.Store.DoctorSchedules(ctx, doctorID)
+}
+
+func (s Scheduling) DoctorSchedule(ctx context.Context, a domain.Actor, doctorID string) (domain.DoctorSchedule, error) {
+	if a.Role == "doctor" && doctorID != a.ID {
+		return domain.DoctorSchedule{}, domain.ErrForbidden
+	} else if a.Role != "admin" && a.Role != "receptionist" && a.Role != "nurse" && a.Role != "doctor" {
+		return domain.DoctorSchedule{}, domain.ErrForbidden
+	}
+	return s.Store.DoctorSchedule(ctx, doctorID)
+}
+
+func (s Scheduling) SaveDoctorSchedule(ctx context.Context, a domain.Actor, input domain.SaveDoctorScheduleInput) (domain.DoctorSchedule, error) {
+	if a.Role == "doctor" && input.DoctorID != a.ID {
+		return domain.DoctorSchedule{}, domain.ErrForbidden
+	} else if a.Role != "admin" && a.Role != "doctor" {
+		return domain.DoctorSchedule{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.DoctorSchedule{}, err
+	}
+	return s.Store.SaveDoctorSchedule(ctx, a, input)
+}
+
+func (s Scheduling) DeleteDoctorSchedule(ctx context.Context, a domain.Actor, doctorID string) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	return s.Store.DeleteDoctorSchedule(ctx, a, doctorID)
+}
+
+func (s Scheduling) DoctorHolidays(ctx context.Context, a domain.Actor, doctorID string) ([]domain.DoctorHoliday, error) {
+	if a.Role == "doctor" {
+		if doctorID != "" && doctorID != a.ID {
+			return nil, domain.ErrForbidden
+		}
+		doctorID = a.ID
+	} else if a.Role != "admin" && a.Role != "receptionist" && a.Role != "nurse" {
+		return nil, domain.ErrForbidden
+	}
+	return s.Store.DoctorHolidays(ctx, doctorID)
+}
+
+func (s Scheduling) CreateDoctorHoliday(ctx context.Context, a domain.Actor, input domain.CreateDoctorHolidayInput) (domain.DoctorHoliday, error) {
+	if a.Role == "doctor" && input.DoctorID != a.ID {
+		return domain.DoctorHoliday{}, domain.ErrForbidden
+	} else if a.Role != "admin" && a.Role != "doctor" {
+		return domain.DoctorHoliday{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.DoctorHoliday{}, err
+	}
+	return s.Store.CreateDoctorHoliday(ctx, a, input)
+}
+
+func (s Scheduling) DeleteDoctorHoliday(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.ErrForbidden
+	}
+	return s.Store.DeleteDoctorHoliday(ctx, a, id)
+}
+
+func (s Scheduling) DoctorBreaks(ctx context.Context, a domain.Actor, doctorID string) ([]domain.DoctorLunchBreak, error) {
+	if a.Role == "doctor" {
+		if doctorID != "" && doctorID != a.ID {
+			return nil, domain.ErrForbidden
+		}
+		doctorID = a.ID
+	} else if a.Role != "admin" && a.Role != "receptionist" && a.Role != "nurse" {
+		return nil, domain.ErrForbidden
+	}
+	return s.Store.DoctorBreaks(ctx, doctorID)
+}
+
+func (s Scheduling) CreateDoctorBreak(ctx context.Context, a domain.Actor, input domain.CreateDoctorBreakInput) (domain.DoctorLunchBreak, error) {
+	if a.Role == "doctor" && input.DoctorID != a.ID {
+		return domain.DoctorLunchBreak{}, domain.ErrForbidden
+	} else if a.Role != "admin" && a.Role != "doctor" {
+		return domain.DoctorLunchBreak{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.DoctorLunchBreak{}, err
+	}
+	return s.Store.CreateDoctorBreak(ctx, a, input)
+}
+
+func (s Scheduling) DeleteDoctorBreak(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.ErrForbidden
+	}
+	return s.Store.DeleteDoctorBreak(ctx, a, id)
+}
+

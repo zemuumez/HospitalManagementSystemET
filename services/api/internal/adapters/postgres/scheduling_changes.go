@@ -132,6 +132,25 @@ func (s Store) Reschedule(ctx context.Context, a domain.Actor, id string, i doma
 	if busy {
 		return out, domain.ErrStale
 	}
+	var holidayOrBreak bool
+	e = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM doctor_holiday
+			WHERE doctor_id=$1 AND holiday_date=($2 AT TIME ZONE 'Africa/Addis_Ababa')::date
+		) OR EXISTS(
+			SELECT 1 FROM doctor_lunch_break
+			WHERE doctor_id=$1
+			  AND (every_day=true OR break_date=($2 AT TIME ZONE 'Africa/Addis_Ababa')::date)
+			  AND ($2 AT TIME ZONE 'Africa/Addis_Ababa')::time < break_to
+			  AND ($3 AT TIME ZONE 'Africa/Addis_Ababa')::time > break_from
+		)
+	`, out.DoctorID, i.StartsAt, end).Scan(&holidayOrBreak)
+	if e != nil {
+		return out, e
+	}
+	if holidayOrBreak {
+		return out, domain.ErrConflict
+	}
 	if _, e = tx.Exec(ctx, `INSERT INTO appointment_reschedule(appointment_id,from_start,from_end,to_start,to_end,actor_id,reason,version) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, id, out.StartsAt, out.EndsAt, i.StartsAt, end, a.ID, i.Reason, out.Version+1); e != nil {
 		return out, e
 	}
