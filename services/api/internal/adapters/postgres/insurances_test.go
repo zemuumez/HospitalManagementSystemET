@@ -606,4 +606,94 @@ func testInsurances(t *testing.T, db *pgxpool.Pool, store Store, actors []domain
 	if err := json.Unmarshal(recChunked.Body.Bytes(), &chunkedResp); err != nil || chunkedResp.Status != 1 {
 		t.Fatalf("expected status 1 from chunked request, got status=%d err=%v", chunkedResp.Status, err)
 	}
+
+	// -------------------------------------------------------------
+	// Regression C3: Insurance export overflow contract (>5,000 records)
+	// -------------------------------------------------------------
+	// Seed >5,000 records (e.g. 5,005 insurances) with a distinct prefix
+	_, err = db.Exec(ctx, `
+		INSERT INTO insurance (id, name, service_tax_minor, hospital_rate_minor, discount, remark, insurance_no, insurance_code, total_minor, status, currency_symbol)
+		SELECT gen_random_uuid(), 'C3 Overflow Insurance ' || LPAD(i::text, 4, '0'), 0, 100, 0, 'desc', 'NO-C3-' || i, 'CD-C3-' || i, 100, 1, 'ETB'
+		FROM generate_series(1, 5005) AS i
+	`)
+	if err != nil {
+		t.Fatalf("failed to bulk seed 5005 insurances: %v", err)
+	}
+	defer func() {
+		_, _ = db.Exec(ctx, `DELETE FROM insurance WHERE name LIKE 'C3 Overflow Insurance %'`)
+	}()
+
+	// A) ExportInsurances without search or with broad search exceeding 5,000 must reject with ErrExportLimitExceeded
+	_, overInsTotal, err := insurancesService.ExportInsurances(ctx, admin, "C3 Overflow Insurance")
+	if !errors.Is(err, domain.ErrExportLimitExceeded) {
+		t.Fatalf("expected ErrExportLimitExceeded for >5,000 insurances, got err=%v total=%d", err, overInsTotal)
+	}
+	if overInsTotal != 5005 {
+		t.Fatalf("expected overInsTotal to report 5005, got %d", overInsTotal)
+	}
+
+	// B) HTTP GET /v1/insurances-export without allow_truncated must return 422 with code EXPORT_LIMIT_EXCEEDED
+	overInsHttpReq := httptest.NewRequest("GET", "/v1/insurances-export?search=C3+Overflow+Insurance", nil)
+	overInsHttpReq.Header.Set("Cookie", "session=admin")
+	overInsHttpReq.Header.Set("Origin", "http://hospital.test")
+	overInsHttpRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(overInsHttpRec, overInsHttpReq)
+	if overInsHttpRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for oversized insurance export without truncate permission, got %d: %s", overInsHttpRec.Code, overInsHttpRec.Body.String())
+	}
+	var overInsHttpPayload struct {
+		Error    string `json:"error"`
+		Code     string `json:"code"`
+		Total    int    `json:"total"`
+		MaxLimit int    `json:"max_limit"`
+	}
+	if err := json.Unmarshal(overInsHttpRec.Body.Bytes(), &overInsHttpPayload); err != nil {
+		t.Fatalf("failed to unmarshal 422 insurance overflow response: %v", err)
+	}
+	if overInsHttpPayload.Code != "EXPORT_LIMIT_EXCEEDED" || overInsHttpPayload.Total != 5005 || overInsHttpPayload.MaxLimit != 5000 {
+		t.Fatalf("unexpected 422 insurance payload: %+v", overInsHttpPayload)
+	}
+
+	// C) HTTP GET /v1/insurances-export with allow_truncated=true must return 200 with truncated=true and exactly 5,000 items
+	truncInsHttpReq := httptest.NewRequest("GET", "/v1/insurances-export?search=C3+Overflow+Insurance&allow_truncated=true", nil)
+	truncInsHttpReq.Header.Set("Cookie", "session=admin")
+	truncInsHttpReq.Header.Set("Origin", "http://hospital.test")
+	truncInsHttpRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(truncInsHttpRec, truncInsHttpReq)
+	if truncInsHttpRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for truncated insurance export, got %d: %s", truncInsHttpRec.Code, truncInsHttpRec.Body.String())
+	}
+	var truncInsHttpPayload struct {
+		Insurances []domain.Insurance `json:"insurances"`
+		Total      int                `json:"total"`
+		Truncated  bool               `json:"truncated"`
+		MaxLimit   int                `json:"max_limit"`
+	}
+	if err := json.Unmarshal(truncInsHttpRec.Body.Bytes(), &truncInsHttpPayload); err != nil {
+		t.Fatalf("failed to unmarshal truncated insurance response: %v", err)
+	}
+	if !truncInsHttpPayload.Truncated || len(truncInsHttpPayload.Insurances) != 5000 || truncInsHttpPayload.Total != 5005 {
+		t.Fatalf("unexpected truncated insurance payload: total=%d len=%d truncated=%v", truncInsHttpPayload.Total, len(truncInsHttpPayload.Insurances), truncInsHttpPayload.Truncated)
+	}
+
+	// D) Filtered export below the cap must succeed with truncated=false
+	filtInsHttpReq := httptest.NewRequest("GET", "/v1/insurances-export?search=C3+Overflow+Insurance+001", nil)
+	filtInsHttpReq.Header.Set("Cookie", "session=admin")
+	filtInsHttpReq.Header.Set("Origin", "http://hospital.test")
+	filtInsHttpRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(filtInsHttpRec, filtInsHttpReq)
+	if filtInsHttpRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for filtered insurance export below cap, got %d: %s", filtInsHttpRec.Code, filtInsHttpRec.Body.String())
+	}
+	var filtInsHttpPayload struct {
+		Insurances []domain.Insurance `json:"insurances"`
+		Total      int                `json:"total"`
+		Truncated  bool               `json:"truncated"`
+	}
+	if err := json.Unmarshal(filtInsHttpRec.Body.Bytes(), &filtInsHttpPayload); err != nil {
+		t.Fatalf("failed to unmarshal filtered insurance response: %v", err)
+	}
+	if filtInsHttpPayload.Truncated || filtInsHttpPayload.Total == 0 || len(filtInsHttpPayload.Insurances) != filtInsHttpPayload.Total {
+		t.Fatalf("unexpected filtered insurance export payload: total=%d len=%d truncated=%v", filtInsHttpPayload.Total, len(filtInsHttpPayload.Insurances), filtInsHttpPayload.Truncated)
+	}
 }

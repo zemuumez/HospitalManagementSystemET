@@ -76,6 +76,11 @@ func fail(w http.ResponseWriter, err error) {
 		status = 422
 		message = "Check the supplied fields and try again"
 	}
+	if errors.Is(err, domain.ErrExportLimitExceeded) {
+		code = "EXPORT_LIMIT_EXCEEDED"
+		status = 422
+		message = "Export exceeds maximum limit of 5,000 records. Please refine search filters to reduce the result set."
+	}
 	if errors.Is(err, domain.ErrConflict) {
 		code = "IDEMPOTENCY_CONFLICT"
 		status = 409

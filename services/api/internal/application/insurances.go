@@ -79,8 +79,13 @@ func (s InsurancesService) Insurances(ctx context.Context, a domain.Actor, page 
 }
 
 func (s InsurancesService) ExportInsurances(ctx context.Context, a domain.Actor, search string) ([]domain.Insurance, int, error) {
+	list, total, _, err := s.ExportInsurancesBounded(ctx, a, search, false)
+	return list, total, err
+}
+
+func (s InsurancesService) ExportInsurancesBounded(ctx context.Context, a domain.Actor, search string, allowTruncated bool) ([]domain.Insurance, int, bool, error) {
 	if !a.Can("insurances.read") {
-		return nil, 0, domain.ErrForbidden
+		return nil, 0, false, domain.ErrForbidden
 	}
 	const maxExport = 5000
 	const batchSize = 100
@@ -90,16 +95,20 @@ func (s InsurancesService) ExportInsurances(ctx context.Context, a domain.Actor,
 	for {
 		batch, total, err := s.Store.Insurances(ctx, a, page, batchSize, search)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		totalCount = total
+		if totalCount > maxExport && !allowTruncated {
+			return nil, totalCount, false, domain.ErrExportLimitExceeded
+		}
 		all = append(all, batch...)
 		if len(all) >= total || len(batch) == 0 || len(all) >= maxExport {
 			break
 		}
 		page++
 	}
-	return all, totalCount, nil
+	truncated := totalCount > maxExport && len(all) == maxExport
+	return all, totalCount, truncated, nil
 }
 
 func (s InsurancesService) SetStatus(ctx context.Context, a domain.Actor, id string, targetStatus int) (domain.Insurance, error) {

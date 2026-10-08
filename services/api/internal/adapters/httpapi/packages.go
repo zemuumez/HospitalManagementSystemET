@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,12 +13,31 @@ func (s Server) packages(w http.ResponseWriter, r *http.Request, a domain.Actor)
 	// Export endpoint
 	if r.URL.Path == "/v1/packages-export" && r.Method == "GET" {
 		search := r.URL.Query().Get("search")
-		list, total, err := s.Packages.ExportPackages(r.Context(), a, search)
+		allowTruncated := r.URL.Query().Get("allow_truncated") == "true" || r.URL.Query().Get("truncate") == "1"
+		list, total, truncated, err := s.Packages.ExportPackagesBounded(r.Context(), a, search, allowTruncated)
 		if err != nil {
+			if errors.Is(err, domain.ErrExportLimitExceeded) {
+				write(w, 422, map[string]any{
+					"error":     "Export exceeds maximum limit of 5,000 records. Please refine search filters.",
+					"code":      "EXPORT_LIMIT_EXCEEDED",
+					"total":     total,
+					"max_limit": 5000,
+				})
+				return true
+			}
 			fail(w, err)
 			return true
 		}
-		write(w, 200, map[string]any{"packages": list, "total": total})
+		res := map[string]any{
+			"packages":  list,
+			"total":     total,
+			"truncated": truncated,
+			"max_limit": 5000,
+		}
+		if truncated {
+			res["warning"] = "Export truncated to 5,000 records. Please refine search filters."
+		}
+		write(w, 200, res)
 		return true
 	}
 

@@ -667,4 +667,94 @@ func testPackages(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.A
 	if exportPayload.Total != 35 || len(exportPayload.Packages) != 35 {
 		t.Fatalf("HTTP export truncated: expected 35 records, got total=%d len=%d", exportPayload.Total, len(exportPayload.Packages))
 	}
+
+	// -------------------------------------------------------------
+	// 16. Regression C3: Export overflow contract (>5,000 records)
+	// -------------------------------------------------------------
+	// Seed >5,000 records (e.g. 5,005 packages) with a distinct prefix
+	_, err = db.Exec(ctx, `
+		INSERT INTO package (id, name, description, discount, total_amount_minor)
+		SELECT gen_random_uuid(), 'C3 Overflow Package ' || LPAD(i::text, 4, '0'), 'bulk generated for export test', 0, 1000
+		FROM generate_series(1, 5005) AS i
+	`)
+	if err != nil {
+		t.Fatalf("failed to bulk seed 5005 packages: %v", err)
+	}
+	defer func() {
+		_, _ = db.Exec(ctx, `DELETE FROM package WHERE name LIKE 'C3 Overflow Package %'`)
+	}()
+
+	// A) ExportPackages without search or with broad search exceeding 5,000 must reject with ErrExportLimitExceeded
+	_, overTotal, err := packagesService.ExportPackages(ctx, admin, "C3 Overflow Package")
+	if !errors.Is(err, domain.ErrExportLimitExceeded) {
+		t.Fatalf("expected ErrExportLimitExceeded for >5,000 packages, got err=%v total=%d", err, overTotal)
+	}
+	if overTotal != 5005 {
+		t.Fatalf("expected overTotal to report 5005, got %d", overTotal)
+	}
+
+	// B) HTTP GET /v1/packages-export without allow_truncated must return 422 with code EXPORT_LIMIT_EXCEEDED
+	overHttpReq := httptest.NewRequest("GET", "/v1/packages-export?search=C3+Overflow+Package", nil)
+	overHttpReq.Header.Set("Cookie", "session=admin")
+	overHttpReq.Header.Set("Origin", "http://hospital.test")
+	overHttpRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(overHttpRec, overHttpReq)
+	if overHttpRec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for oversized export without truncate permission, got %d: %s", overHttpRec.Code, overHttpRec.Body.String())
+	}
+	var overHttpPayload struct {
+		Error    string `json:"error"`
+		Code     string `json:"code"`
+		Total    int    `json:"total"`
+		MaxLimit int    `json:"max_limit"`
+	}
+	if err := json.Unmarshal(overHttpRec.Body.Bytes(), &overHttpPayload); err != nil {
+		t.Fatalf("failed to unmarshal 422 overflow response: %v", err)
+	}
+	if overHttpPayload.Code != "EXPORT_LIMIT_EXCEEDED" || overHttpPayload.Total != 5005 || overHttpPayload.MaxLimit != 5000 {
+		t.Fatalf("unexpected 422 payload: %+v", overHttpPayload)
+	}
+
+	// C) HTTP GET /v1/packages-export with allow_truncated=true must return 200 with truncated=true and exactly 5,000 items
+	truncHttpReq := httptest.NewRequest("GET", "/v1/packages-export?search=C3+Overflow+Package&allow_truncated=true", nil)
+	truncHttpReq.Header.Set("Cookie", "session=admin")
+	truncHttpReq.Header.Set("Origin", "http://hospital.test")
+	truncHttpRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(truncHttpRec, truncHttpReq)
+	if truncHttpRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for truncated export, got %d: %s", truncHttpRec.Code, truncHttpRec.Body.String())
+	}
+	var truncHttpPayload struct {
+		Packages  []domain.Package `json:"packages"`
+		Total     int              `json:"total"`
+		Truncated bool             `json:"truncated"`
+		MaxLimit  int              `json:"max_limit"`
+	}
+	if err := json.Unmarshal(truncHttpRec.Body.Bytes(), &truncHttpPayload); err != nil {
+		t.Fatalf("failed to unmarshal truncated response: %v", err)
+	}
+	if !truncHttpPayload.Truncated || len(truncHttpPayload.Packages) != 5000 || truncHttpPayload.Total != 5005 {
+		t.Fatalf("unexpected truncated payload: total=%d len=%d truncated=%v", truncHttpPayload.Total, len(truncHttpPayload.Packages), truncHttpPayload.Truncated)
+	}
+
+	// D) Filtered export below the cap (e.g. search for 'C3 Overflow Package 001' matching <= 10 items) must succeed with truncated=false
+	filtHttpReq := httptest.NewRequest("GET", "/v1/packages-export?search=C3+Overflow+Package+001", nil)
+	filtHttpReq.Header.Set("Cookie", "session=admin")
+	filtHttpReq.Header.Set("Origin", "http://hospital.test")
+	filtHttpRec := httptest.NewRecorder()
+	httpHandler.ServeHTTP(filtHttpRec, filtHttpReq)
+	if filtHttpRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for filtered export below cap, got %d: %s", filtHttpRec.Code, filtHttpRec.Body.String())
+	}
+	var filtHttpPayload struct {
+		Packages  []domain.Package `json:"packages"`
+		Total     int              `json:"total"`
+		Truncated bool             `json:"truncated"`
+	}
+	if err := json.Unmarshal(filtHttpRec.Body.Bytes(), &filtHttpPayload); err != nil {
+		t.Fatalf("failed to unmarshal filtered response: %v", err)
+	}
+	if filtHttpPayload.Truncated || filtHttpPayload.Total == 0 || len(filtHttpPayload.Packages) != filtHttpPayload.Total {
+		t.Fatalf("unexpected filtered export payload: total=%d len=%d truncated=%v", filtHttpPayload.Total, len(filtHttpPayload.Packages), filtHttpPayload.Truncated)
+	}
 }

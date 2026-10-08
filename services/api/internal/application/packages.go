@@ -78,8 +78,13 @@ func (s PackagesService) Packages(ctx context.Context, a domain.Actor, page int,
 }
 
 func (s PackagesService) ExportPackages(ctx context.Context, a domain.Actor, search string) ([]domain.Package, int, error) {
+	list, total, _, err := s.ExportPackagesBounded(ctx, a, search, false)
+	return list, total, err
+}
+
+func (s PackagesService) ExportPackagesBounded(ctx context.Context, a domain.Actor, search string, allowTruncated bool) ([]domain.Package, int, bool, error) {
 	if !a.Can("packages.read") {
-		return nil, 0, domain.ErrForbidden
+		return nil, 0, false, domain.ErrForbidden
 	}
 	const maxExport = 5000
 	const batchSize = 100
@@ -89,14 +94,18 @@ func (s PackagesService) ExportPackages(ctx context.Context, a domain.Actor, sea
 	for {
 		batch, total, err := s.Store.Packages(ctx, a, page, batchSize, search)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		totalCount = total
+		if totalCount > maxExport && !allowTruncated {
+			return nil, totalCount, false, domain.ErrExportLimitExceeded
+		}
 		all = append(all, batch...)
 		if len(all) >= total || len(batch) == 0 || len(all) >= maxExport {
 			break
 		}
 		page++
 	}
-	return all, totalCount, nil
+	truncated := totalCount > maxExport && len(all) == maxExport
+	return all, totalCount, truncated, nil
 }

@@ -12,6 +12,7 @@ var ErrForbidden = errors.New("forbidden")
 var ErrValidation = errors.New("validation failed")
 var ErrConflict = errors.New("idempotency key conflict")
 var ErrInUse = errors.New("record is in use and cannot be deleted")
+var ErrExportLimitExceeded = errors.New("export exceeds maximum limit of 5000 records; please apply search filters")
 
 type Actor struct {
 	ID   string `json:"id"`
