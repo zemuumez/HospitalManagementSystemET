@@ -6,6 +6,7 @@ import { hashPassword } from "better-auth/crypto";
 import { chromium } from "@playwright/test";
 import { checkInventoryUI } from "./check-inventory-ui.mjs";
 import { checkPackagesUI } from "./check-packages-ui.mjs";
+import { checkInsuranceUI } from "./check-insurance-ui.mjs";
 
 assert.match(
   process.env.HMS_TEST_ISOLATED_SCHEMA || "",
@@ -157,6 +158,7 @@ try {
   }
   await checkInventoryUI({ context, db, base, recipientId: id, results });
   await checkPackagesUI({ context, db, base, results, browser });
+  await checkInsuranceUI({ context, db, base, results, browser });
   console.log(
     `Endpoint and inventory repairs: ${results.length} checks passed.`,
   );

@@ -1472,5 +1472,20 @@
   "Estimated Total": "የተገመተ ጠቅላላ",
   "Are you sure you want to delete this package?": "እርግጠኛ ነዎት ይህን ጥቅል መሰረዝ ይፈልጋሉ?",
   "Saving...": "በማስቀመጥ ላይ...",
-  "Updating...": "በማሻሻል ላይ..."
+  "Updating...": "በማሻሻል ላይ...",
+  "Edit Insurance": "የመድን ዋስትና አርትዕ",
+  "Insurance Details": "የመድን ዋስትና ዝርዝር",
+  "Insurance policy successfully registered": "የመድን ዋስትናው በተሳካ ሁኔታ ተመዝግቧል",
+  "Insurance policy updated successfully": "የመድን ዋስትናው በተሳካ ሁኔታ ተሻሽሏል",
+  "Insurance removed from catalog": "የመድን ዋስትናው ከዝርዝሩ ተሰርዟል",
+  "Insurance is in use by patient admissions and cannot be deleted": "የመድን ዋስትናው በታካሚ ቅበላ ጥቅም ላይ ስለዋለ ሊሰረዝ አይችልም",
+  "No insurance policies found in catalog": "በዝርዝሩ ውስጥ ምንም የመድን ዋስትና አልተገኘም",
+  "Are you sure you want to delete this insurance?": "እርግጠኛ ነዎት ይህን የመድን ዋስትና መሰረዝ ይፈልጋሉ?",
+  "Failed to delete insurance": "የመድን ዋስትናውን መሰረዝ አልተሳካም",
+  "Failed to save insurance": "የመድን ዋስትናውን ማስቀመጥ አልተሳካም",
+  "Failed to update insurance": "የመድን ዋስትናውን ማሻሻል አልተሳካም",
+  "Failed to update status": "ሁኔታውን ማሻሻል አልተሳካም",
+  "TOTAL": "ድምር",
+  "TOTAL AMOUNT": "ጠቅላላ መጠን",
+  "No diseases registered for this policy": "ለዚህ የመድን ዋስትና የተመዘገበ በሽታ የለም"
 }

@@ -38,6 +38,7 @@ const allowedRoot = new Set([
   "packages",
   "packages-export",
   "insurances",
+  "insurances-export",
   "operations",
   "operation-categories",
   "pathology-categories",
@@ -175,7 +176,8 @@ function isAllowedPath(path: string[]): boolean {
     if (
       (path[0] === "prescriptions" ||
         path[0] === "live-consultations" ||
-        path[0] === "live-meetings") &&
+        path[0] === "live-meetings" ||
+        path[0] === "insurances") &&
       path[2] === "status"
     ) {
       return true;

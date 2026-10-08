@@ -23,7 +23,7 @@ export type ServicesWorkspaceProps = {
 };
 
 interface DiseaseItem {
-  id: string;
+  id?: string;
   name: string;
   charge: number;
 }
@@ -40,6 +40,9 @@ interface InsuranceItem {
   status: boolean;
   diseases: DiseaseItem[];
   totalAmount: number;
+  serviceTaxMinor?: number;
+  hospitalRateMinor?: number;
+  totalAmountMinor?: number;
 }
 
 interface PackageServiceLine {
@@ -113,50 +116,11 @@ export function ServicesWorkspace({
   const [page, setPage] = useState(1);
 
   // Insurances State
-  const [insurances, setInsurances] = useState<InsuranceItem[]>([
-    {
-      id: "INS-001",
-      name: "BAJAJ",
-      serviceTax: 5,
-      discount: 10,
-      insuranceNo: "BJ-994821",
-      insuranceCode: "BAJAJ-CORP",
-      hospitalRate: 1500,
-      remark: "Corporate insurance partner",
-      status: true,
-      diseases: [
-        { id: "1", name: "Cardiology Consultation", charge: 250 },
-        { id: "2", name: "ECG Scan", charge: 150 },
-      ],
-      totalAmount: 400,
-    },
-    {
-      id: "INS-002",
-      name: "Zelda Walls",
-      serviceTax: 7.5,
-      discount: 5,
-      insuranceNo: "ZW-481923",
-      insuranceCode: "ZELDA-HLTH",
-      hospitalRate: 2200,
-      remark: "Individual premium insurance",
-      status: true,
-      diseases: [{ id: "1", name: "Full Blood Panel", charge: 180 }],
-      totalAmount: 180,
-    },
-    {
-      id: "INS-003",
-      name: "Brooke Leblan",
-      serviceTax: 4,
-      discount: 0,
-      insuranceNo: "BL-102938",
-      insuranceCode: "BROOKE-STD",
-      hospitalRate: 1800,
-      remark: "Standard coverage policy",
-      status: false,
-      diseases: [{ id: "1", name: "X-Ray Chest", charge: 220 }],
-      totalAmount: 220,
-    },
-  ]);
+  const [insurances, setInsurances] = useState<InsuranceItem[]>([]);
+  const [insuranceEditModal, setInsuranceEditModal] = useState(false);
+  const [insuranceDetailModal, setInsuranceDetailModal] = useState(false);
+  const [selectedInsurance, setSelectedInsurance] =
+    useState<InsuranceItem | null>(null);
 
   // New Insurance Form Fields
   const [newInsuranceName, setNewInsuranceName] = useState("");
@@ -168,6 +132,20 @@ export function ServicesWorkspace({
   const [newRemark, setNewRemark] = useState("");
   const [newStatus, setNewStatus] = useState(true);
   const [newDiseases, setNewDiseases] = useState<
+    { id: string; name: string; charge: string }[]
+  >([{ id: "1", name: "", charge: "" }]);
+
+  // Edit Insurance Form Fields
+  const [editInsuranceId, setEditInsuranceId] = useState("");
+  const [editInsuranceName, setEditInsuranceName] = useState("");
+  const [editServiceTax, setEditServiceTax] = useState("");
+  const [editDiscount, setEditDiscount] = useState("0");
+  const [editInsuranceNo, setEditInsuranceNo] = useState("");
+  const [editInsuranceCode, setEditInsuranceCode] = useState("");
+  const [editHospitalRate, setEditHospitalRate] = useState("");
+  const [editRemark, setEditRemark] = useState("");
+  const [editStatus, setEditStatus] = useState(true);
+  const [editDiseases, setEditDiseases] = useState<
     { id: string; name: string; charge: string }[]
   >([{ id: "1", name: "", charge: "" }]);
 
@@ -315,7 +293,19 @@ export function ServicesWorkspace({
     },
   ];
 
-  // Dynamic Disease Details Helpers for New Insurance
+  // Dynamic Disease Details Helpers for Insurance
+  function resetNewInsuranceForm() {
+    setNewInsuranceName("");
+    setNewServiceTax("");
+    setNewDiscount("0");
+    setNewInsuranceNo("");
+    setNewInsuranceCode("");
+    setNewHospitalRate("");
+    setNewRemark("");
+    setNewStatus(true);
+    setNewDiseases([{ id: "1", name: "", charge: "" }]);
+  }
+
   function addDiseaseRow() {
     setNewDiseases((prev) => [
       ...prev,
@@ -338,10 +328,137 @@ export function ServicesWorkspace({
     );
   }
 
-  const calculatedTotal = newDiseases.reduce((acc, row) => {
-    const val = parseFloat(row.charge);
-    return acc + (isNaN(val) ? 0 : val);
-  }, 0);
+  function startEditInsurance(item: InsuranceItem) {
+    setSelectedInsurance(item);
+    setEditInsuranceId(item.id);
+    setEditInsuranceName(item.name);
+    setEditServiceTax(item.serviceTax ? String(item.serviceTax) : "0");
+    setEditDiscount(String(item.discount || 0));
+    setEditInsuranceNo(item.insuranceNo || "");
+    setEditInsuranceCode(item.insuranceCode || "");
+    setEditHospitalRate(item.hospitalRate ? String(item.hospitalRate) : "0");
+    setEditRemark(item.remark || "");
+    setEditStatus(item.status);
+
+    const diseasesToUse =
+      Array.isArray(item.diseases) && item.diseases.length > 0
+        ? item.diseases
+        : [{ id: "1", name: "", charge: "0" }];
+
+    setEditDiseases(
+      diseasesToUse.map((d, idx) => ({
+        id: d.id || String(idx + 1),
+        name: d.name,
+        charge: String(d.charge),
+      })),
+    );
+    setInsuranceEditModal(true);
+  }
+
+  function addEditDiseaseRow() {
+    setEditDiseases((prev) => [
+      ...prev,
+      { id: String(Date.now()), name: "", charge: "" },
+    ]);
+  }
+
+  function removeEditDiseaseRow(index: number) {
+    if (editDiseases.length <= 1) return;
+    setEditDiseases((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateEditDisease(
+    index: number,
+    field: "name" | "charge",
+    value: string,
+  ) {
+    setEditDiseases((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)),
+    );
+  }
+
+  async function openInsuranceDetails(item: InsuranceItem) {
+    setSelectedInsurance(item);
+    setInsuranceDetailModal(true);
+    try {
+      const res = await fetch(`/api/hms/insurances/${item.id}`);
+      if (res.ok) {
+        const full = await res.json();
+        if (full && full.id === item.id) {
+          setSelectedInsurance({
+            id: full.id,
+            name: full.name,
+            serviceTax:
+              full.service_tax ??
+              full.serviceTax ??
+              ((full.service_tax_minor ?? full.serviceTaxMinor ?? 0) / 100),
+            discount: full.discount ?? 0,
+            insuranceNo: full.insurance_no || full.insuranceNo || "",
+            insuranceCode: full.insurance_code || full.insuranceCode || "",
+            hospitalRate:
+              full.hospital_rate ??
+              full.hospitalRate ??
+              ((full.hospital_rate_minor ?? full.hospitalRateMinor ?? 0) / 100),
+            remark: full.remark || "",
+            status: full.status === 1 || full.status === true,
+            diseases: Array.isArray(full.diseases)
+              ? full.diseases.map((d: any) => ({
+                  id: d.id,
+                  name: d.disease_name || d.diseaseName || d.name || "",
+                  charge:
+                    d.disease_charge ??
+                    d.diseaseCharge ??
+                    ((d.disease_charge_minor ?? d.diseaseChargeMinor ?? 0) /
+                      100),
+                }))
+              : [],
+            totalAmount:
+              full.total ??
+              full.totalAmount ??
+              ((full.total_minor ?? full.totalAmountMinor ?? 0) / 100),
+          });
+        }
+      }
+    } catch {
+      // Keep existing item
+    }
+  }
+
+  function calculateInsurancePreviewTotals(
+    taxStr: string,
+    rateStr: string,
+    discountStr: string,
+    diseases: { name: string; charge: string }[],
+  ) {
+    const tax = Math.max(0, parseFloat(taxStr) || 0);
+    const rate = Math.max(0, parseFloat(rateStr) || 0);
+    const discount = Math.min(
+      100,
+      Math.max(0, parseInt(discountStr, 10) || 0),
+    );
+    const diseaseSum = diseases.reduce(
+      (sum, d) => sum + Math.max(0, parseFloat(d.charge) || 0),
+      0,
+    );
+    const base = tax + rate + diseaseSum;
+    const discountAmount = Math.round(base * discount) / 100;
+    const total = Math.max(0, base - discountAmount);
+    return { base, diseaseSum, discountAmount, total };
+  }
+
+  const createCalculatedPreview = calculateInsurancePreviewTotals(
+    newServiceTax,
+    newHospitalRate,
+    newDiscount,
+    newDiseases,
+  );
+
+  const editCalculatedPreview = calculateInsurancePreviewTotals(
+    editServiceTax,
+    editHospitalRate,
+    editDiscount,
+    editDiseases,
+  );
 
   // Dynamic Service Lines Helpers for Packages
   function resetPackageForm() {
@@ -577,23 +694,59 @@ export function ServicesWorkspace({
 
       if (insRes.ok) {
         const insData = await insRes.json();
-        if (
-          Array.isArray(insData.insurances) &&
-          insData.insurances.length > 0
-        ) {
+        if (Array.isArray(insData.insurances)) {
           setInsurances(
             insData.insurances.map((i: any) => ({
               id: i.id,
               name: i.name,
-              serviceTax: i.serviceTax || 0,
-              discount: i.discount || 0,
-              insuranceNo: i.insuranceNo || "INS-001",
-              insuranceCode: i.insuranceCode || "CODE",
-              hospitalRate: (i.hospitalRateMinor || 0) / 100,
+              serviceTax:
+                i.service_tax ??
+                i.serviceTax ??
+                ((i.service_tax_minor ?? i.serviceTaxMinor ?? 0) / 100),
+              serviceTaxMinor:
+                i.service_tax_minor ??
+                i.serviceTaxMinor ??
+                Math.round(
+                  (i.service_tax ?? i.serviceTax ?? 0) * 100,
+                ),
+              discount: i.discount ?? 0,
+              insuranceNo: i.insurance_no || i.insuranceNo || "",
+              insuranceCode: i.insurance_code || i.insuranceCode || "",
+              hospitalRate:
+                i.hospital_rate ??
+                i.hospitalRate ??
+                ((i.hospital_rate_minor ?? i.hospitalRateMinor ?? 0) / 100),
+              hospitalRateMinor:
+                i.hospital_rate_minor ??
+                i.hospitalRateMinor ??
+                Math.round(
+                  (i.hospital_rate ?? i.hospitalRate ?? 0) * 100,
+                ),
               remark: i.remark || "",
-              status: i.status === 1,
-              diseases: [],
-              totalAmount: (i.totalAmountMinor || 0) / 100,
+              status: i.status === 1 || i.status === true,
+              diseases: Array.isArray(i.diseases)
+                ? i.diseases.map((d: any) => ({
+                    id: d.id,
+                    name:
+                      d.disease_name || d.diseaseName || d.name || "",
+                    charge:
+                      d.disease_charge ??
+                      d.diseaseCharge ??
+                      ((d.disease_charge_minor ??
+                        d.diseaseChargeMinor ??
+                        0) / 100),
+                  }))
+                : [],
+              totalAmount:
+                i.total ??
+                i.totalAmount ??
+                ((i.total_minor ?? i.totalAmountMinor ?? 0) / 100),
+              totalAmountMinor:
+                i.total_minor ??
+                i.totalAmountMinor ??
+                Math.round(
+                  (i.total ?? i.totalAmount ?? 0) * 100,
+                ),
             })),
           );
         }
@@ -962,70 +1115,226 @@ export function ServicesWorkspace({
 
   async function handleSaveInsurance(e: React.FormEvent) {
     e.preventDefault();
-    if (!newInsuranceName) return;
+    if (!newInsuranceName.trim()) return;
     setIsSubmitting(true);
     setApiErrorBanner("");
     setApiSuccessBanner("");
 
     try {
+      const payload = {
+        name: newInsuranceName.trim(),
+        service_tax_minor: Math.round(
+          (parseFloat(newServiceTax) || 0) * 100,
+        ),
+        serviceTaxMinor: Math.round(
+          (parseFloat(newServiceTax) || 0) * 100,
+        ),
+        discount: Math.max(
+          0,
+          Math.min(100, parseInt(newDiscount, 10) || 0),
+        ),
+        insurance_no: newInsuranceNo.trim(),
+        insuranceNo: newInsuranceNo.trim(),
+        insurance_code: newInsuranceCode.trim(),
+        insuranceCode: newInsuranceCode.trim(),
+        hospital_rate_minor: Math.round(
+          (parseFloat(newHospitalRate) || 0) * 100,
+        ),
+        hospitalRateMinor: Math.round(
+          (parseFloat(newHospitalRate) || 0) * 100,
+        ),
+        remark: newRemark.trim(),
+        status: newStatus ? 1 : 0,
+        diseases: newDiseases
+          .filter((d) => d.name.trim() !== "")
+          .map((d) => ({
+            disease_name: d.name.trim(),
+            diseaseName: d.name.trim(),
+            name: d.name.trim(),
+            disease_charge_minor: Math.round(
+              (parseFloat(d.charge) || 0) * 100,
+            ),
+            diseaseChargeMinor: Math.round(
+              (parseFloat(d.charge) || 0) * 100,
+            ),
+          })),
+      };
+
       const res = await fetch("/api/hms/insurances", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newInsuranceName.trim(),
-          serviceTax: parseFloat(newServiceTax) || 0,
-          discount: parseFloat(newDiscount) || 0,
-          insuranceNo: newInsuranceNo.trim(),
-          insuranceCode: newInsuranceCode.trim(),
-          hospitalRateMinor: Math.round(
-            (parseFloat(newHospitalRate) || 0) * 100,
-          ),
-          remark: newRemark.trim(),
-          status: newStatus ? 1 : 0,
-        }),
+        body: JSON.stringify(payload),
       });
+
       if (res.ok) {
         setApiSuccessBanner(t("Insurance policy successfully registered"));
-        loadServicesData();
+        resetNewInsuranceForm();
         setInsuranceMode("list");
-        setIsSubmitting(false);
+        await loadServicesData();
         return;
       }
+
+      const err = await res.json().catch(() => ({}));
+      setApiErrorBanner(
+        err.message || err.error || t("Failed to save insurance"),
+      );
     } catch {
-      // Fallback
+      setApiErrorBanner(
+        t("The hospital service is unavailable. Please try again shortly."),
+      );
     } finally {
       setIsSubmitting(false);
     }
+  }
 
-    const newItem: InsuranceItem = {
-      id: `INS-${String(insurances.length + 1).padStart(3, "0")}`,
-      name: newInsuranceName,
-      serviceTax: parseFloat(newServiceTax) || 0,
-      discount: parseFloat(newDiscount) || 0,
-      insuranceNo: newInsuranceNo,
-      insuranceCode: newInsuranceCode,
-      hospitalRate: parseFloat(newHospitalRate) || 0,
-      remark: newRemark,
-      status: newStatus,
-      diseases: newDiseases.map((d, i) => ({
-        id: String(i + 1),
-        name: d.name || "Service",
-        charge: parseFloat(d.charge) || 0,
-      })),
-      totalAmount: calculatedTotal,
-    };
-    setInsurances([newItem, ...insurances]);
-    setInsuranceMode("list");
-    setNewInsuranceName("");
-    setNewServiceTax("");
-    setNewDiscount("0");
-    setNewInsuranceNo("");
-    setNewInsuranceCode("");
-    setNewHospitalRate("");
-    setNewRemark("");
-    setNewStatus(true);
-    setNewDiseases([{ id: "1", name: "", charge: "" }]);
-    setIsSubmitting(false);
+  async function handleUpdateInsurance(
+    e?: React.FormEvent | React.MouseEvent,
+  ) {
+    if (e) {
+      e.preventDefault();
+    }
+    if (isSubmitting) return;
+    const id = editInsuranceId || selectedInsurance?.id;
+    if (!id || !editInsuranceName.trim()) {
+      setApiErrorBanner(t("Insurance name is required"));
+      return;
+    }
+
+    setIsSubmitting(true);
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const payload = {
+        name: editInsuranceName.trim(),
+        service_tax_minor: Math.round(
+          (parseFloat(editServiceTax) || 0) * 100,
+        ),
+        serviceTaxMinor: Math.round(
+          (parseFloat(editServiceTax) || 0) * 100,
+        ),
+        discount: Math.max(
+          0,
+          Math.min(100, parseInt(editDiscount, 10) || 0),
+        ),
+        insurance_no: editInsuranceNo.trim(),
+        insuranceNo: editInsuranceNo.trim(),
+        insurance_code: editInsuranceCode.trim(),
+        insuranceCode: editInsuranceCode.trim(),
+        hospital_rate_minor: Math.round(
+          (parseFloat(editHospitalRate) || 0) * 100,
+        ),
+        hospitalRateMinor: Math.round(
+          (parseFloat(editHospitalRate) || 0) * 100,
+        ),
+        remark: editRemark.trim(),
+        status: editStatus ? 1 : 0,
+        diseases: editDiseases
+          .filter((d) => d.name.trim() !== "")
+          .map((d) => ({
+            ...(d.id && !d.id.startsWith("new") && !/^\d{13}$/.test(d.id)
+              ? { id: d.id }
+              : {}),
+            disease_name: d.name.trim(),
+            diseaseName: d.name.trim(),
+            name: d.name.trim(),
+            disease_charge_minor: Math.round(
+              (parseFloat(d.charge) || 0) * 100,
+            ),
+            diseaseChargeMinor: Math.round(
+              (parseFloat(d.charge) || 0) * 100,
+            ),
+          })),
+      };
+
+      const res = await fetch(`/api/hms/insurances/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setApiSuccessBanner(t("Insurance policy updated successfully"));
+        setInsuranceEditModal(false);
+        setSelectedInsurance(null);
+        await loadServicesData();
+        return;
+      }
+
+      const err = await res.json().catch(() => ({}));
+      setApiErrorBanner(
+        err.message || err.error || t("Failed to update insurance"),
+      );
+    } catch {
+      setApiErrorBanner(
+        t("The hospital service is unavailable. Please try again shortly."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleToggleInsuranceStatus(id: string) {
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+
+    try {
+      const res = await fetch(`/api/hms/insurances/${id}/status`, {
+        method: "PATCH",
+      });
+      if (res.ok) {
+        await loadServicesData();
+        return;
+      }
+      const err = await res.json().catch(() => ({}));
+      setApiErrorBanner(
+        err.message || err.error || t("Failed to update status"),
+      );
+    } catch {
+      setApiErrorBanner(
+        t("The hospital service is unavailable. Please try again shortly."),
+      );
+    }
+  }
+
+  async function handleDeleteInsurance(id: string) {
+    if (!window.confirm(t("Are you sure you want to delete this insurance?"))) {
+      return;
+    }
+
+    setApiErrorBanner("");
+    setApiSuccessBanner("");
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch(`/api/hms/insurances/${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.status === 204 || res.ok) {
+        setApiSuccessBanner(t("Insurance removed from catalog"));
+        await loadServicesData();
+        return;
+      }
+
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 409 || err.error === "RECORD_IN_USE") {
+        setApiErrorBanner(
+          err.message ||
+            t("Insurance is in use by patient admissions and cannot be deleted"),
+        );
+      } else {
+        setApiErrorBanner(
+          err.message || err.error || t("Failed to delete insurance"),
+        );
+      }
+    } catch {
+      setApiErrorBanner(
+        t("The hospital service is unavailable. Please try again shortly."),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   /* -------------------------------------------------------------
@@ -1033,7 +1342,10 @@ export function ServicesWorkspace({
      ------------------------------------------------------------- */
   if (currentTab === "insurances" && insuranceMode === "create") {
     return (
-      <div className="legacy-workspace">
+      <div
+        className="legacy-workspace"
+        data-ready={!isLoadingApi ? "true" : "false"}
+      >
         {/* Top subtabs */}
         <div className="module-subtabs-nav">
           {tabs.map((tab) => (
@@ -1048,12 +1360,35 @@ export function ServicesWorkspace({
         </div>
 
         <div className="form-card-container">
+          {apiErrorBanner && (
+            <div
+              className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded mb-3"
+              style={{
+                borderColor: "#ef4444",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                color: "#ef4444",
+              }}
+            >
+              <span>{apiErrorBanner}</span>
+              <button
+                type="button"
+                className="btn-icon-link"
+                onClick={() => setApiErrorBanner("")}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           <div className="d-flex justify-content-between align-items-center mb-4">
             <h2 className="workspace-heading m-0">{t("New Insurance")}</h2>
             <button
               type="button"
               className="btn-back-outline"
-              onClick={() => setInsuranceMode("list")}
+              onClick={() => {
+                resetNewInsuranceForm();
+                setInsuranceMode("list");
+              }}
             >
               {t("Back")}
             </button>
@@ -1234,21 +1569,58 @@ export function ServicesWorkspace({
                 </tbody>
               </table>
 
-              <div className="d-flex justify-content-end align-items-center mt-3 fs-5 fw-bold">
-                <span>
-                  {t("Total Amount")}: ${calculatedTotal.toFixed(2)}
-                </span>
+              <div className="d-flex flex-column align-items-end mt-3 gap-1 fs-7">
+                <div>
+                  {t("Service Tax")}: ETB{" "}
+                  {(parseFloat(newServiceTax) || 0).toFixed(2)}
+                </div>
+                <div>
+                  {t("Hospital Rate")}: ETB{" "}
+                  {(parseFloat(newHospitalRate) || 0).toFixed(2)}
+                </div>
+                <div>
+                  {t("Disease Details")}: ETB{" "}
+                  {createCalculatedPreview.diseaseSum.toFixed(2)}
+                </div>
+                <div>
+                  {t("Subtotal")}: ETB{" "}
+                  {createCalculatedPreview.base.toFixed(2)}
+                </div>
+                <div>
+                  {t("Discount (%)")}: -ETB{" "}
+                  {createCalculatedPreview.discountAmount.toFixed(2)} (
+                  {newDiscount}%)
+                </div>
+                <div className="fs-6 fw-bold text-primary mt-1">
+                  {t("Total Amount")}: ETB{" "}
+                  {createCalculatedPreview.total.toFixed(2)}
+                </div>
               </div>
             </div>
 
             <div className="d-flex justify-content-end gap-2 mt-4">
-              <button type="submit" className="btn-action-blue px-4 py-2">
-                {t("Save")}
+              <button
+                type="submit"
+                className="btn-action-blue px-4 py-2"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <span className="d-inline-flex align-items-center gap-1">
+                    <Loader2 size={14} className="animate-spin" />
+                    {t("Saving...")}
+                  </span>
+                ) : (
+                  t("Save")
+                )}
               </button>
               <button
                 type="button"
                 className="btn-action-grey px-4 py-2"
-                onClick={() => setInsuranceMode("list")}
+                disabled={isSubmitting}
+                onClick={() => {
+                  resetNewInsuranceForm();
+                  setInsuranceMode("list");
+                }}
               >
                 {t("Cancel")}
               </button>
@@ -1422,6 +1794,7 @@ export function ServicesWorkspace({
                   <th>{t("INSURANCE NO")} ↕</th>
                   <th>{t("INSURANCE CODE")} ↕</th>
                   <th>{t("HOSPITAL RATE")} ↕</th>
+                  <th>{t("TOTAL")} ↕</th>
                   <th>{t("STATUS")}</th>
                   <th>{t("ACTION")}</th>
                 </tr>
@@ -1446,7 +1819,13 @@ export function ServicesWorkspace({
                           {item.name}
                         </span>
                       </td>
-                      <td>{item.serviceTax}%</td>
+                      <td>
+                        ETB{" "}
+                        {item.serviceTax.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
                       <td>{item.discount}%</td>
                       <td>
                         <span className="badge-blue-pill">
@@ -1454,21 +1833,32 @@ export function ServicesWorkspace({
                         </span>
                       </td>
                       <td>{item.insuranceCode}</td>
-                      <td>${item.hospitalRate.toLocaleString()}</td>
                       <td>
-                        <label className="switch-toggle">
+                        ETB{" "}
+                        {item.hospitalRate.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td>
+                        ETB{" "}
+                        {item.totalAmount.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td>
+                        <label
+                          className="switch-toggle"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleToggleInsuranceStatus(item.id);
+                          }}
+                        >
                           <input
                             type="checkbox"
                             checked={item.status}
-                            onChange={() =>
-                              setInsurances((prev) =>
-                                prev.map((x) =>
-                                  x.id === item.id
-                                    ? { ...x, status: !x.status }
-                                    : x,
-                                ),
-                              )
-                            }
+                            readOnly
                           />
                           <span className="slider-toggle"></span>
                         </label>
@@ -1476,19 +1866,27 @@ export function ServicesWorkspace({
                       <td>
                         <div className="d-flex gap-2">
                           <button
+                            type="button"
+                            className="btn-icon-blue-link"
+                            title={t("View")}
+                            onClick={() => openInsuranceDetails(item)}
+                          >
+                            <Eye size={16} />
+                          </button>
+                          <button
+                            type="button"
                             className="btn-icon-blue-link"
                             title={t("Edit")}
+                            onClick={() => startEditInsurance(item)}
                           >
                             <Edit2 size={16} />
                           </button>
                           <button
+                            type="button"
                             className="btn-icon-danger"
                             title={t("Delete")}
-                            onClick={() =>
-                              setInsurances((prev) =>
-                                prev.filter((x) => x.id !== item.id),
-                              )
-                            }
+                            disabled={isSubmitting}
+                            onClick={() => handleDeleteInsurance(item.id)}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -1496,6 +1894,23 @@ export function ServicesWorkspace({
                       </td>
                     </tr>
                   ))}
+                {insurances.filter((item) =>
+                  (
+                    item.name +
+                    " " +
+                    item.insuranceNo +
+                    " " +
+                    item.insuranceCode
+                  )
+                    .toLowerCase()
+                    .includes(search.toLowerCase()),
+                ).length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="text-center py-4 text-muted">
+                      {t("No insurance policies found in catalog")}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -2440,6 +2855,408 @@ export function ServicesWorkspace({
                 type="button"
                 className="btn-action-grey"
                 onClick={() => setPackageDetailModal(false)}
+              >
+                {t("Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT INSURANCE */}
+      {insuranceEditModal && (
+        <div
+          className="modal-backdrop-custom"
+          style={{ overflowY: "auto", padding: "16px" }}
+        >
+          <div
+            className="modal-card-custom"
+            style={{
+              maxWidth: "780px",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <div className="modal-header-custom d-flex justify-content-between align-items-center flex-shrink-0">
+              <h3>{t("Edit Insurance")}</h3>
+              <button
+                type="button"
+                className="btn-close-custom"
+                onClick={() => setInsuranceEditModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form
+              onSubmit={handleUpdateInsurance}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+                flex: 1,
+              }}
+            >
+              <div
+                className="modal-body-custom"
+                style={{
+                  overflowY: "auto",
+                  flex: 1,
+                  maxHeight: "calc(90vh - 140px)",
+                }}
+              >
+                <div className="form-grid-2">
+                  <div className="form-group-custom">
+                    <label>
+                      {t("Insurance")}: <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={t("Insurance")}
+                      value={editInsuranceName}
+                      onChange={(e) => setEditInsuranceName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group-custom">
+                    <label>
+                      {t("Service Tax")}: <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={t("Service Tax")}
+                      value={editServiceTax}
+                      onChange={(e) => setEditServiceTax(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group-custom">
+                    <label>{t("Discount: (In Percentage(%))")}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={editDiscount}
+                      onChange={(e) => setEditDiscount(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group-custom">
+                    <label>
+                      {t("Insurance No")}: <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={t("Insurance No")}
+                      value={editInsuranceNo}
+                      onChange={(e) => setEditInsuranceNo(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group-custom">
+                    <label>
+                      {t("Insurance Code")}: <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={t("Insurance Code")}
+                      value={editInsuranceCode}
+                      onChange={(e) => setEditInsuranceCode(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group-custom">
+                    <label>
+                      {t("Hospital Rate")}: <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={t("Hospital Rate")}
+                      value={editHospitalRate}
+                      onChange={(e) => setEditHospitalRate(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group-custom">
+                    <label>{t("Remark")}:</label>
+                    <textarea
+                      rows={3}
+                      placeholder={t("Remark")}
+                      value={editRemark}
+                      onChange={(e) => setEditRemark(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group-custom">
+                    <label>{t("Status")}:</label>
+                    <div className="mt-2">
+                      <label className="switch-toggle">
+                        <input
+                          type="checkbox"
+                          checked={editStatus}
+                          onChange={(e) => setEditStatus(e.target.checked)}
+                        />
+                        <span className="slider-toggle"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Disease Details Table Section */}
+                <div className="mt-4 pt-3 border-top border-secondary-subtle">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h4 className="m-0 fs-5 fw-semibold">{t("Disease Details")}</h4>
+                    <button
+                      type="button"
+                      className="btn-action-blue px-3 py-1 fs-6"
+                      onClick={addEditDiseaseRow}
+                    >
+                      {t("Add")}
+                    </button>
+                  </div>
+
+                  <table className="billing-table w-100">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "60px" }}>#</th>
+                        <th>
+                          {t("DISEASES NAME")}{" "}
+                          <span className="text-danger">*</span>
+                        </th>
+                        <th>
+                          {t("DISEASES CHARGE")}{" "}
+                          <span className="text-danger">*</span>
+                        </th>
+                        <th style={{ width: "80px" }}>{t("ACTION")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editDiseases.map((row, idx) => (
+                        <tr key={row.id || idx}>
+                          <td>{idx + 1}</td>
+                          <td>
+                            <input
+                              type="text"
+                              required
+                              className="form-control-custom w-100"
+                              placeholder={t("Diseases Name")}
+                              value={row.name}
+                              onChange={(e) =>
+                                updateEditDisease(idx, "name", e.target.value)
+                              }
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              required
+                              className="form-control-custom w-100"
+                              placeholder={t("Diseases charge")}
+                              value={row.charge}
+                              onChange={(e) =>
+                                updateEditDisease(idx, "charge", e.target.value)
+                              }
+                            />
+                          </td>
+                          <td className="text-center">
+                            <button
+                              type="button"
+                              className="btn-icon-danger"
+                              disabled={editDiseases.length <= 1}
+                              onClick={() => removeEditDiseaseRow(idx)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="d-flex flex-column align-items-end mt-3 gap-1 fs-7">
+                    <div>
+                      {t("Service Tax")}: ETB{" "}
+                      {(parseFloat(editServiceTax) || 0).toFixed(2)}
+                    </div>
+                    <div>
+                      {t("Hospital Rate")}: ETB{" "}
+                      {(parseFloat(editHospitalRate) || 0).toFixed(2)}
+                    </div>
+                    <div>
+                      {t("Disease Details")}: ETB{" "}
+                      {editCalculatedPreview.diseaseSum.toFixed(2)}
+                    </div>
+                    <div>
+                      {t("Subtotal")}: ETB{" "}
+                      {editCalculatedPreview.base.toFixed(2)}
+                    </div>
+                    <div>
+                      {t("Discount (%)")}: -ETB{" "}
+                      {editCalculatedPreview.discountAmount.toFixed(2)} (
+                      {editDiscount}%)
+                    </div>
+                    <div className="fs-6 fw-bold text-primary mt-1">
+                      {t("Estimated Total")}: ETB{" "}
+                      {editCalculatedPreview.total.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer-custom d-flex justify-content-end gap-2 flex-shrink-0">
+                <button
+                  type="submit"
+                  className="btn-action-blue"
+                  disabled={isSubmitting}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleUpdateInsurance(e);
+                  }}
+                >
+                  {isSubmitting ? (
+                    <span className="d-inline-flex align-items-center gap-1">
+                      <Loader2 size={14} className="animate-spin" />
+                      {t("Saving...")}
+                    </span>
+                  ) : (
+                    t("Save")
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn-action-grey"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    setInsuranceEditModal(false);
+                    setSelectedInsurance(null);
+                  }}
+                >
+                  {t("Cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: INSURANCE DETAILS */}
+      {insuranceDetailModal && selectedInsurance && (
+        <div className="modal-backdrop-custom">
+          <div className="modal-card-custom" style={{ maxWidth: "640px" }}>
+            <div className="modal-header-custom d-flex justify-content-between align-items-center">
+              <h3>{t("Insurance Details")}</h3>
+              <button
+                type="button"
+                className="btn-close-custom"
+                onClick={() => setInsuranceDetailModal(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body-custom">
+              <div className="mb-3">
+                <div className="d-flex justify-content-between align-items-start mb-2">
+                  <div>
+                    <h4 className="fs-5 fw-bold text-primary m-0">
+                      {selectedInsurance.name}
+                    </h4>
+                    <div className="fs-7 text-muted mt-1">
+                      {t("Insurance No")}:{" "}
+                      <span className="fw-semibold">
+                        {selectedInsurance.insuranceNo}
+                      </span>{" "}
+                      | {t("Insurance Code")}:{" "}
+                      <span className="fw-semibold">
+                        {selectedInsurance.insuranceCode}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={
+                      selectedInsurance.status
+                        ? "badge-available-stock"
+                        : "badge-blue-pill"
+                    }
+                  >
+                    {selectedInsurance.status ? t("Active") : t("Inactive")}
+                  </span>
+                </div>
+
+                {selectedInsurance.remark && (
+                  <p className="text-muted fs-7 mb-2 bg-light p-2 rounded">
+                    <span className="fw-semibold">{t("Remark")}: </span>
+                    {selectedInsurance.remark}
+                  </p>
+                )}
+
+                <div className="d-flex flex-wrap gap-3 fs-7 bg-light p-2 rounded">
+                  <div>
+                    <span className="text-muted">{t("Service Tax")}: </span>
+                    <span className="fw-semibold">
+                      ETB {selectedInsurance.serviceTax.toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted">{t("Hospital Rate")}: </span>
+                    <span className="fw-semibold">
+                      ETB {selectedInsurance.hospitalRate.toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted">{t("Discount (%)")}: </span>
+                    <span className="fw-semibold">
+                      {selectedInsurance.discount}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted">{t("Total Amount")}: </span>
+                    <span className="fw-semibold text-primary">
+                      ETB {selectedInsurance.totalAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <h4 className="fs-6 fw-bold mb-2">{t("Disease Details")}</h4>
+              <div className="table-responsive">
+                <table className="billing-table w-100">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "40px" }}>#</th>
+                      <th>{t("DISEASES NAME")}</th>
+                      <th>{t("DISEASES CHARGE")} (ETB)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedInsurance.diseases.map((d, idx) => (
+                      <tr key={d.id || idx}>
+                        <td>{idx + 1}</td>
+                        <td className="fw-semibold">{d.name}</td>
+                        <td>ETB {d.charge.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    {selectedInsurance.diseases.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="text-center py-2 text-muted">
+                          {t("No diseases registered for this policy")}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="modal-footer-custom d-flex justify-content-end">
+              <button
+                type="button"
+                className="btn-action-grey"
+                onClick={() => setInsuranceDetailModal(false)}
               >
                 {t("Cancel")}
               </button>

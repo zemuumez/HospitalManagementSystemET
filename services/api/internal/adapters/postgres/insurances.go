@@ -274,6 +274,7 @@ func (s Store) Insurances(ctx context.Context, a domain.Actor, page int, limit i
 	defer rows.Close()
 
 	out := []domain.Insurance{}
+	insIDs := []string{}
 	for rows.Next() {
 		var ins domain.Insurance
 		if err := rows.Scan(&ins.ID, &ins.Name, &ins.ServiceTaxMinor, &ins.Discount, &ins.Remark, &ins.InsuranceNo, &ins.InsuranceCode, &ins.HospitalRateMinor, &ins.TotalMinor, &ins.Status, &ins.CurrencySymbol, &ins.CreatedAt, &ins.UpdatedAt); err != nil {
@@ -282,10 +283,43 @@ func (s Store) Insurances(ctx context.Context, a domain.Actor, page int, limit i
 		ins.ServiceTax = float64(ins.ServiceTaxMinor) / 100.0
 		ins.HospitalRate = float64(ins.HospitalRateMinor) / 100.0
 		ins.Total = float64(ins.TotalMinor) / 100.0
+		ins.Diseases = []domain.InsuranceDiseaseLine{}
 		out = append(out, ins)
+		insIDs = append(insIDs, ins.ID)
+	}
+	if rows.Err() != nil {
+		return nil, 0, rows.Err()
 	}
 
-	return out, total, rows.Err()
+	if len(insIDs) > 0 {
+		dRows, err := s.DB.Query(ctx, `
+			SELECT id, insurance_id, disease_name, disease_charge_minor, created_at, updated_at
+			FROM insurance_disease
+			WHERE insurance_id = ANY($1)
+			ORDER BY created_at ASC, id ASC
+		`, insIDs)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer dRows.Close()
+
+		diseasesByIns := make(map[string][]domain.InsuranceDiseaseLine)
+		for dRows.Next() {
+			var d domain.InsuranceDiseaseLine
+			if err := dRows.Scan(&d.ID, &d.InsuranceID, &d.DiseaseName, &d.DiseaseChargeMinor, &d.CreatedAt, &d.UpdatedAt); err != nil {
+				return nil, 0, err
+			}
+			d.DiseaseCharge = float64(d.DiseaseChargeMinor) / 100.0
+			diseasesByIns[d.InsuranceID] = append(diseasesByIns[d.InsuranceID], d)
+		}
+		for i := range out {
+			if lines, ok := diseasesByIns[out[i].ID]; ok {
+				out[i].Diseases = lines
+			}
+		}
+	}
+
+	return out, total, nil
 }
 
 func (s Store) ToggleInsuranceStatus(ctx context.Context, a domain.Actor, id string) (domain.Insurance, error) {
