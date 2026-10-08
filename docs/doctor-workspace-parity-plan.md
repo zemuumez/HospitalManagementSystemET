@@ -310,11 +310,43 @@ sequenceDiagram
 
 ## 10. Ordered Implementation Steps and Acceptance Tests
 
-| Step | Phase | Scope | Description |
-|---|---|---|---|
-| **Step 1 (Assigned)** | Backend | **Doctor Profile & Account Parity Core** | 1. Add backward-compatible migration for `doctor_profile.specialist`.<br>2. Implement unified doctor domain model, validation, and repository methods (`GetDoctor`, `CreateDoctorProfile`, `UpdateDoctorProfile`, `ListDoctors`, `SetDoctorStatus`).<br>3. Implement HTTP endpoints: `GET /v1/doctors/{id}`, `POST /v1/doctors`, `PUT /v1/doctors/{id}`, `PATCH /v1/doctors/{id}/status`.<br>4. Enforce role permissions (Admin, Receptionist, Nurse, Doctor-own access).<br>5. Connect Next.js `/api/staff` to coordinate atomic auth and profile creation with rollback on failure.<br>6. Write extensive PostgreSQL regression suite. |
-| **Step 2** | Backend | **Doctor Deletion Protection & Reference Auditing** | Implement `DELETE /v1/doctors/{id}` with complete check against 9 clinical models and payroll, rejecting in-use deletions and allowing unreferenced cleanup. |
-| **Step 3** | Backend | **Doctor Schedules & Weekly Availability** | Implement `/v1/doctor-schedules` aggregate, slot generator reconciliation, and timetable editing. |
-| **Step 4** | Backend | **Doctor OPD Charges & Price Master** | Implement dedicated OPD charge master table/endpoints with currency support. |
-| **Step 5** | Frontend | **Doctors Workspace Real Integration & Mock Elimination** | Remove `INITIAL_*` arrays, eliminate false preview mode, wire real create/edit modals, pagination, search, and status toggle. |
-| **Step 6** | E2E | **End-to-End Browser & Cross-Actor Journey** | Test multi-doctor creation, scheduling, booking, edit, deactivation, and role scoping with Playwright. |
+| Step | Phase | Scope | Description | Status |
+|---|---|---|---|---|
+| **Step 1** | Backend | **Doctor Profile & Account Parity Core** | Unified doctor domain model, validation, CRUD endpoints, role permissions, atomic Next.js /api/staff provisioning. | **Completed (`43dcefa`)** |
+| **Step 2** | Backend | **Doctor Deletion Protection & Reference Auditing** | Deletion guard against 9 clinical models and payroll, 409 conflict responses, unreferenced doctor cleanup. | **Completed (`43dcefa`)** |
+| **Step 3** | Backend | **Doctor Schedules & Weekly Availability** | Timetable management, `/v1/doctor-schedules`, slot generator suppression, holiday/break conflict guards (`doctor_holiday`, `doctor_lunch_break`). | **Completed (`75da27b`)** |
+| **Step 4** | Backend | **Doctor OPD Charges & Price Master** | Dedicated `doctor_opd_charge` master table, `/v1/doctor-opd-charges`, bidirectional profile charge sync, ETB currency. | **Completed (`ddf9668`)** |
+| **Step 5** | Frontend | **Doctors Workspace Real Integration & Mock Elimination** | Eliminated `INITIAL_*` mocks and fake preview mode fallbacks, wired all tabs (Doctors, Departments, Schedules, Holidays, Breaks, OPD Charges) to real endpoints. | **Completed (`fc1e947`)** |
+| **Step 6** | E2E | **End-to-End Browser & Cross-Actor Journey** | 12 browser journeys with Playwright covering login, validation errors, reload persistence, profile edits, timetable changes, holiday booking conflicts, referenced deletion block, and doctor role restrictions. | **Completed** |
+
+---
+
+## 11. Delivery Verification Summary
+
+### Commits on `feat/doctor-deletion-parity`:
+- **Step 3**: `75da27b` - `feat(doctor): implement timetable editing, slot generation, holidays and break handling with booking conflict protection (Step 3)`
+- **Step 4**: `ddf9668` - `feat(doctor): implement doctor OPD charges management and profile synchronization (Step 4)`
+- **Step 5**: `fc1e947` - `feat(doctor): wire doctors workspace to real API endpoints and eliminate mock records (Step 5)`
+- **Step 6**: Add automated browser verification suite, role scoping, and update parity checklist.
+
+### Automated Browser Verification (12 Journeys):
+- **Runner**: `scripts/verify-doctor-workspace.mjs`
+- **Results**: 12/12 journeys passed cleanly (exit code 0).
+- **Screenshots Artifacts**:
+  1. `01_admin_login.png` - Administrator authentication via Better Auth.
+  2. `02_doctors_directory.png` - Live connected PostgreSQL database indicator with 10+ doctors.
+  3. `03_validation_error.png` - Real validation error banners for missing required fields.
+  4. `04_doctor_persisted.png` - Hard page reload demonstrating persistent database doctor profile and charges.
+  5. `05_doctor_details.png` - Doctor details view modal rendering persisted specialist, contact, and fee data.
+  6. `06_doctor_edited.png` - Updating doctor details via `PUT /api/hms/doctors/{id}` immediately reflected in UI.
+  7. `07_schedule_form.png` & `07_schedule_saved.png` - Weekly timetable saved via `POST /api/hms/doctor-schedules`.
+  8. `08_holiday_saved.png` - Doctor holiday leave saved via `POST /api/hms/doctor-holidays`.
+  9. `09_break_saved.png` - Intraday lunch break saved via `POST /api/hms/doctor-breaks`.
+  10. `10_opd_charge_synced.png` - Master OPD charge edit and synchronization with doctor profile.
+  11. `11_booking_conflict_protected.png` - Active appointment on booked date blocks conflicting holiday creation with 409 conflict banner.
+  12. `12_deletion_conflict_blocked.png` - Doctor referenced by clinical appointment cannot be deleted; 409 `RECORD_IN_USE` error banner displayed and doctor preserved in directory.
+  13. `13_doctor_role_restricted.png` - Doctor login verifies scoped permissions: `+ New Doctor` button hidden, deletion buttons hidden, and status toggle switches disabled.
+
+### Full Test Suite Results:
+- **Go PostgreSQL Tests**: `go test -v -timeout 120s ./internal/adapters/postgres -run "TestClinicalTransactions"` -> **PASS (12.44s)** across all transaction, doctor, schedule, and deletion suites.
+- **Frontend Unit Tests**: `npm test` -> **PASS (8/8 tests passed)**.

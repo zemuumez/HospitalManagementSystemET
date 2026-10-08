@@ -188,6 +188,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiSuccessBanner, setApiSuccessBanner] = useState("");
   const [apiErrorBanner, setApiErrorBanner] = useState("");
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
+  const isAdmin = currentUser?.role === "admin";
 
   // Modals & sub-views
   const [viewMode, setViewMode] = useState<
@@ -203,6 +205,8 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   const [docSpecialist, setDocSpecialist] = useState("General Medicine");
   const [docPhone, setDocPhone] = useState("+251 91 123 4567");
   const [docQual, setDocQual] = useState("MD, Specialist");
+  const [docDesignation, setDocDesignation] = useState("Senior Consultant");
+  const [docGender, setDocGender] = useState("male");
   const [docOpdCharge, setDocOpdCharge] = useState("300");
   const [docApptCharge, setDocApptCharge] = useState("300");
 
@@ -267,7 +271,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
     setIsSyncing(true);
     let connected = false;
     try {
-      const [docRes, depRes, schedRes, holRes, breakRes, opdRes] =
+      const [docRes, depRes, schedRes, holRes, breakRes, opdRes, meRes] =
         await Promise.all([
           fetch("/api/hms/doctors?status=all").catch(() => null),
           fetch("/api/hms/doctor-departments").catch(() => null),
@@ -275,7 +279,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           fetch("/api/hms/doctor-holidays").catch(() => null),
           fetch("/api/hms/doctor-breaks").catch(() => null),
           fetch("/api/hms/doctor-opd-charges").catch(() => null),
+          fetch("/api/hms/me").catch(() => null),
         ]);
+
+      if (meRes && meRes.ok) {
+        const meData = await meRes.json().catch(() => null);
+        const u = meData?.user || meData;
+        if (u) setCurrentUser({ id: u.id, role: u.role });
+      }
 
       if (docRes && docRes.ok) {
         const data = await docRes.json();
@@ -449,7 +460,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
           password: docPassword,
           departmentId: docDeptId || undefined,
           specialist: docSpecialist.trim(),
+          designation: docDesignation.trim() || "Senior Consultant",
           qualification: docQual.trim() || "MD",
+          gender: docGender || "male",
           phone: docPhone.trim() || undefined,
           opdCharge: parseFloat(docOpdCharge) || 0,
           appointmentCharge: parseFloat(docApptCharge) || 0,
@@ -623,10 +636,18 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         await loadDoctorsData();
       } else {
         const err = await res.json().catch(() => ({}));
-        setApiErrorBanner(
-          err.error ||
-            t("Failed to create holiday. Overlapping appointments may exist."),
-        );
+        if (res.status === 409) {
+          setApiErrorBanner(
+            t(
+              "Cannot create holiday: doctor has active appointments on this date.",
+            ),
+          );
+        } else {
+          setApiErrorBanner(
+            err.error ||
+              t("Failed to create holiday. Overlapping appointments may exist."),
+          );
+        }
       }
     } catch {
       setApiErrorBanner(t("Network error creating doctor holiday."));
@@ -1343,7 +1364,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         </div>
 
         <div className="billing-actions">
-          {activeTab === "doctors" && (
+          {activeTab === "doctors" && isAdmin && (
             <button
               className="btn-action-blue"
               onClick={() => setShowAddDoctor(true)}
@@ -1352,7 +1373,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
             </button>
           )}
 
-          {activeTab === "doctor-departments" && (
+          {activeTab === "doctor-departments" && isAdmin && (
             <button
               className="btn-action-blue"
               onClick={() => setShowAddDept(true)}
@@ -1481,6 +1502,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                             <input
                               type="checkbox"
                               checked={doc.status}
+                              disabled={!isAdmin}
                               onChange={() => handleToggleDoctorStatus(doc)}
                             />
                             <span className="slider round" />
@@ -1499,28 +1521,32 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                             >
                               <Eye size={16} />
                             </button>
-                            <button
-                              className="action-btn-edit"
-                              aria-label="Edit"
-                              title={t("Edit Doctor")}
-                              onClick={() => openEditDoctor(doc)}
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              className="action-btn-delete"
-                              aria-label="Delete"
-                              title={t("Delete Doctor")}
-                              onClick={() =>
-                                setDeleteTarget({
-                                  id: doc.id,
-                                  type: "doctor",
-                                  name: doc.name,
-                                })
-                              }
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                            {(isAdmin || doc.id === currentUser?.id) && (
+                              <button
+                                className="action-btn-edit"
+                                aria-label="Edit"
+                                title={t("Edit Doctor")}
+                                onClick={() => openEditDoctor(doc)}
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                            )}
+                            {isAdmin && (
+                              <button
+                                className="action-btn-delete"
+                                aria-label="Delete"
+                                title={t("Delete Doctor")}
+                                onClick={() =>
+                                  setDeleteTarget({
+                                    id: doc.id,
+                                    type: "doctor",
+                                    name: doc.name,
+                                  })
+                                }
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1565,25 +1591,27 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                           </span>
                         </td>
                         <td className="text-end">
-                          <div
-                            className="action-buttons"
-                            style={{ justifyContent: "flex-end" }}
-                          >
-                            <button
-                              className="action-btn-delete"
-                              aria-label="Archive Department"
-                              title={t("Archive Department")}
-                              onClick={() =>
-                                setDeleteTarget({
-                                  id: dep.id,
-                                  type: "department",
-                                  name: dep.title,
-                                })
-                              }
+                          {isAdmin && (
+                            <div
+                              className="action-buttons"
+                              style={{ justifyContent: "flex-end" }}
                             >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
+                              <button
+                                className="action-btn-delete"
+                                aria-label="Archive Department"
+                                title={t("Archive Department")}
+                                onClick={() =>
+                                  setDeleteTarget({
+                                    id: dep.id,
+                                    type: "department",
+                                    name: dep.title,
+                                  })
+                                }
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -1869,37 +1897,39 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                           {charge.currencySymbol}
                         </td>
                         <td className="text-end">
-                          <div
-                            className="action-buttons"
-                            style={{ justifyContent: "flex-end", gap: "8px" }}
-                          >
-                            <button
-                              className="action-btn-edit"
-                              aria-label="Edit OPD Charge"
-                              title={t("Edit Charge")}
-                              onClick={() => {
-                                setOpdModalDoctorId(charge.doctorId);
-                                setOpdModalAmount(String(charge.standardCharge));
-                                setShowOpdModal(true);
-                              }}
+                          {isAdmin && (
+                            <div
+                              className="action-buttons"
+                              style={{ justifyContent: "flex-end", gap: "8px" }}
                             >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              className="action-btn-delete"
-                              aria-label="Reset OPD Charge"
-                              title={t("Reset Charge")}
-                              onClick={() =>
-                                setDeleteTarget({
-                                  id: charge.doctorId,
-                                  type: "opd-charge",
-                                  name: `OPD charge for ${charge.doctorName}`,
-                                })
-                              }
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
+                              <button
+                                className="action-btn-edit"
+                                aria-label="Edit OPD Charge"
+                                title={t("Edit Charge")}
+                                onClick={() => {
+                                  setOpdModalDoctorId(charge.doctorId);
+                                  setOpdModalAmount(String(charge.standardCharge));
+                                  setShowOpdModal(true);
+                                }}
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                className="action-btn-delete"
+                                aria-label="Reset OPD Charge"
+                                title={t("Reset Charge")}
+                                onClick={() =>
+                                  setDeleteTarget({
+                                    id: charge.doctorId,
+                                    type: "opd-charge",
+                                    name: `OPD charge for ${charge.doctorName}`,
+                                  })
+                                }
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -2064,6 +2094,27 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 </div>
                 <div>
                   <label className="form-label-custom">
+                    {t("Designation")}:
+                  </label>
+                  <input
+                    placeholder="Senior Consultant"
+                    className="form-input-custom"
+                    value={docDesignation}
+                    onChange={(e) => setDocDesignation(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label className="form-label-custom">
                     {t("Qualification")}:
                   </label>
                   <input
@@ -2072,6 +2123,17 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                     value={docQual}
                     onChange={(e) => setDocQual(e.target.value)}
                   />
+                </div>
+                <div>
+                  <label className="form-label-custom">{t("Gender")}:</label>
+                  <select
+                    className="form-select-custom"
+                    value={docGender}
+                    onChange={(e) => setDocGender(e.target.value)}
+                  >
+                    <option value="male">{t("Male")}</option>
+                    <option value="female">{t("Female")}</option>
+                  </select>
                 </div>
               </div>
 
@@ -2511,6 +2573,21 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               </button>
             </div>
             <form onSubmit={handleCreateHoliday} className="modal-body-custom">
+              {apiErrorBanner && (
+                <div
+                  style={{
+                    background: "rgba(239, 68, 68, 0.15)",
+                    border: "1px solid #ef4444",
+                    color: "#f87171",
+                    padding: "8px 12px",
+                    borderRadius: "6px",
+                    marginBottom: "14px",
+                    fontSize: "13px",
+                  }}
+                >
+                  {apiErrorBanner}
+                </div>
+              )}
               <div style={{ marginBottom: "16px" }}>
                 <label className="form-label-custom">
                   {t("Doctor")}: <span style={{ color: "#ef4444" }}>*</span>
