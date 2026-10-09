@@ -3,15 +3,70 @@ package postgres
 import (
 	"context"
 	"errors"
+	"net/url"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"hms.local/api/internal/domain"
 )
 
-var tokenRegex = regexp.MustCompile(`[a-f0-9]{32}`)
+var (
+	attachmentPathRegex = regexp.MustCompile(`(?:^|/)(?:api/hms/|v1/)?attachments/([a-f0-9]{32})(?:/content)?(?:$|[/?#\s"'])`)
+	rawTokenRegex       = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	generalAssetKeys    = map[string]bool{
+		"app_logo":    true,
+		"logo_url":    true,
+		"favicon":     true,
+		"favicon_url": true,
+	}
+)
+
+// extractAttachmentTokens parses valid local attachment references from a setting value.
+// It requires genuine attachment URL paths (e.g. /v1/attachments/{token}/content or /api/hms/attachments/{token}/content)
+// or designated general asset fields containing raw tokens, and ignores ordinary text, provider keys, and remote URLs.
+func extractAttachmentTokens(key string, val string) []string {
+	val = strings.TrimSpace(val)
+	if val == "" {
+		return nil
+	}
+
+	// 1. Check if the value is an external absolute URL with a remote scheme and host.
+	if strings.HasPrefix(val, "http://") || strings.HasPrefix(val, "https://") {
+		u, err := url.Parse(val)
+		if err == nil && u.Host != "" {
+			host := u.Hostname()
+			if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+				// Remote external URL: ignore even if path or query happens to contain hex
+				return nil
+			}
+			val = u.Path
+		}
+	}
+
+	// 2. Extract genuine local attachment paths (e.g. /v1/attachments/{token}/content)
+	matches := attachmentPathRegex.FindAllStringSubmatch(val, -1)
+	if len(matches) > 0 {
+		var tokens []string
+		for _, m := range matches {
+			if len(m) > 1 && len(m[1]) == 32 {
+				tokens = append(tokens, m[1])
+			}
+		}
+		if len(tokens) > 0 {
+			return tokens
+		}
+	}
+
+	// 3. For designated asset fields in general settings, accept exact 32-hex tokens
+	if generalAssetKeys[key] && rawTokenRegex.MatchString(val) {
+		return []string{val}
+	}
+
+	return nil
+}
 
 // --- General Settings ---
 
@@ -115,9 +170,9 @@ func retireLockedDisplacedTokensTx(ctx context.Context, tx pgx.Tx, a domain.Acto
 		var inUse bool
 		err := tx.QueryRow(ctx, `
 			SELECT EXISTS(
-				SELECT 1 FROM hospital_general_setting WHERE value LIKE '%' || $1 || '%'
+				SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 			) OR EXISTS(
-				SELECT 1 FROM front_cms_setting WHERE value LIKE '%' || $1 || '%'
+				SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 			)
 		`, tok).Scan(&inUse)
 		if err != nil {
@@ -184,12 +239,12 @@ func (s Store) UpdateGeneralSettings(ctx context.Context, a domain.Actor, inputs
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, err
 		}
-		oldTokens := tokenRegex.FindAllString(prevVal, -1)
+		oldTokens := extractAttachmentTokens(in.Key, prevVal)
 		for _, t := range oldTokens {
 			allOldTokens[t] = true
 		}
 		if !domain.SettingsSecretKeys[in.Key] {
-			newTokens := tokenRegex.FindAllString(in.Value, -1)
+			newTokens := extractAttachmentTokens(in.Key, in.Value)
 			for _, t := range newTokens {
 				allNewTokens[t] = true
 				boundTokens[t] = true
@@ -383,11 +438,11 @@ func (s Store) UpdateFrontCMSSettings(ctx context.Context, a domain.Actor, setti
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, err
 		}
-		oldTokens := tokenRegex.FindAllString(prevVal, -1)
+		oldTokens := extractAttachmentTokens(in.Key, prevVal)
 		for _, t := range oldTokens {
 			allOldTokens[t] = true
 		}
-		newTokens := tokenRegex.FindAllString(in.Value, -1)
+		newTokens := extractAttachmentTokens(in.Key, in.Value)
 		for _, t := range newTokens {
 			allNewTokens[t] = true
 			boundTokens[t] = true
@@ -449,17 +504,27 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 	}
 	defer tx.Rollback(ctx)
 
-	// Bounded work per run (LIMIT 100) and stable order (ORDER BY token ASC)
+	// Bounded work per run (LIMIT 100) and stable order (ORDER BY sa.token ASC).
+	// Pre-filter likely unreferenced candidates before applying LIMIT 100 so referenced assets
+	// do not permanently occupy the batch.
 	rows, err := tx.Query(ctx, `
-		SELECT id, token, storage_path, is_public, patient_id::text, encounter_id::text
-		FROM secure_attachment
-		WHERE is_public = true
-		  AND patient_id IS NULL
-		  AND encounter_id IS NULL
-		  AND created_at < clock_timestamp() - make_interval(secs => $1)
-		ORDER BY token ASC
+		SELECT sa.id, sa.token, sa.storage_path, sa.is_public, sa.patient_id::text, sa.encounter_id::text
+		FROM secure_attachment sa
+		WHERE sa.is_public = true
+		  AND sa.patient_id IS NULL
+		  AND sa.encounter_id IS NULL
+		  AND sa.created_at < clock_timestamp() - make_interval(secs => $1)
+		  AND NOT EXISTS (
+		      SELECT 1 FROM hospital_general_setting hgs
+		      WHERE (hgs.value LIKE '%/attachments/' || sa.token || '%' OR hgs.value = sa.token)
+		  )
+		  AND NOT EXISTS (
+		      SELECT 1 FROM front_cms_setting fcs
+		      WHERE (fcs.value LIKE '%/attachments/' || sa.token || '%' OR fcs.value = sa.token)
+		  )
+		ORDER BY sa.token ASC
 		LIMIT 100
-		FOR UPDATE SKIP LOCKED
+		FOR UPDATE OF sa SKIP LOCKED
 	`, intervalSec)
 	if err != nil {
 		return nil, err
@@ -494,9 +559,9 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 		var inUse bool
 		err := tx.QueryRow(ctx, `
 			SELECT EXISTS(
-				SELECT 1 FROM hospital_general_setting WHERE value LIKE '%' || $1 || '%'
+				SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 			) OR EXISTS(
-				SELECT 1 FROM front_cms_setting WHERE value LIKE '%' || $1 || '%'
+				SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 			)
 		`, c.token).Scan(&inUse)
 		if err != nil {

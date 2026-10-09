@@ -180,9 +180,9 @@ func (s Store) DeleteAttachment(ctx context.Context, a domain.Actor, token strin
 	var inUse bool
 	err = tx.QueryRow(ctx, `
 		SELECT EXISTS(
-			SELECT 1 FROM hospital_general_setting WHERE value LIKE '%' || $1 || '%'
+			SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 		) OR EXISTS(
-			SELECT 1 FROM front_cms_setting WHERE value LIKE '%' || $1 || '%'
+			SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 		)
 	`, token).Scan(&inUse)
 	if err != nil {

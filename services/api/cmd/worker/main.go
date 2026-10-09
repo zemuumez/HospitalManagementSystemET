@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -54,14 +55,33 @@ func main() {
 	store := postgres.Store{DB: db}
 	cmsSettings := application.CMSSettingsService{Store: store, Files: files, Now: time.Now}
 
-	// Resolve admin user for operational audit trail
-	var adminID string
-	_ = db.QueryRow(ctx, `SELECT id FROM "user" WHERE role = 'admin' ORDER BY id ASC LIMIT 1`).Scan(&adminID)
-	systemAdmin := domain.Actor{ID: adminID, Role: "admin"}
+	resolveAdminActor := func(c context.Context) (domain.Actor, error) {
+		var adminID string
+		err := db.QueryRow(c, `
+			SELECT u.id
+			FROM "user" u
+			JOIN staff_access a ON a.user_id = u.id
+			WHERE a.role = 'admin' AND a.active = true
+			ORDER BY u.id ASC
+			LIMIT 1
+		`).Scan(&adminID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return domain.Actor{}, fmt.Errorf("no active administrator found in staff_access")
+			}
+			return domain.Actor{}, fmt.Errorf("failed to query administrator from staff_access: %w", err)
+		}
+		return domain.Actor{ID: adminID, Role: "admin"}, nil
+	}
 
 	// If invoked as a maintenance command:
 	if *cleanupFlag {
-		cleaned, err := cmsSettings.RunOperationalAttachmentCleanup(ctx, systemAdmin, *olderThanFlag)
+		admin, err := resolveAdminActor(ctx)
+		if err != nil {
+			slog.Error("Operational attachment cleanup aborted: missing administrative audit actor", "error", err)
+			os.Exit(1)
+		}
+		cleaned, err := cmsSettings.RunOperationalAttachmentCleanup(ctx, admin, *olderThanFlag)
 		if err != nil {
 			slog.Error("Operational attachment cleanup failed", "error", err)
 			os.Exit(1)
@@ -84,10 +104,15 @@ func main() {
 		case <-ctx.Done():
 			return
 		case <-cleanupTicker.C:
-			if cleaned, err := cmsSettings.RunOperationalAttachmentCleanup(ctx, systemAdmin, 24*time.Hour); err != nil {
-				slog.Error("Scheduled abandoned attachment cleanup failed", "error", err)
-			} else if cleaned > 0 {
-				slog.Info("Scheduled abandoned attachment cleanup completed", "cleaned", cleaned)
+			admin, err := resolveAdminActor(ctx)
+			if err != nil {
+				slog.Error("Scheduled abandoned attachment cleanup aborted: missing administrative audit actor", "error", err)
+			} else {
+				if cleaned, err := cmsSettings.RunOperationalAttachmentCleanup(ctx, admin, 24*time.Hour); err != nil {
+					slog.Error("Scheduled abandoned attachment cleanup failed", "error", err)
+				} else if cleaned > 0 {
+					slog.Info("Scheduled abandoned attachment cleanup completed", "cleaned", cleaned)
+				}
 			}
 		case <-time.After(time.Second):
 		}

@@ -104,17 +104,20 @@ Stored in `hospital_general_setting` with strict secret masking:
 
 ### 5.2 Binding, Replacement & Retirement Protocol (R1a)
 To eliminate races between concurrent settings saves and attachment retirements:
-1. **Alphabetical Lock Ordering Protocol**:
+1. **Precise Reference Parsing**:
+   - Attachment tokens are extracted only from genuine local attachment URL paths (`/(?:api/hms/|v1/)?attachments/{token}(?:/content)?`) or designated general asset fields (`app_logo`, `logo_url`, `favicon`, `favicon_url`).
+   - Ordinary setting text, provider public keys, and remote external URLs containing 32-character hexadecimal identifiers are preserved without false-positive token classification.
+2. **Alphabetical Lock Ordering Protocol**:
    - All referenced and displacing attachment tokens are collected and deduplicated.
    - Tokens are acquired and locked in stable alphabetical order (`ORDER BY token ASC`) inside a PostgreSQL transaction (`SELECT token, is_public, patient_id FROM secure_attachment WHERE token = ANY(...) FOR UPDATE`).
    - Newly bound tokens are validated: must exist, must have `is_public = true`, and must have empty `patient_id` (rejecting clinical records with `ErrValidation` / 422).
    - If any bound token does not exist in `secure_attachment`, the transaction immediately aborts with `ErrNotFound` (404), preventing dangling image URLs from ever persisting.
-2. **Atomic Displacement & Reference Verification**:
+3. **Atomic Displacement & Reference Verification**:
    - Previous setting values are read under `FOR UPDATE`.
    - Setting rows are updated atomically within the transaction.
    - For any token displaced by the update, the transaction verifies that no active setting in either `hospital_general_setting` or `front_cms_setting` still references the token before marking it for retirement.
    - If no references remain, the attachment row is deleted from `secure_attachment` under the held lock, and the disk file removal is dispatched.
-3. **Single-Item Method Coordination**:
+4. **Single-Item Method Coordination**:
    - Single-item persistence methods (`UpdateGeneralSetting`, `UpdateFrontCMSSetting`) delegate directly through the unified batch transaction methods to guarantee identical row-locking, validation, and displaced-token cleanup semantics.
 
 ### 5.3 Operational Abandoned Attachment Cleanup (R1b)
@@ -122,9 +125,11 @@ Assets uploaded without being saved into settings or displaced before completion
 1. **Cleanup Semantics (`CleanupAbandonedAttachments`)**:
    - Targets only public, non-clinical attachments (`is_public = true AND (patient_id IS NULL OR patient_id = '')`).
    - Enforces an age threshold (`created_at < NOW() - older_than`, default 24h).
-   - Bounded work per run: `LIMIT 100` with non-blocking concurrency: `ORDER BY token ASC FOR UPDATE SKIP LOCKED`.
-   - Under the held row lock, verifies `NOT EXISTS` across both `hospital_general_setting` and `front_cms_setting` before deleting database records and returning tokens for disk file removal.
-2. **Observable Error Handling**:
+   - Pre-filters candidate tokens using `NOT EXISTS` across both `hospital_general_setting` and `front_cms_setting` before applying `LIMIT 100`, preventing referenced assets from permanently occupying candidate slots.
+   - Bounded work per run: `LIMIT 100` with non-blocking concurrency: `ORDER BY sa.token ASC FOR UPDATE OF sa SKIP LOCKED`.
+   - Under the held row lock, re-verifies reference status across settings tables before deleting records and dispatching disk file removals.
+2. **Observable Error Handling & Audit Identity**:
+   - Worker resolves active administrators from `staff_access` joined with `"user"` for audit event recording (`actor_id = admin.ID`), visibly logging and exiting on missing administrators.
    - Both operational cleanup file removal (`RunOperationalAttachmentCleanup`) and direct retirement (`RetireAttachment`) log disk removal failures using structured logging (`log.Printf`) rather than discarding errors.
 3. **Operational Invocation Channels**:
    - **Administrative REST Endpoint**:

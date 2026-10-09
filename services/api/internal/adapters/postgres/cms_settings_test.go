@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1186,6 +1190,243 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			docHttpHandler.ServeHTTP(docRec, docReq)
 			if docRec.Code != http.StatusForbidden {
 				t.Fatalf("expected HTTP 403 Forbidden for non-admin cleanup, got %d: %s", docRec.Code, docRec.Body.String())
+			}
+		}
+
+		// 13. L1: Ordinary setting content, provider keys, and remote URLs containing 32-hex strings are NOT mistaken for attachments
+		{
+			hex32 := "0123456789abcdef0123456789abcdef"
+			// A. UpdateGeneralSettings with ordinary text containing 32-hex
+			ordinaryText := "Reference " + hex32 + " for hospital information"
+			err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"about_us":            ordinaryText,
+				"hospital_address":    "Central Street " + hex32,
+				"stripe_key":          "pk_test_" + hex32,
+				"phonepe_merchant_id": hex32,
+				"facebook_url":        "https://cdn.example.com/assets/logo_" + hex32 + ".png",
+				"twitter_url":         "https://external.example.com/attachments/" + hex32 + "/content",
+			})
+			if err != nil {
+				t.Fatalf("expected successful save of ordinary text, provider keys, and external URLs containing 32-hex, got: %v", err)
+			}
+
+			// Verify values were persisted unchanged
+			rawSettings, err := store.GeneralSettings(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rawSettings["about_us"] != ordinaryText {
+				t.Fatalf("expected about_us to match, got %s", rawSettings["about_us"])
+			}
+			if rawSettings["stripe_key"] != "pk_test_"+hex32 {
+				t.Fatalf("expected stripe_key to match, got %s", rawSettings["stripe_key"])
+			}
+			if rawSettings["phonepe_merchant_id"] != hex32 {
+				t.Fatalf("expected phonepe_merchant_id to match, got %s", rawSettings["phonepe_merchant_id"])
+			}
+			if rawSettings["facebook_url"] != "https://cdn.example.com/assets/logo_"+hex32+".png" {
+				t.Fatalf("expected facebook_url to match, got %s", rawSettings["facebook_url"])
+			}
+			if rawSettings["twitter_url"] != "https://external.example.com/attachments/"+hex32+"/content" {
+				t.Fatalf("expected twitter_url to match, got %s", rawSettings["twitter_url"])
+			}
+
+			// B. Front CMS with ordinary text containing 32-hex
+			err = cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+				{Key: "home_page_title", Value: "Welcome to Hospital (" + hex32 + ")", Type: "home"},
+				{Key: "home_page_description", Value: "https://photos.external.com/banner_" + hex32 + ".jpg", Type: "home"},
+			})
+			if err != nil {
+				t.Fatalf("expected front CMS to save ordinary text and remote URLs containing 32-hex, got: %v", err)
+			}
+
+			// C. Dedicated attachment field (app_logo) with genuine attachment URL binds and validates properly
+			validAtt, err := attSrv.UploadPublic(ctx, admin, "valid_logo.png", pngDataA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			validURL := "/v1/attachments/" + validAtt.Token + "/content"
+			err = cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": validURL,
+			})
+			if err != nil {
+				t.Fatalf("expected valid attachment URL to bind successfully, got: %v", err)
+			}
+
+			// D. Dedicated attachment field (app_logo) with nonexistent attachment URL fails with ErrNotFound
+			nonexistentURL := "/v1/attachments/ffffffffffffffffffffffffffffffff/content"
+			err = cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": nonexistentURL,
+			})
+			if !errors.Is(err, domain.ErrNotFound) {
+				t.Fatalf("expected ErrNotFound for nonexistent attachment URL, got: %v", err)
+			}
+			// Verify nonexistent URL was NOT persisted
+			rawSettings, _ = store.GeneralSettings(ctx)
+			if rawSettings["app_logo"] == nonexistentURL {
+				t.Fatal("broken attachment URL was improperly persisted")
+			}
+		}
+
+		// 14. L3: More-than-100 fixtures progress across cleanup runs without starvation
+		{
+			// Seed 105 aged public non-clinical attachments in ascending order
+			var bulkTokens []string
+			for i := 0; i < 105; i++ {
+				tok := fmt.Sprintf("bulk_%04d_%s", i, strings.Repeat("0", 22))
+				id := fmt.Sprintf("00000000-0000-0000-0000-%012d", i+1000)
+				storagePath, err := files.Put(ctx, pngDataA)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				_, err = db.Exec(ctx, `
+					INSERT INTO secure_attachment (id, token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, created_at)
+					VALUES ($1, $2, $3, 'image/png', 68, $4, $5, $6, true, clock_timestamp() - interval '48 hours')
+					ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token, storage_path = EXCLUDED.storage_path, created_at = EXCLUDED.created_at
+				`, id, tok, fmt.Sprintf("bulk_%04d.png", i), storagePath, strings.Repeat("f", 64), admin.ID)
+				if err != nil {
+					t.Fatalf("failed to insert bulk fixture %d: %v", i, err)
+				}
+				bulkTokens = append(bulkTokens, tok)
+			}
+
+			// Reference the first 100 attachments in front_cms_setting
+			cmsInputs := make([]domain.FrontCMSSettingInput, 100)
+			for i := 0; i < 100; i++ {
+				cmsInputs[i] = domain.FrontCMSSettingInput{
+					Key:   fmt.Sprintf("bulk_cms_ref_%04d", i),
+					Value: "/v1/attachments/" + bulkTokens[i] + "/content",
+					Type:  "bulk",
+				}
+			}
+			if err := cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, cmsInputs); err != nil {
+				t.Fatalf("failed to reference first 100 bulk attachments: %v", err)
+			}
+
+			// Tokens bulkTokens[100..104] (5 attachments) are unreferenced orphans.
+			// Run operational cleanup: with candidate pre-filtering, the referenced 100 tokens
+			// do NOT monopolize the batch. The 5 unreferenced orphans must be cleaned up!
+			cleanedCount, err := cmsWithFiles.RunOperationalAttachmentCleanup(ctx, admin, 24*time.Hour)
+			if err != nil {
+				t.Fatalf("operational cleanup failed on >100 fixture set: %v", err)
+			}
+			if cleanedCount < 5 {
+				t.Fatalf("expected at least 5 unreferenced orphans to be cleaned, got %d", cleanedCount)
+			}
+
+			// Verify the 5 unreferenced orphans were deleted
+			for i := 100; i < 105; i++ {
+				var exists bool
+				_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token = $1)`, bulkTokens[i]).Scan(&exists)
+				if exists {
+					t.Fatalf("orphan %s was NOT deleted; referenced assets blocked cleanup", bulkTokens[i])
+				}
+			}
+
+			// Verify all 100 referenced assets remain intact in secure_attachment
+			for i := 0; i < 100; i++ {
+				var exists bool
+				_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token = $1)`, bulkTokens[i]).Scan(&exists)
+				if !exists {
+					t.Fatalf("referenced asset %s was mistakenly deleted", bulkTokens[i])
+				}
+			}
+		}
+
+		// 15. L2: Real Worker CLI execution against isolated schema & missing-actor failure
+		{
+			workerBinPath, err := filepath.Abs("../../../bin/worker.exe")
+			if err != nil || !func() bool { _, e := os.Stat(workerBinPath); return e == nil }() {
+				// Build worker binary if needed
+				buildCmd := exec.Command("go", "build", "-o", "../../../bin/worker.exe", "../../../cmd/worker")
+				if out, err := buildCmd.CombinedOutput(); err != nil {
+					t.Fatalf("failed to build worker binary for CLI test: %v, out: %s", err, string(out))
+				}
+				workerBinPath, _ = filepath.Abs("../../../bin/worker.exe")
+			}
+
+			dbURL := os.Getenv("DATABASE_URL")
+			if dbURL == "" {
+				t.Skip("DATABASE_URL not set; skipping worker CLI exec test")
+			}
+
+			// Case A: Successful worker execution with active admin in staff_access
+			orphanTok := "cli_orphan_0123456789abcdef012345"
+			orphanID := "99999999-9999-9999-9999-999999999999"
+			orphanPath, err := files.Put(ctx, pngDataA)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = db.Exec(ctx, `
+				INSERT INTO secure_attachment (id, token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, created_at)
+				VALUES ($1, $2, 'orphan.png', 'image/png', 68, $3, $4, $5, true, clock_timestamp() - interval '48 hours')
+				ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token, storage_path = EXCLUDED.storage_path, created_at = EXCLUDED.created_at
+			`, orphanID, orphanTok, orphanPath, strings.Repeat("c", 64), admin.ID)
+			if err != nil {
+				t.Fatalf("failed to seed worker CLI orphan fixture: %v", err)
+			}
+
+			// Run real worker binary with -cleanup-attachments
+			cmd := exec.Command(workerBinPath, "-cleanup-attachments", "-older-than=24h")
+			cmd.Env = append(os.Environ(), "DATABASE_URL="+dbURL)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("worker -cleanup-attachments failed with error: %v, output: %s", err, string(out))
+			}
+
+			// Verify orphan was deleted from secure_attachment
+			var orphanExists bool
+			_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token = $1)`, orphanTok).Scan(&orphanExists)
+			if orphanExists {
+				t.Fatal("worker CLI failed to delete aged orphan attachment")
+			}
+
+			// Verify audit_event has valid admin actor_id (not empty string!)
+			var auditActorID string
+			err = db.QueryRow(ctx, `
+				SELECT actor_id FROM audit_event
+				WHERE action = 'attachment.retired' AND resource_id = $1
+				ORDER BY created_at DESC LIMIT 1
+			`, orphanTok).Scan(&auditActorID)
+			if err != nil {
+				t.Fatalf("failed to find audit event for worker deletion: %v", err)
+			}
+			if auditActorID == "" || auditActorID != admin.ID {
+				t.Fatalf("expected audit_event actor_id to be valid admin ID %q, got %q", admin.ID, auditActorID)
+			}
+
+			// Case B: No-eligible-actor failure (when no active admin exists in staff_access)
+			noAdminSchema := "test_no_admin_" + strings.ReplaceAll(admin.ID, "-", "_")
+			_, err = db.Exec(ctx, fmt.Sprintf(`
+				CREATE SCHEMA IF NOT EXISTS %s;
+				CREATE TABLE IF NOT EXISTS %s."user" (id text PRIMARY KEY, name text, email text);
+				CREATE TABLE IF NOT EXISTS %s.staff_access (user_id text, role text, active boolean);
+				INSERT INTO %s."user"(id, name, email) VALUES('doc-only', 'Doctor NonAdmin', 'doc@test.local') ON CONFLICT DO NOTHING;
+				INSERT INTO %s.staff_access(user_id, role, active) VALUES('doc-only', 'doctor', true);
+			`, noAdminSchema, noAdminSchema, noAdminSchema, noAdminSchema, noAdminSchema))
+			if err != nil {
+				t.Fatalf("failed to setup isolated no-admin schema: %v", err)
+			}
+			defer func() {
+				_, _ = db.Exec(ctx, fmt.Sprintf(`DROP SCHEMA IF EXISTS %s CASCADE`, noAdminSchema))
+			}()
+
+			// Run worker binary pointing to the no-admin schema search path
+			sep := "?"
+			if strings.Contains(dbURL, "?") {
+				sep = "&"
+			}
+			noAdminURL := dbURL + sep + "search_path=" + noAdminSchema
+			cmdNoAdmin := exec.Command(workerBinPath, "-cleanup-attachments")
+			cmdNoAdmin.Env = append(os.Environ(), "DATABASE_URL="+noAdminURL)
+			outNoAdmin, errNoAdmin := cmdNoAdmin.CombinedOutput()
+			if errNoAdmin == nil {
+				t.Fatalf("expected worker CLI to exit with error when no active admin exists, got success. Output: %s", string(outNoAdmin))
+			}
+			if !strings.Contains(string(outNoAdmin), "missing administrative audit actor") && !strings.Contains(string(outNoAdmin), "no active administrator found") {
+				t.Fatalf("expected output to mention missing administrator, got: %s", string(outNoAdmin))
 			}
 		}
 	})
