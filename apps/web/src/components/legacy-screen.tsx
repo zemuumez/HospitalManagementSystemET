@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
+import { SETTINGS_TABS } from "./settings-workspace";
 import {
   ArrowDownUp,
   BedDouble,
@@ -400,6 +402,19 @@ export function LegacyScreen({
           : ["Overview"];
   return (
     <section>
+      {s.group === "Settings" && (
+        <div className="module-subtabs-nav">
+          {SETTINGS_TABS.map((tab) => (
+            <Link
+              key={tab.id}
+              href={tab.href}
+              className={`module-subtab-link ${s.id === tab.id ? "active" : ""}`}
+            >
+              {t(tab.label)}
+            </Link>
+          ))}
+        </div>
+      )}
       <div className="page-heading">
         <h1>{t(s.title)}</h1>
         <div className="flex gap-2">

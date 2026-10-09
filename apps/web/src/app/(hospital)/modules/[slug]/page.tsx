@@ -29,6 +29,7 @@ import { notFound } from "next/navigation";
 import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
 import { LegacyExtras } from "@/components/legacy-extras";
+import { SettingsWorkspace } from "@/components/settings-workspace";
 export default async function ModulePage({
   params,
 }: {
@@ -190,10 +191,21 @@ export default async function ModulePage({
   if (slug === "appointments") return <ConnectedAppointments />;
   if (
     [
-      "front-settings",
       "settings",
+      "hospital-schedule",
       "modules-setting",
+      "currency-settings",
+      "operation-categories",
+      "operations",
+      "payment-gateway",
+      "add-custom-fields",
       "patient-queue-theme",
+      "front-settings",
+    ].includes(slug)
+  )
+    return <SettingsWorkspace key={slug} id={slug} />;
+  if (
+    [
       "attendance",
       "manage-attendance",
       "patient-id-card-template",

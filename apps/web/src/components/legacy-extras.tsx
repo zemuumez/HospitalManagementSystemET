@@ -11,6 +11,7 @@ import {
   GENERAL_KEY,
 } from "@/lib/front-settings";
 import { groups, people } from "@/lib/legacy";
+import { SettingsWorkspace } from "./settings-workspace";
 
 export const extraScreens = [
   "front-settings",
@@ -23,10 +24,13 @@ export const extraScreens = [
   "generate-patient-id-card",
 ];
 export function LegacyExtras({ id }: { id: string }) {
-  if (id === "front-settings" || id === "settings")
-    return <SettingsForm cms={id === "front-settings"} />;
-  if (id === "modules-setting") return <ModulesSettings />;
-  if (id === "patient-queue-theme") return <QueueTheme />;
+  if (
+    id === "front-settings" ||
+    id === "settings" ||
+    id === "modules-setting" ||
+    id === "patient-queue-theme"
+  )
+    return <SettingsWorkspace id={id} />;
   if (id === "attendance" || id === "manage-attendance")
     return <Attendance manage={id === "manage-attendance"} />;
   return <SmartCards templates={id === "patient-id-card-template"} />;
