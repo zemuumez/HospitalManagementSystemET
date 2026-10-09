@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -645,7 +646,7 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 		authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"user": map[string]any{"id": admin.ID},
+				"user":    map[string]any{"id": admin.ID},
 				"session": map[string]any{"userId": admin.ID, "expiresAt": time.Now().Add(time.Hour)},
 			})
 		}))
@@ -674,7 +675,8 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 	})
 
 	t.Run("S4: attachment retirement on settings update & 404 on retired token", func(t *testing.T) {
-		files, err := privatefiles.New(t.TempDir())
+		attachmentRoot := t.TempDir()
+		files, err := privatefiles.New(attachmentRoot)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1336,20 +1338,31 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 
 		// 15. L2: Real Worker CLI execution against isolated schema & missing-actor failure
 		{
-			workerBinPath, err := filepath.Abs("../../../bin/worker.exe")
-			if err != nil || !func() bool { _, e := os.Stat(workerBinPath); return e == nil }() {
-				// Build worker binary if needed
-				buildCmd := exec.Command("go", "build", "-o", "../../../bin/worker.exe", "../../../cmd/worker")
+			workerBinPath := filepath.Join(t.TempDir(), "worker.exe")
+			{
+				// Always build this checkout; never reuse a stale repository binary.
+				buildCmd := exec.Command("go", "build", "-o", workerBinPath, "../../../cmd/worker")
 				if out, err := buildCmd.CombinedOutput(); err != nil {
 					t.Fatalf("failed to build worker binary for CLI test: %v, out: %s", err, string(out))
 				}
-				workerBinPath, _ = filepath.Abs("../../../bin/worker.exe")
 			}
 
-			dbURL := os.Getenv("DATABASE_URL")
-			if dbURL == "" {
-				t.Skip("DATABASE_URL not set; skipping worker CLI exec test")
+			dbURL := db.Config().ConnString()
+			var isolatedSchema string
+			if err := db.QueryRow(ctx, `SELECT current_schema()`).Scan(&isolatedSchema); err != nil {
+				t.Fatal(err)
 			}
+			if !strings.HasPrefix(isolatedSchema, "hms_test_") {
+				t.Fatal("worker test requires isolated schema")
+			}
+			workerURL, err := url.Parse(dbURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			workerQuery := workerURL.Query()
+			workerQuery.Set("search_path", isolatedSchema)
+			workerURL.RawQuery = workerQuery.Encode()
+			dbURL = workerURL.String()
 
 			// Case A: Successful worker execution with active admin in staff_access
 			orphanTok := "cli_orphan_0123456789abcdef012345"
@@ -1370,7 +1383,7 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 
 			// Run real worker binary with -cleanup-attachments
 			cmd := exec.Command(workerBinPath, "-cleanup-attachments", "-older-than=24h")
-			cmd.Env = append(os.Environ(), "DATABASE_URL="+dbURL)
+			cmd.Env = append(os.Environ(), "DATABASE_URL="+dbURL, "HMS_ATTACHMENT_DIR="+attachmentRoot)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("worker -cleanup-attachments failed with error: %v, output: %s", err, string(out))
@@ -1414,11 +1427,14 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			}()
 
 			// Run worker binary pointing to the no-admin schema search path
-			sep := "?"
-			if strings.Contains(dbURL, "?") {
-				sep = "&"
+			parsedURL, err := url.Parse(dbURL)
+			if err != nil {
+				t.Fatal(err)
 			}
-			noAdminURL := dbURL + sep + "search_path=" + noAdminSchema
+			query := parsedURL.Query()
+			query.Set("search_path", noAdminSchema)
+			parsedURL.RawQuery = query.Encode()
+			noAdminURL := parsedURL.String()
 			cmdNoAdmin := exec.Command(workerBinPath, "-cleanup-attachments")
 			cmdNoAdmin.Env = append(os.Environ(), "DATABASE_URL="+noAdminURL)
 			outNoAdmin, errNoAdmin := cmdNoAdmin.CombinedOutput()
