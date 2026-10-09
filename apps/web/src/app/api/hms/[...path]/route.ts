@@ -41,6 +41,7 @@ const allowedRoot = new Set([
   "insurances-export",
   "operations",
   "operation-categories",
+  "custom-fields",
   "pathology-categories",
   "pathology-units",
   "pathology-parameters",

@@ -360,7 +360,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
                     .map((s) => (
                       <Link
                         key={s.id}
-                        className={selected?.id === s.id ? "active" : ""}
+                        className={`${selected?.id === s.id ? "active" : ""} module-subtab-link`.trim()}
                         href={screenHref(s)}
                       >
                         {t(s.title)}

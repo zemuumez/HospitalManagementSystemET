@@ -15,6 +15,9 @@ import {
   ShieldAlert,
   Eye,
   EyeOff,
+  Plus,
+  X,
+  Filter,
 } from "lucide-react";
 
 export const SETTINGS_TABS = [
@@ -81,24 +84,11 @@ export function SettingsWorkspace({ id }: { id: string }) {
   const { t } = useLanguage();
   const identity = useIdentity();
   const isAdmin = identity?.user?.role === "admin";
-  const isFrontCms = id === "front-settings";
-  const tabs = isFrontCms ? FRONT_CMS_TABS : SETTINGS_TABS;
 
   // Non-admin rejection banner
   if (identity && !isAdmin) {
     return (
       <div className="legacy-workspace" data-ready="true">
-        <div className="module-subtabs-nav">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.id}
-              href={tab.href}
-              className={`module-subtab-link ${id === tab.id ? "active" : ""}`}
-            >
-              {t(tab.label)}
-            </Link>
-          ))}
-        </div>
         <div
           className="legacy-card p-6"
           style={{ borderColor: "#ef4444", borderLeftWidth: 4 }}
@@ -124,23 +114,14 @@ export function SettingsWorkspace({ id }: { id: string }) {
 
   return (
     <div className="legacy-workspace" data-ready="true">
-      <div className="module-subtabs-nav">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.id}
-            href={tab.href}
-            className={`module-subtab-link ${id === tab.id ? "active" : ""}`}
-          >
-            {t(tab.label)}
-          </Link>
-        ))}
-      </div>
-
       {id === "settings" && <GeneralSettingsTab />}
       {id === "hospital-schedule" && <HospitalScheduleTab />}
       {id === "modules-setting" && <ModulesSettingTab />}
       {id === "currency-settings" && <CurrencySettingsTab />}
+      {id === "operation-categories" && <OperationCategoriesTab />}
+      {id === "operations" && <OperationsTab />}
       {id === "payment-gateway" && <PaymentGatewayTab />}
+      {id === "add-custom-fields" && <CustomFieldsTab />}
       {id === "patient-queue-theme" && <PatientQueueThemeTab />}
       {id === "front-settings" && <FrontCmsSettingsTab />}
     </div>
@@ -632,13 +613,16 @@ function GeneralSettingsTab() {
               <img
                 src={form.app_logo || "/legacy/hms-logo.png"}
                 alt="App Logo Preview"
+                className="setting-preview-img rounded p-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 object-contain"
                 style={{
                   width: 90,
                   height: 50,
-                  objectFit: "contain",
-                  background: "#1e2433",
-                  borderRadius: 6,
-                  padding: 4,
+                }}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.src.endsWith("/legacy/hms-logo.png")) {
+                    target.src = "/legacy/hms-logo.png";
+                  }
                 }}
               />
               <button
@@ -681,15 +665,18 @@ function GeneralSettingsTab() {
           <div className="flex items-center gap-4 mt-2">
             <span className="setting-image-picker relative inline-block">
               <img
-                src={form.favicon || "/legacy/hms-logo.png"}
+                src={form.favicon || "/favicon.ico"}
                 alt="Favicon Preview"
+                className="setting-preview-img rounded p-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 object-contain"
                 style={{
                   width: 40,
                   height: 40,
-                  objectFit: "contain",
-                  background: "#1e2433",
-                  borderRadius: 6,
-                  padding: 4,
+                }}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.src.endsWith("/favicon.png")) {
+                    target.src = "/favicon.png";
+                  }
                 }}
               />
               <button
@@ -1024,7 +1011,7 @@ function HospitalScheduleTab() {
           {days.map((d, i) => (
             <div
               key={d.day_name}
-              className="flex items-center gap-4 p-3 rounded border border-gray-800 bg-[#161c28]"
+              className="flex items-center gap-4 p-3 rounded border border-slate-200 dark:border-gray-800 bg-slate-50/60 dark:bg-[#161c28]"
             >
               <label className="flex items-center gap-2 min-w-[140px] cursor-pointer">
                 <input
@@ -1036,7 +1023,9 @@ function HospitalScheduleTab() {
                 />
                 <span
                   className={
-                    d.is_closed ? "text-muted" : "font-medium text-white"
+                    d.is_closed
+                      ? "text-muted"
+                      : "font-medium text-slate-900 dark:text-white"
                   }
                 >
                   {t(d.day_name)}
@@ -1222,10 +1211,10 @@ function ModulesSettingTab() {
           <div
             key={key}
             data-module-key={key}
-            className="flex items-center justify-between p-3.5 rounded border border-gray-800 bg-[#161c28]"
+            className="flex items-center justify-between p-3.5 rounded border border-slate-200 dark:border-gray-800 bg-slate-50/60 dark:bg-[#161c28]"
           >
             <div>
-              <span className="font-medium text-white block">
+              <span className="font-medium text-slate-900 dark:text-white block">
                 {t(ms.name || key)}
               </span>
               <span className="text-xs text-muted font-mono">{key}</span>
@@ -1353,11 +1342,20 @@ function CurrencySettingsTab() {
             {CURRENCY_LIST.map((c) => {
               const isCurrent = activeCurrency === c.code;
               return (
-                <tr key={c.code} className={isCurrent ? "bg-blue-900/10" : ""}>
-                  <td className="font-medium text-white">{t(c.name)}</td>
-                  <td className="font-semibold text-blue-400">{c.symbol}</td>
+                <tr
+                  key={c.code}
+                  className={
+                    isCurrent ? "bg-blue-50/70 dark:bg-blue-900/20" : ""
+                  }
+                >
+                  <td className="font-medium text-slate-900 dark:text-white">
+                    {t(c.name)}
+                  </td>
+                  <td className="font-semibold text-blue-600 dark:text-blue-400">
+                    {c.symbol}
+                  </td>
                   <td>
-                    <span className="font-mono text-sm px-2 py-0.5 rounded bg-gray-800 border border-gray-700">
+                    <span className="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 dark:bg-gray-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-gray-700">
                       {c.code}
                     </span>
                   </td>
@@ -1531,8 +1529,8 @@ function PaymentGatewayTab() {
 
       <form onSubmit={handleSave} className="flex flex-col gap-8" noValidate>
         {/* Stripe Section */}
-        <div className="border border-gray-800 rounded-lg p-5 bg-[#141a24]">
-          <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="border border-slate-200 dark:border-gray-800 rounded-lg p-5 bg-slate-50/60 dark:bg-[#141a24]">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
             <span>Stripe</span>
           </h3>
           <div className="legacy-form">
@@ -1582,8 +1580,8 @@ function PaymentGatewayTab() {
         </div>
 
         {/* PayPal Section */}
-        <div className="border border-gray-800 rounded-lg p-5 bg-[#141a24]">
-          <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="border border-slate-200 dark:border-gray-800 rounded-lg p-5 bg-slate-50/60 dark:bg-[#141a24]">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
             <span>PayPal</span>
           </h3>
           <div className="legacy-form">
@@ -1643,8 +1641,8 @@ function PaymentGatewayTab() {
         </div>
 
         {/* Razorpay Section */}
-        <div className="border border-gray-800 rounded-lg p-5 bg-[#141a24]">
-          <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="border border-slate-200 dark:border-gray-800 rounded-lg p-5 bg-slate-50/60 dark:bg-[#141a24]">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
             <span>Razorpay</span>
           </h3>
           <div className="legacy-form">
@@ -1691,8 +1689,8 @@ function PaymentGatewayTab() {
         </div>
 
         {/* Flutterwave Section */}
-        <div className="border border-gray-800 rounded-lg p-5 bg-[#141a24]">
-          <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="border border-slate-200 dark:border-gray-800 rounded-lg p-5 bg-slate-50/60 dark:bg-[#141a24]">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
             <span>Flutterwave</span>
           </h3>
           <div className="legacy-form">
@@ -1743,8 +1741,8 @@ function PaymentGatewayTab() {
         </div>
 
         {/* PhonePe Section */}
-        <div className="border border-gray-800 rounded-lg p-5 bg-[#141a24]">
-          <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="border border-slate-200 dark:border-gray-800 rounded-lg p-5 bg-slate-50/60 dark:bg-[#141a24]">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
             <span>PhonePe</span>
           </h3>
           <div className="legacy-form">
@@ -1802,8 +1800,8 @@ function PaymentGatewayTab() {
         </div>
 
         {/* Paystack Section */}
-        <div className="border border-gray-800 rounded-lg p-5 bg-[#141a24]">
-          <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+        <div className="border border-slate-200 dark:border-gray-800 rounded-lg p-5 bg-slate-50/60 dark:bg-[#141a24]">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
             <span>Paystack</span>
           </h3>
           <div className="legacy-form">
@@ -2025,7 +2023,7 @@ function PatientQueueThemeTab() {
         </label>
 
         {/* Live Preview Box */}
-        <div className="form-span mt-4 p-5 rounded-lg border border-gray-800 bg-[#141a24]">
+        <div className="form-span mt-4 p-5 rounded-lg border border-slate-200 dark:border-gray-800 bg-slate-50/60 dark:bg-[#141a24]">
           <span className="text-xs uppercase tracking-wider text-muted font-semibold block mb-2">
             {t("Live Display Preview")}
           </span>
@@ -2426,6 +2424,1014 @@ function FrontCmsSettingsTab() {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 8. Operation Categories Tab
+// ---------------------------------------------------------------------------
+
+function OperationCategoriesTab() {
+  const { t } = useLanguage();
+  const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [successNotice, setSuccessNotice] = useState("");
+  const [errorNotice, setErrorNotice] = useState("");
+
+  const loadData = () => {
+    setLoading(true);
+    api<any>("operation-categories")
+      .then((res) => {
+        const list = res?.operation_categories || res || [];
+        setCategories(Array.isArray(list) ? list : []);
+      })
+      .catch((err) =>
+        setErrorNotice(err.message || "Failed to load operation categories."),
+      )
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nameInput.trim()) {
+      setErrorNotice("Category name is required.");
+      return;
+    }
+    setSubmitting(true);
+    setErrorNotice("");
+    setSuccessNotice("");
+    try {
+      await api("operation-categories", {
+        method: "POST",
+        body: JSON.stringify({ name: nameInput.trim() }),
+      });
+      setSuccessNotice("Operation category created successfully.");
+      setNameInput("");
+      setModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      setErrorNotice(err.message || "Failed to create operation category.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (
+      !window.confirm(
+        t("Are you sure you want to delete this operation category?"),
+      )
+    )
+      return;
+    setErrorNotice("");
+    setSuccessNotice("");
+    try {
+      await api(`operation-categories/${id}`, { method: "DELETE" });
+      setSuccessNotice(`Operation category "${name}" deleted successfully.`);
+      loadData();
+    } catch (err: any) {
+      setErrorNotice(
+        err.message ||
+          "Failed to delete operation category. It may be in use by active operations.",
+      );
+    }
+  };
+
+  const filtered = categories.filter((c) =>
+    (c.name || "").toLowerCase().includes(search.toLowerCase()),
+  );
+
+  return (
+    <div className="legacy-card">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-lg font-semibold m-0">
+            {t("Operation Categories")}
+          </h2>
+          <p className="text-muted text-sm mt-1">
+            {t("Manage surgical and procedural category classifications.")}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-action-blue flex items-center gap-1.5"
+          onClick={() => {
+            setNameInput("");
+            setErrorNotice("");
+            setModalOpen(true);
+          }}
+        >
+          <Plus size={16} />
+          {t("New Operation Category")}
+        </button>
+      </div>
+
+      {successNotice && (
+        <div
+          className="alert-notice p-3 mb-4 rounded border flex items-center gap-2"
+          style={{
+            backgroundColor: "rgba(34, 197, 94, 0.1)",
+            borderColor: "#22c55e",
+            color: "#22c55e",
+          }}
+          role="status"
+        >
+          <CheckCircle2 size={18} />
+          <span>{t(successNotice)}</span>
+        </div>
+      )}
+
+      {errorNotice && (
+        <div
+          className="alert-notice p-3 mb-4 rounded border flex items-center gap-2"
+          style={{
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            borderColor: "#ef4444",
+            color: "#ef4444",
+          }}
+          role="alert"
+        >
+          <AlertCircle size={18} />
+          <span>{t(errorNotice)}</span>
+        </div>
+      )}
+
+      <div className="table-toolbar mb-4 flex justify-between gap-4">
+        <div className="table-search">
+          <input
+            type="text"
+            placeholder={t("Search categories...")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="legacy-table w-full">
+          <thead>
+            <tr>
+              <th>{t("Name")}</th>
+              <th className="text-right">{t("Action")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={2} className="text-center py-6 text-muted">
+                  {t("Loading operation categories...")}
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={2} className="text-center py-6 text-muted">
+                  {t("No operation categories found.")}
+                </td>
+              </tr>
+            ) : (
+              filtered.map((cat) => (
+                <tr key={cat.id}>
+                  <td className="font-medium text-slate-900 dark:text-white">
+                    {cat.name}
+                  </td>
+                  <td className="text-right">
+                    <button
+                      type="button"
+                      className="text-red-500 hover:text-red-400 p-1 rounded inline-flex items-center"
+                      title={t("Delete")}
+                      onClick={() => handleDelete(cat.id, cat.name)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl max-w-md w-full border border-slate-200 dark:border-slate-800 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold m-0 text-slate-900 dark:text-white">
+                {t("New Operation Category")}
+              </h3>
+              <button
+                type="button"
+                className="text-muted hover:text-slate-900 dark:hover:text-white"
+                onClick={() => setModalOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreate}>
+              <div className="mb-4">
+                <label className="label block mb-1">
+                  {t("Name")}: <b className="text-red-500">*</b>
+                </label>
+                <input
+                  className="field"
+                  type="text"
+                  required
+                  placeholder={t("Enter category name")}
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  className="btn-action-gray px-4 py-2"
+                  onClick={() => setModalOpen(false)}
+                  disabled={submitting}
+                >
+                  {t("Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  className="btn-action-blue px-4 py-2"
+                  disabled={submitting}
+                >
+                  {submitting ? t("Saving...") : t("Save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 9. Operations Tab
+// ---------------------------------------------------------------------------
+
+function OperationsTab() {
+  const { t } = useLanguage();
+  const [operations, setOperations] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingOp, setEditingOp] = useState<any | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    operation_category_id: "",
+    description: "",
+    status: 1,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [successNotice, setSuccessNotice] = useState("");
+  const [errorNotice, setErrorNotice] = useState("");
+
+  const loadData = () => {
+    setLoading(true);
+    Promise.all([api<any>("operations"), api<any>("operation-categories")])
+      .then(([opsRes, catsRes]) => {
+        const ops = opsRes?.operations || opsRes || [];
+        const cats = catsRes?.operation_categories || catsRes || [];
+        setOperations(Array.isArray(ops) ? ops : []);
+        setCategories(Array.isArray(cats) ? cats : []);
+      })
+      .catch((err) =>
+        setErrorNotice(err.message || "Failed to load operations."),
+      )
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const openCreateModal = () => {
+    setEditingOp(null);
+    setForm({
+      name: "",
+      operation_category_id: categories[0]?.id || "",
+      description: "",
+      status: 1,
+    });
+    setErrorNotice("");
+    setModalOpen(true);
+  };
+
+  const openEditModal = (op: any) => {
+    setEditingOp(op);
+    setForm({
+      name: op.name || "",
+      operation_category_id: op.operation_category_id || "",
+      description: op.description || "",
+      status: op.status ?? 1,
+    });
+    setErrorNotice("");
+    setModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setErrorNotice("Operation name is required.");
+      return;
+    }
+    if (!form.operation_category_id) {
+      setErrorNotice("Operation category is required.");
+      return;
+    }
+    setSubmitting(true);
+    setErrorNotice("");
+    setSuccessNotice("");
+    try {
+      if (editingOp) {
+        await api(`operations/${editingOp.id}`, {
+          method: "PUT",
+          body: JSON.stringify(form),
+        });
+        setSuccessNotice("Operation updated successfully.");
+      } else {
+        await api("operations", {
+          method: "POST",
+          body: JSON.stringify(form),
+        });
+        setSuccessNotice("Operation created successfully.");
+      }
+      setModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      setErrorNotice(err.message || "Failed to save operation.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(t("Are you sure you want to delete this operation?")))
+      return;
+    setErrorNotice("");
+    setSuccessNotice("");
+    try {
+      await api(`operations/${id}`, { method: "DELETE" });
+      setSuccessNotice(`Operation "${name}" deleted successfully.`);
+      loadData();
+    } catch (err: any) {
+      setErrorNotice(err.message || "Failed to delete operation.");
+    }
+  };
+
+  const filtered = operations.filter((op) => {
+    if (categoryFilter && op.operation_category_id !== categoryFilter)
+      return false;
+    if (
+      search &&
+      !((op.name || "") + (op.description || ""))
+        .toLowerCase()
+        .includes(search.toLowerCase())
+    )
+      return false;
+    return true;
+  });
+
+  return (
+    <div className="legacy-card">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-lg font-semibold m-0">{t("Operations")}</h2>
+          <p className="text-muted text-sm mt-1">
+            {t(
+              "Manage surgical operations, procedures, and category assignments.",
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-action-blue flex items-center gap-1.5"
+          onClick={openCreateModal}
+        >
+          <Plus size={16} />
+          {t("New Operation")}
+        </button>
+      </div>
+
+      {successNotice && (
+        <div
+          className="alert-notice p-3 mb-4 rounded border flex items-center gap-2"
+          style={{
+            backgroundColor: "rgba(34, 197, 94, 0.1)",
+            borderColor: "#22c55e",
+            color: "#22c55e",
+          }}
+          role="status"
+        >
+          <CheckCircle2 size={18} />
+          <span>{t(successNotice)}</span>
+        </div>
+      )}
+
+      {errorNotice && (
+        <div
+          className="alert-notice p-3 mb-4 rounded border flex items-center gap-2"
+          style={{
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            borderColor: "#ef4444",
+            color: "#ef4444",
+          }}
+          role="alert"
+        >
+          <AlertCircle size={18} />
+          <span>{t(errorNotice)}</span>
+        </div>
+      )}
+
+      <div className="table-toolbar mb-4 flex flex-wrap justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="table-search">
+            <input
+              type="text"
+              placeholder={t("Search operations...")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="field max-w-[200px]"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="">{t("All Categories")}</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="legacy-table w-full">
+          <thead>
+            <tr>
+              <th>{t("Name")}</th>
+              <th>{t("Operation Category")}</th>
+              <th>{t("Description")}</th>
+              <th>{t("Status")}</th>
+              <th className="text-right">{t("Action")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="text-center py-6 text-muted">
+                  {t("Loading operations...")}
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-center py-6 text-muted">
+                  {t("No operations found.")}
+                </td>
+              </tr>
+            ) : (
+              filtered.map((op) => (
+                <tr key={op.id}>
+                  <td className="font-medium text-slate-900 dark:text-white">
+                    {op.name}
+                  </td>
+                  <td>
+                    {op.operation_category_name ||
+                      categories.find((c) => c.id === op.operation_category_id)
+                        ?.name ||
+                      "-"}
+                  </td>
+                  <td className="text-muted max-w-xs truncate">
+                    {op.description || "-"}
+                  </td>
+                  <td>
+                    {op.status === 1 ? (
+                      <span className="badge">{t("Active")}</span>
+                    ) : (
+                      <span className="badge muted">{t("Inactive")}</span>
+                    )}
+                  </td>
+                  <td className="text-right">
+                    <div className="row-actions justify-end">
+                      <button
+                        type="button"
+                        className="text-blue-500 hover:text-blue-400 p-1"
+                        title={t("Edit")}
+                        onClick={() => openEditModal(op)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-500 hover:text-red-400 p-1"
+                        title={t("Delete")}
+                        onClick={() => handleDelete(op.id, op.name)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl max-w-lg w-full border border-slate-200 dark:border-slate-800 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold m-0 text-slate-900 dark:text-white">
+                {editingOp ? t("Edit Operation") : t("New Operation")}
+              </h3>
+              <button
+                type="button"
+                className="text-muted hover:text-slate-900 dark:hover:text-white"
+                onClick={() => setModalOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div>
+                <label className="label block mb-1">
+                  {t("Name")}: <b className="text-red-500">*</b>
+                </label>
+                <input
+                  className="field"
+                  type="text"
+                  required
+                  placeholder={t("Enter operation name")}
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label block mb-1">
+                  {t("Operation Category")}: <b className="text-red-500">*</b>
+                </label>
+                <select
+                  className="field"
+                  required
+                  value={form.operation_category_id}
+                  onChange={(e) =>
+                    setForm({ ...form, operation_category_id: e.target.value })
+                  }
+                >
+                  <option value="" disabled>
+                    {t("Select Category")}
+                  </option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label block mb-1">{t("Description")}:</label>
+                <textarea
+                  className="field"
+                  rows={3}
+                  placeholder={t("Enter description (optional)")}
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm({ ...form, description: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="label block mb-1">{t("Status")}:</label>
+                <select
+                  className="field"
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm({ ...form, status: Number(e.target.value) })
+                  }
+                >
+                  <option value={1}>{t("Active")}</option>
+                  <option value={0}>{t("Inactive")}</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  type="button"
+                  className="btn-action-gray px-4 py-2"
+                  onClick={() => setModalOpen(false)}
+                  disabled={submitting}
+                >
+                  {t("Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  className="btn-action-blue px-4 py-2"
+                  disabled={submitting}
+                >
+                  {submitting ? t("Saving...") : t("Save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 10. Custom Fields Tab
+// ---------------------------------------------------------------------------
+
+function CustomFieldsTab() {
+  const { t } = useLanguage();
+  const [fields, setFields] = useState<any[]>([]);
+  const [moduleFilter, setModuleFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({
+    module_name: "patients",
+    field_type: "text",
+    field_name: "",
+    is_required: false,
+    values: "",
+    grid: 12,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [successNotice, setSuccessNotice] = useState("");
+  const [errorNotice, setErrorNotice] = useState("");
+
+  const MODULES = [
+    { value: "patients", label: "Patients" },
+    { value: "appointments", label: "Appointments" },
+    { value: "doctors", label: "Doctors" },
+    { value: "medicines", label: "Medicines" },
+    { value: "beds", label: "Beds" },
+    { value: "services", label: "Services" },
+  ];
+
+  const FIELD_TYPES = [
+    { value: "text", label: "Text" },
+    { value: "number", label: "Number" },
+    { value: "select", label: "Select Dropdown" },
+    { value: "date", label: "Date" },
+    { value: "boolean", label: "Boolean (Yes/No)" },
+    { value: "textarea", label: "Text Area" },
+  ];
+
+  const loadData = () => {
+    setLoading(true);
+    const query = moduleFilter
+      ? `?module=${encodeURIComponent(moduleFilter)}`
+      : "";
+    api<any>(`custom-fields${query}`)
+      .then((res) => {
+        const list = res?.custom_fields || res || [];
+        setFields(Array.isArray(list) ? list : []);
+      })
+      .catch((err) =>
+        setErrorNotice(err.message || "Failed to load custom fields."),
+      )
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [moduleFilter]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.field_name.trim()) {
+      setErrorNotice("Field name is required.");
+      return;
+    }
+    setSubmitting(true);
+    setErrorNotice("");
+    setSuccessNotice("");
+    try {
+      await api("custom-fields", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          field_name: form.field_name.trim(),
+          grid: Number(form.grid) || 12,
+        }),
+      });
+      setSuccessNotice("Custom field created successfully.");
+      setForm({
+        module_name: "patients",
+        field_type: "text",
+        field_name: "",
+        is_required: false,
+        values: "",
+        grid: 12,
+      });
+      setModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      setErrorNotice(err.message || "Failed to create custom field.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (
+      !window.confirm(t("Are you sure you want to delete this custom field?"))
+    )
+      return;
+    setErrorNotice("");
+    setSuccessNotice("");
+    try {
+      await api(`custom-fields/${id}`, { method: "DELETE" });
+      setSuccessNotice(`Custom field "${name}" deleted successfully.`);
+      loadData();
+    } catch (err: any) {
+      setErrorNotice(err.message || "Failed to delete custom field.");
+    }
+  };
+
+  return (
+    <div className="legacy-card">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-lg font-semibold m-0">{t("Custom Fields")}</h2>
+          <p className="text-muted text-sm mt-1">
+            {t(
+              "Define custom data fields across clinical and administrative modules.",
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-action-blue flex items-center gap-1.5"
+          onClick={() => {
+            setErrorNotice("");
+            setModalOpen(true);
+          }}
+        >
+          <Plus size={16} />
+          {t("New Custom Field")}
+        </button>
+      </div>
+
+      {successNotice && (
+        <div
+          className="alert-notice p-3 mb-4 rounded border flex items-center gap-2"
+          style={{
+            backgroundColor: "rgba(34, 197, 94, 0.1)",
+            borderColor: "#22c55e",
+            color: "#22c55e",
+          }}
+          role="status"
+        >
+          <CheckCircle2 size={18} />
+          <span>{t(successNotice)}</span>
+        </div>
+      )}
+
+      {errorNotice && (
+        <div
+          className="alert-notice p-3 mb-4 rounded border flex items-center gap-2"
+          style={{
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            borderColor: "#ef4444",
+            color: "#ef4444",
+          }}
+          role="alert"
+        >
+          <AlertCircle size={18} />
+          <span>{t(errorNotice)}</span>
+        </div>
+      )}
+
+      <div className="table-toolbar mb-4 flex justify-between gap-4">
+        <select
+          className="field max-w-[220px]"
+          value={moduleFilter}
+          onChange={(e) => setModuleFilter(e.target.value)}
+        >
+          <option value="">{t("All Modules")}</option>
+          {MODULES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {t(m.label)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="legacy-table w-full">
+          <thead>
+            <tr>
+              <th>{t("Field Name")}</th>
+              <th>{t("Module")}</th>
+              <th>{t("Field Type")}</th>
+              <th>{t("Required")}</th>
+              <th>{t("Grid")}</th>
+              <th className="text-right">{t("Action")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="text-center py-6 text-muted">
+                  {t("Loading custom fields...")}
+                </td>
+              </tr>
+            ) : fields.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-6 text-muted">
+                  {t("No custom fields configured.")}
+                </td>
+              </tr>
+            ) : (
+              fields.map((cf) => (
+                <tr key={cf.id}>
+                  <td className="font-medium text-slate-900 dark:text-white">
+                    {cf.field_name}
+                  </td>
+                  <td>
+                    <span className="capitalize">{cf.module_name}</span>
+                  </td>
+                  <td>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      {cf.field_type}
+                    </span>
+                  </td>
+                  <td>
+                    {cf.is_required ? (
+                      <span className="badge">{t("Yes")}</span>
+                    ) : (
+                      <span className="badge muted">{t("No")}</span>
+                    )}
+                  </td>
+                  <td>{cf.grid}/12</td>
+                  <td className="text-right">
+                    <button
+                      type="button"
+                      className="text-red-500 hover:text-red-400 p-1 rounded inline-flex items-center"
+                      title={t("Delete")}
+                      onClick={() => handleDelete(cf.id, cf.field_name)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl max-w-lg w-full border border-slate-200 dark:border-slate-800 p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold m-0 text-slate-900 dark:text-white">
+                {t("New Custom Field")}
+              </h3>
+              <button
+                type="button"
+                className="text-muted hover:text-slate-900 dark:hover:text-white"
+                onClick={() => setModalOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreate} className="flex flex-col gap-4">
+              <div>
+                <label className="label block mb-1">
+                  {t("Module")}: <b className="text-red-500">*</b>
+                </label>
+                <select
+                  className="field"
+                  value={form.module_name}
+                  onChange={(e) =>
+                    setForm({ ...form, module_name: e.target.value })
+                  }
+                >
+                  {MODULES.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {t(m.label)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label block mb-1">
+                  {t("Field Name")}: <b className="text-red-500">*</b>
+                </label>
+                <input
+                  className="field"
+                  type="text"
+                  required
+                  placeholder={t("e.g., Blood Pressure Note, Secondary Phone")}
+                  value={form.field_name}
+                  onChange={(e) =>
+                    setForm({ ...form, field_name: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="label block mb-1">
+                  {t("Field Type")}: <b className="text-red-500">*</b>
+                </label>
+                <select
+                  className="field"
+                  value={form.field_type}
+                  onChange={(e) =>
+                    setForm({ ...form, field_type: e.target.value })
+                  }
+                >
+                  {FIELD_TYPES.map((ft) => (
+                    <option key={ft.value} value={ft.value}>
+                      {t(ft.label)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {form.field_type === "select" && (
+                <div>
+                  <label className="label block mb-1">
+                    {t("Values (comma separated)")}:
+                  </label>
+                  <input
+                    className="field"
+                    type="text"
+                    placeholder="Option 1, Option 2, Option 3"
+                    value={form.values}
+                    onChange={(e) =>
+                      setForm({ ...form, values: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.is_required}
+                    onChange={(e) =>
+                      setForm({ ...form, is_required: e.target.checked })
+                    }
+                  />
+                  <span className="text-sm font-medium">
+                    {t("Is Required")}
+                  </span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="text-sm font-medium">
+                    {t("Grid Width")}:
+                  </span>
+                  <select
+                    className="field max-w-[120px]"
+                    value={form.grid}
+                    onChange={(e) =>
+                      setForm({ ...form, grid: Number(e.target.value) })
+                    }
+                  >
+                    <option value={12}>12 (Full)</option>
+                    <option value={6}>6 (Half)</option>
+                    <option value={4}>4 (One Third)</option>
+                  </select>
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  type="button"
+                  className="btn-action-gray px-4 py-2"
+                  onClick={() => setModalOpen(false)}
+                  disabled={submitting}
+                >
+                  {t("Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  className="btn-action-blue px-4 py-2"
+                  disabled={submitting}
+                >
+                  {submitting ? t("Saving...") : t("Save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
