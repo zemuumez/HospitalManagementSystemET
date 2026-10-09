@@ -2438,6 +2438,7 @@ function OperationCategoriesTab() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingCat, setEditingCat] = useState<any | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState("");
@@ -2460,7 +2461,21 @@ function OperationCategoriesTab() {
     loadData();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openCreateModal = () => {
+    setEditingCat(null);
+    setNameInput("");
+    setErrorNotice("");
+    setModalOpen(true);
+  };
+
+  const openEditModal = (cat: any) => {
+    setEditingCat(cat);
+    setNameInput(cat.name || "");
+    setErrorNotice("");
+    setModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nameInput.trim()) {
       setErrorNotice("Category name is required.");
@@ -2470,16 +2485,30 @@ function OperationCategoriesTab() {
     setErrorNotice("");
     setSuccessNotice("");
     try {
-      await api("operation-categories", {
-        method: "POST",
-        body: JSON.stringify({ name: nameInput.trim() }),
-      });
-      setSuccessNotice("Operation category created successfully.");
+      if (editingCat) {
+        await api(`operation-categories/${editingCat.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name: nameInput.trim() }),
+        });
+        setSuccessNotice("Operation category updated successfully.");
+      } else {
+        await api("operation-categories", {
+          method: "POST",
+          body: JSON.stringify({ name: nameInput.trim() }),
+        });
+        setSuccessNotice("Operation category created successfully.");
+      }
       setNameInput("");
+      setEditingCat(null);
       setModalOpen(false);
       loadData();
     } catch (err: any) {
-      setErrorNotice(err.message || "Failed to create operation category.");
+      setErrorNotice(
+        err.message ||
+          (editingCat
+            ? "Failed to update operation category."
+            : "Failed to create operation category."),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -2524,11 +2553,7 @@ function OperationCategoriesTab() {
         <button
           type="button"
           className="btn-action-blue flex items-center gap-1.5"
-          onClick={() => {
-            setNameInput("");
-            setErrorNotice("");
-            setModalOpen(true);
-          }}
+          onClick={openCreateModal}
         >
           <Plus size={16} />
           {t("New Operation Category")}
@@ -2604,14 +2629,24 @@ function OperationCategoriesTab() {
                     {cat.name}
                   </td>
                   <td className="text-right">
-                    <button
-                      type="button"
-                      className="text-red-500 hover:text-red-400 p-1 rounded inline-flex items-center"
-                      title={t("Delete")}
-                      onClick={() => handleDelete(cat.id, cat.name)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="row-actions justify-end">
+                      <button
+                        type="button"
+                        className="text-blue-500 hover:text-blue-400 p-1"
+                        title={t("Edit")}
+                        onClick={() => openEditModal(cat)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-500 hover:text-red-400 p-1"
+                        title={t("Delete")}
+                        onClick={() => handleDelete(cat.id, cat.name)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -2625,7 +2660,9 @@ function OperationCategoriesTab() {
           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl max-w-md w-full border border-slate-200 dark:border-slate-800 p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold m-0 text-slate-900 dark:text-white">
-                {t("New Operation Category")}
+                {editingCat
+                  ? t("Edit Operation Category")
+                  : t("New Operation Category")}
               </h3>
               <button
                 type="button"
@@ -2635,7 +2672,7 @@ function OperationCategoriesTab() {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreate}>
+            <form onSubmit={handleSubmit}>
               <div className="mb-4">
                 <label className="label block mb-1">
                   {t("Name")}: <b className="text-red-500">*</b>
@@ -3063,6 +3100,7 @@ function CustomFieldsTab() {
   const [moduleFilter, setModuleFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingField, setEditingField] = useState<any | null>(null);
   const [form, setForm] = useState({
     module_name: "patients",
     field_type: "text",
@@ -3113,7 +3151,35 @@ function CustomFieldsTab() {
     loadData();
   }, [moduleFilter]);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openCreateModal = () => {
+    setEditingField(null);
+    setForm({
+      module_name: "patients",
+      field_type: "text",
+      field_name: "",
+      is_required: false,
+      values: "",
+      grid: 12,
+    });
+    setErrorNotice("");
+    setModalOpen(true);
+  };
+
+  const openEditModal = (cf: any) => {
+    setEditingField(cf);
+    setForm({
+      module_name: cf.module_name || "patients",
+      field_type: cf.field_type || "text",
+      field_name: cf.field_name || "",
+      is_required: !!cf.is_required,
+      values: cf.values || "",
+      grid: cf.grid || 12,
+    });
+    setErrorNotice("");
+    setModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.field_name.trim()) {
       setErrorNotice("Field name is required.");
@@ -3123,27 +3189,37 @@ function CustomFieldsTab() {
     setErrorNotice("");
     setSuccessNotice("");
     try {
-      await api("custom-fields", {
-        method: "POST",
-        body: JSON.stringify({
-          ...form,
-          field_name: form.field_name.trim(),
-          grid: Number(form.grid) || 12,
-        }),
-      });
-      setSuccessNotice("Custom field created successfully.");
-      setForm({
-        module_name: "patients",
-        field_type: "text",
-        field_name: "",
-        is_required: false,
-        values: "",
-        grid: 12,
-      });
+      if (editingField) {
+        await api(`custom-fields/${editingField.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            ...form,
+            field_name: form.field_name.trim(),
+            grid: Number(form.grid) || 12,
+          }),
+        });
+        setSuccessNotice("Custom field updated successfully.");
+      } else {
+        await api("custom-fields", {
+          method: "POST",
+          body: JSON.stringify({
+            ...form,
+            field_name: form.field_name.trim(),
+            grid: Number(form.grid) || 12,
+          }),
+        });
+        setSuccessNotice("Custom field created successfully.");
+      }
+      setEditingField(null);
       setModalOpen(false);
       loadData();
     } catch (err: any) {
-      setErrorNotice(err.message || "Failed to create custom field.");
+      setErrorNotice(
+        err.message ||
+          (editingField
+            ? "Failed to update custom field."
+            : "Failed to create custom field."),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -3179,10 +3255,7 @@ function CustomFieldsTab() {
         <button
           type="button"
           className="btn-action-blue flex items-center gap-1.5"
-          onClick={() => {
-            setErrorNotice("");
-            setModalOpen(true);
-          }}
+          onClick={openCreateModal}
         >
           <Plus size={16} />
           {t("New Custom Field")}
@@ -3282,14 +3355,24 @@ function CustomFieldsTab() {
                   </td>
                   <td>{cf.grid}/12</td>
                   <td className="text-right">
-                    <button
-                      type="button"
-                      className="text-red-500 hover:text-red-400 p-1 rounded inline-flex items-center"
-                      title={t("Delete")}
-                      onClick={() => handleDelete(cf.id, cf.field_name)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="row-actions justify-end">
+                      <button
+                        type="button"
+                        className="text-blue-500 hover:text-blue-400 p-1"
+                        title={t("Edit")}
+                        onClick={() => openEditModal(cf)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-500 hover:text-red-400 p-1"
+                        title={t("Delete")}
+                        onClick={() => handleDelete(cf.id, cf.field_name)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -3303,7 +3386,7 @@ function CustomFieldsTab() {
           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl max-w-lg w-full border border-slate-200 dark:border-slate-800 p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold m-0 text-slate-900 dark:text-white">
-                {t("New Custom Field")}
+                {editingField ? t("Edit Custom Field") : t("New Custom Field")}
               </h3>
               <button
                 type="button"
@@ -3313,7 +3396,7 @@ function CustomFieldsTab() {
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreate} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
                 <label className="label block mb-1">
                   {t("Module")}: <b className="text-red-500">*</b>
