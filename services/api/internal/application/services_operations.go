@@ -25,10 +25,12 @@ type ServicesOperationsStore interface {
 
 	CreateOperationCategory(context.Context, domain.Actor, domain.OperationCategoryInput) (domain.OperationCategory, error)
 	OperationCategories(context.Context, domain.Actor) ([]domain.OperationCategory, error)
+	DeleteOperationCategory(context.Context, domain.Actor, string) error
 	CreateOperation(context.Context, domain.Actor, domain.HospitalOperationInput) (domain.HospitalOperation, error)
 	UpdateOperation(context.Context, domain.Actor, string, domain.HospitalOperationInput) (domain.HospitalOperation, error)
 	Operations(context.Context, domain.Actor, int, string) ([]domain.HospitalOperation, int, error)
 	Operation(context.Context, domain.Actor, string) (domain.HospitalOperation, error)
+	DeleteOperation(context.Context, domain.Actor, string) error
 
 	CreateCustomField(context.Context, domain.Actor, domain.CustomFieldInput) (domain.CustomField, error)
 	DeleteCustomField(context.Context, domain.Actor, string) error
@@ -195,6 +197,16 @@ func (s ServicesOperationsService) OperationCategories(ctx context.Context, a do
 	return s.Store.OperationCategories(ctx, a)
 }
 
+func (s ServicesOperationsService) DeleteOperationCategory(ctx context.Context, a domain.Actor, id string) error {
+	if !a.Can("operations.manage") {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	return s.Store.DeleteOperationCategory(ctx, a, id)
+}
+
 func (s ServicesOperationsService) CreateOperation(ctx context.Context, a domain.Actor, in domain.HospitalOperationInput) (domain.HospitalOperation, error) {
 	if !a.Can("operations.manage") {
 		return domain.HospitalOperation{}, domain.ErrForbidden
@@ -236,6 +248,16 @@ func (s ServicesOperationsService) Operation(ctx context.Context, a domain.Actor
 		return domain.HospitalOperation{}, domain.ErrValidation
 	}
 	return s.Store.Operation(ctx, a, id)
+}
+
+func (s ServicesOperationsService) DeleteOperation(ctx context.Context, a domain.Actor, id string) error {
+	if !a.Can("operations.manage") {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	return s.Store.DeleteOperation(ctx, a, id)
 }
 
 // Custom Fields

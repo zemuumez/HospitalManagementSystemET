@@ -99,7 +99,7 @@ func fail(w http.ResponseWriter, err error) {
 	if errors.Is(err, domain.ErrInUse) {
 		code = "RECORD_IN_USE"
 		status = 409
-		message = "Record is in use by patient admissions and cannot be deleted"
+		message = "Record is in use and cannot be deleted"
 	}
 	write(w, status, map[string]string{"error": message, "code": code})
 }

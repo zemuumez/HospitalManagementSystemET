@@ -179,9 +179,9 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 	}
 
 	// Operation Categories
-	if r.URL.Path == "/v1/operation-categories" {
-		switch r.Method {
-		case "GET":
+	if strings.HasPrefix(r.URL.Path, "/v1/operation-categories") {
+		switch {
+		case r.URL.Path == "/v1/operation-categories" && r.Method == "GET":
 			list, err := s.ServicesOperations.OperationCategories(r.Context(), a)
 			if err != nil {
 				fail(w, err)
@@ -189,7 +189,7 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 			}
 			write(w, 200, map[string]any{"operation_categories": list})
 			return true
-		case "POST":
+		case r.URL.Path == "/v1/operation-categories" && r.Method == "POST":
 			var in domain.OperationCategoryInput
 			if !decode(w, r, &in) {
 				return true
@@ -200,6 +200,14 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 				return true
 			}
 			write(w, 201, cat)
+			return true
+		case strings.HasPrefix(r.URL.Path, "/v1/operation-categories/") && r.Method == "DELETE":
+			id := strings.TrimPrefix(r.URL.Path, "/v1/operation-categories/")
+			if err := s.ServicesOperations.DeleteOperationCategory(r.Context(), a, id); err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, map[string]bool{"deleted": true})
 			return true
 		}
 	}
@@ -253,6 +261,15 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 				return true
 			}
 			write(w, 200, op)
+			return true
+
+		case strings.HasPrefix(r.URL.Path, "/v1/operations/") && r.Method == "DELETE":
+			id := strings.TrimPrefix(r.URL.Path, "/v1/operations/")
+			if err := s.ServicesOperations.DeleteOperation(r.Context(), a, id); err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, map[string]bool{"deleted": true})
 			return true
 		}
 	}

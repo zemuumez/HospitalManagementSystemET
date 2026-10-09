@@ -122,6 +122,32 @@ func (s Store) UpdateHospitalSchedule(ctx context.Context, a domain.Actor, in do
 	return out, tx.Commit(ctx)
 }
 
+func (s Store) UpdateHospitalSchedules(ctx context.Context, a domain.Actor, days []domain.HospitalScheduleDayInput) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, in := range days {
+		var id string
+		err = tx.QueryRow(ctx, `
+			INSERT INTO hospital_schedule_day (day_of_week, start_time, end_time, is_closed, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, clock_timestamp(), clock_timestamp())
+			ON CONFLICT (day_of_week) DO UPDATE
+			SET start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time, is_closed = EXCLUDED.is_closed, updated_at = clock_timestamp()
+			RETURNING id
+		`, in.DayOfWeek, in.StartTime, in.EndTime, in.IsClosed).Scan(&id)
+		if err != nil {
+			return clinicalError(err)
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'hospital_schedule.updated', $2)`, a.ID, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 // --- Front CMS Settings ---
 
 func (s Store) FrontCMSSettings(ctx context.Context, typeFilter string) ([]domain.FrontCMSSetting, error) {
@@ -173,6 +199,83 @@ func (s Store) UpdateFrontCMSSetting(ctx context.Context, a domain.Actor, in dom
 		return out, err
 	}
 	return out, tx.Commit(ctx)
+}
+
+func (s Store) UpdateFrontCMSSettings(ctx context.Context, a domain.Actor, settings []domain.FrontCMSSettingInput) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, in := range settings {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO front_cms_setting (key, value, type, updated_at)
+			VALUES ($1, $2, $3, clock_timestamp())
+			ON CONFLICT (key) DO UPDATE
+			SET value = EXCLUDED.value, type = EXCLUDED.type, updated_at = clock_timestamp()
+		`, in.Key, in.Value, in.Type)
+		if err != nil {
+			return clinicalError(err)
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'front_cms.updated', $2)`, a.ID, in.Key); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (s Store) RetireUnreferencedAttachments(ctx context.Context, a domain.Actor) ([]string, error) {
+	rows, err := s.DB.Query(ctx, `
+		SELECT id, token, storage_path
+		FROM secure_attachment
+		WHERE is_public = true
+		  AND patient_id IS NULL
+		  AND encounter_id IS NULL
+		  AND NOT EXISTS (
+		    SELECT 1 FROM hospital_general_setting WHERE value LIKE '%' || secure_attachment.token || '%'
+		  )
+		  AND NOT EXISTS (
+		    SELECT 1 FROM front_cms_setting WHERE value LIKE '%' || secure_attachment.token || '%'
+		  )
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids, tokens, paths []string
+	for rows.Next() {
+		var id, token, path string
+		if err := rows.Scan(&id, &token, &path); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+		tokens = append(tokens, token)
+		paths = append(paths, path)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	for i, id := range ids {
+		if _, err = tx.Exec(ctx, `DELETE FROM secure_attachment WHERE id = $1`, id); err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'attachment.retired', $2)`, a.ID, tokens[i]); err != nil {
+			return nil, err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return paths, nil
 }
 
 // --- Testimonials ---

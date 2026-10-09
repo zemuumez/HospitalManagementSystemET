@@ -297,4 +297,52 @@ func testServicesOperations(t *testing.T, db *pgxpool.Pool, store Store, actors 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for GET /v1/module-settings, got %d: %s", rec.Code, rec.Body.String())
 	}
+
+	// 8. Operation Categories & Operations DELETE with Conflict Protection (S1)
+	cat, err := srv.CreateOperationCategory(ctx, admin, domain.OperationCategoryInput{
+		Name: "Surgical Test Category",
+	})
+	if err != nil {
+		t.Fatalf("failed to create operation category: %v", err)
+	}
+
+	newOp, err := srv.CreateOperation(ctx, admin, domain.HospitalOperationInput{
+		OperationCategoryID: cat.ID,
+		Name:                "Appendectomy Procedure",
+		Description:         "Emergency appendectomy",
+		Status:              1,
+	})
+	if err != nil {
+		t.Fatalf("failed to create operation: %v", err)
+	}
+
+	// Attempt to delete category while operation references it -> must return ErrConflict / 409
+	req = httptest.NewRequest("DELETE", "/v1/operation-categories/"+cat.ID, nil)
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict when deleting category in use, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Delete operation first
+	req = httptest.NewRequest("DELETE", "/v1/operations/"+newOp.ID, nil)
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for DELETE operation, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Now delete category -> must succeed
+	req = httptest.NewRequest("DELETE", "/v1/operation-categories/"+cat.ID, nil)
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for DELETE unreferenced category, got %d: %s", rec.Code, rec.Body.String())
+	}
 }

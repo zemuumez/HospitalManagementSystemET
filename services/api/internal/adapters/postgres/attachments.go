@@ -149,3 +149,43 @@ func (s Store) ReleaseAttachment(ctx context.Context, a domain.Actor, token stri
 	}
 	return tx.Commit(ctx)
 }
+
+func (s Store) DeleteAttachment(ctx context.Context, a domain.Actor, token string) (string, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	var id, storagePath string
+	var isPublic bool
+	var patientID, encounterID *string
+	err = tx.QueryRow(ctx, `
+		SELECT id, storage_path, is_public, patient_id::text, encounter_id::text
+		FROM secure_attachment
+		WHERE token = $1
+		FOR UPDATE
+	`, token).Scan(&id, &storagePath, &isPublic, &patientID, &encounterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", domain.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	// Clinical files cannot be deleted through public settings retirement!
+	if !isPublic || patientID != nil || encounterID != nil {
+		return "", domain.ErrForbidden
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM secure_attachment WHERE id = $1`, id)
+	if err != nil {
+		return "", err
+	}
+	if err = pharmacyAudit(ctx, tx, a, "attachment.retired", token); err != nil {
+		return "", err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return storagePath, nil
+}

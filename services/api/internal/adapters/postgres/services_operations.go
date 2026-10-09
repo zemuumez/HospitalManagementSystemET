@@ -388,6 +388,56 @@ func (s Store) OperationCategories(ctx context.Context, a domain.Actor) ([]domai
 	return out, rows.Err()
 }
 
+func (s Store) DeleteOperationCategory(ctx context.Context, a domain.Actor, id string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM hospital_operation WHERE operation_category_id = $1`, id).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return domain.ErrInUse
+	}
+
+	res, err := tx.Exec(ctx, `DELETE FROM operation_category WHERE id = $1`, id)
+	if err != nil {
+		return clinicalError(err)
+	}
+	if res.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'operation_category.deleted', $2)`, a.ID, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s Store) DeleteOperation(ctx context.Context, a domain.Actor, id string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	res, err := tx.Exec(ctx, `DELETE FROM hospital_operation WHERE id = $1`, id)
+	if err != nil {
+		return clinicalError(err)
+	}
+	if res.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'operation.deleted', $2)`, a.ID, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s Store) CreateOperation(ctx context.Context, a domain.Actor, in domain.HospitalOperationInput) (domain.HospitalOperation, error) {
 	out := domain.HospitalOperation{
 		OperationCategoryID: in.OperationCategoryID,

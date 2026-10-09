@@ -93,6 +93,15 @@ func (s Server) attachments(w http.ResponseWriter, r *http.Request, a domain.Act
 		write(w, http.StatusOK, att)
 		return true
 
+	case strings.HasPrefix(r.URL.Path, "/v1/attachments/") && r.Method == "DELETE":
+		token := strings.TrimPrefix(r.URL.Path, "/v1/attachments/")
+		if err := s.Attachments.RetireAttachment(r.Context(), a, token); err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, http.StatusNoContent, nil)
+		return true
+
 	case strings.HasPrefix(r.URL.Path, "/v1/patients/") && strings.HasSuffix(r.URL.Path, "/attachments") && r.Method == "GET":
 		patientID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/patients/"), "/attachments")
 		list, err := s.Attachments.ListPatientAttachments(r.Context(), a, patientID)

@@ -15,9 +15,13 @@ type CMSSettingsStore interface {
 
 	HospitalSchedules(context.Context) ([]domain.HospitalScheduleDay, error)
 	UpdateHospitalSchedule(context.Context, domain.Actor, domain.HospitalScheduleDayInput) (domain.HospitalScheduleDay, error)
+	UpdateHospitalSchedules(context.Context, domain.Actor, []domain.HospitalScheduleDayInput) error
 
 	FrontCMSSettings(context.Context, string) ([]domain.FrontCMSSetting, error)
 	UpdateFrontCMSSetting(context.Context, domain.Actor, domain.FrontCMSSettingInput) (domain.FrontCMSSetting, error)
+	UpdateFrontCMSSettings(context.Context, domain.Actor, []domain.FrontCMSSettingInput) error
+
+	RetireUnreferencedAttachments(context.Context, domain.Actor) ([]string, error)
 
 	Testimonials(context.Context, *int) ([]domain.CMSTestimonial, error)
 	Testimonial(context.Context, string) (domain.CMSTestimonial, error)
@@ -28,6 +32,7 @@ type CMSSettingsStore interface {
 
 type CMSSettingsService struct {
 	Store CMSSettingsStore
+	Files AttachmentFiles
 	Now   func() time.Time
 }
 
@@ -62,12 +67,13 @@ func (s CMSSettingsService) UpdateGeneralSetting(ctx context.Context, a domain.A
 	}
 	if domain.SettingsSecretKeys[in.Key] {
 		trimmed := strings.TrimSpace(in.Value)
+		// S5: If secret was unchanged by user, do not mutate/overwrite with stale read
 		if trimmed == domain.SecretConfiguredPlaceholder || trimmed == "********" {
 			existing, err := s.Store.GeneralSettings(ctx)
 			if err != nil {
 				return domain.HospitalGeneralSetting{}, err
 			}
-			in.Value = existing[in.Key]
+			return domain.HospitalGeneralSetting{Key: in.Key, Value: existing[in.Key]}, nil
 		}
 	}
 	if err := in.Validate(); err != nil {
@@ -76,13 +82,20 @@ func (s CMSSettingsService) UpdateGeneralSetting(ctx context.Context, a domain.A
 	return s.Store.UpdateGeneralSetting(ctx, a, in)
 }
 
+func (s CMSSettingsService) retireUnreferencedPublicAttachments(ctx context.Context, a domain.Actor) {
+	if s.Files != nil {
+		paths, err := s.Store.RetireUnreferencedAttachments(ctx, a)
+		if err == nil {
+			for _, p := range paths {
+				_ = s.Files.Remove(ctx, p)
+			}
+		}
+	}
+}
+
 func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.Actor, settings map[string]string) error {
 	if !a.Can("settings.manage") {
 		return domain.ErrForbidden
-	}
-	existing, err := s.Store.GeneralSettings(ctx)
-	if err != nil {
-		return err
 	}
 	inputs := make([]domain.GeneralSettingInput, 0, len(settings))
 	seen := make(map[string]bool)
@@ -90,8 +103,9 @@ func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.
 		in := domain.GeneralSettingInput{Key: k, Value: v}
 		if domain.SettingsSecretKeys[in.Key] {
 			trimmed := strings.TrimSpace(in.Value)
+			// S5: Skip unchanged-secret fields completely from write transaction to eliminate concurrent overwrite races
 			if trimmed == domain.SecretConfiguredPlaceholder || trimmed == "********" {
-				in.Value = existing[in.Key]
+				continue
 			}
 		}
 		if err := in.Validate(); err != nil {
@@ -105,7 +119,12 @@ func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.
 	}
 	// Validate the entire form before writing, and lock keys in stable order.
 	sort.Slice(inputs, func(i, j int) bool { return inputs[i].Key < inputs[j].Key })
-	return s.Store.UpdateGeneralSettings(ctx, a, inputs)
+	if err := s.Store.UpdateGeneralSettings(ctx, a, inputs); err != nil {
+		return err
+	}
+	// S4: Clean up any public logo/favicon attachment that is no longer referenced anywhere
+	s.retireUnreferencedPublicAttachments(ctx, a)
+	return nil
 }
 
 // --- Hospital Schedules ---
@@ -131,15 +150,19 @@ func (s CMSSettingsService) UpdateHospitalSchedules(ctx context.Context, a domai
 	if !a.Can("settings.manage") {
 		return domain.ErrForbidden
 	}
+	// S2: Validate entire batch up-front before touching repository
+	seenDays := make(map[int]bool)
 	for _, in := range days {
 		if err := in.Validate(); err != nil {
 			return err
 		}
-		if _, err := s.Store.UpdateHospitalSchedule(ctx, a, in); err != nil {
-			return err
+		if seenDays[in.DayOfWeek] {
+			return domain.ErrValidation
 		}
+		seenDays[in.DayOfWeek] = true
 	}
-	return nil
+	// Aggregate repository-level transaction covering all writes and audit events
+	return s.Store.UpdateHospitalSchedules(ctx, a, days)
 }
 
 // --- Front CMS Settings ---
@@ -165,14 +188,23 @@ func (s CMSSettingsService) UpdateFrontCMSSettings(ctx context.Context, a domain
 	if !a.Can("cms.manage") {
 		return domain.ErrForbidden
 	}
+	// S2: Validate entire batch up-front before touching repository
+	seenKeys := make(map[string]bool)
 	for _, in := range settings {
 		if err := in.Validate(); err != nil {
 			return err
 		}
-		if _, err := s.Store.UpdateFrontCMSSetting(ctx, a, in); err != nil {
-			return err
+		if seenKeys[in.Key] {
+			return domain.ErrValidation
 		}
+		seenKeys[in.Key] = true
 	}
+	// Aggregate repository-level transaction covering all writes and audit events
+	if err := s.Store.UpdateFrontCMSSettings(ctx, a, settings); err != nil {
+		return err
+	}
+	// S4: Clean up any public CMS attachment that is no longer referenced anywhere
+	s.retireUnreferencedPublicAttachments(ctx, a)
 	return nil
 }
 

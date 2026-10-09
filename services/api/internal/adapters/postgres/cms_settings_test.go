@@ -477,4 +477,298 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			t.Fatalf("expected hospital_logo.png, got %s", meta.FileName)
 		}
 	})
+
+	t.Run("S2: hospital schedule batch atomicity and duplicate rejection", func(t *testing.T) {
+		// Set baseline for day 1 and 2
+		if err := srv.UpdateHospitalSchedules(ctx, admin, []domain.HospitalScheduleDayInput{
+			{DayOfWeek: 1, StartTime: "08:00", EndTime: "17:00", IsClosed: false},
+			{DayOfWeek: 2, StartTime: "08:00", EndTime: "17:00", IsClosed: false},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// 1. Invalid trailing item: item 1 is valid, item 2 has invalid time (EndTime <= StartTime)
+		invalidTrailing := []domain.HospitalScheduleDayInput{
+			{DayOfWeek: 1, StartTime: "09:00", EndTime: "18:00", IsClosed: false},
+			{DayOfWeek: 2, StartTime: "18:00", EndTime: "09:00", IsClosed: false}, // invalid!
+		}
+		if err := srv.UpdateHospitalSchedules(ctx, admin, invalidTrailing); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for invalid trailing schedule item, got %v", err)
+		}
+		// Assert day 1 was NOT mutated
+		scheds, err := srv.HospitalSchedules(ctx, admin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range scheds {
+			if s.DayOfWeek == 1 && s.StartTime != "08:00" {
+				t.Fatalf("expected day 1 to remain 08:00 after trailing validation failure, got %s", s.StartTime)
+			}
+		}
+
+		// 2. Duplicate day in batch
+		dupBatch := []domain.HospitalScheduleDayInput{
+			{DayOfWeek: 3, StartTime: "08:00", EndTime: "17:00", IsClosed: false},
+			{DayOfWeek: 3, StartTime: "09:00", EndTime: "18:00", IsClosed: false},
+		}
+		if err := srv.UpdateHospitalSchedules(ctx, admin, dupBatch); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for duplicate day entry, got %v", err)
+		}
+
+		// 3. Injected late database failure in aggregate transaction
+		if _, err := db.Exec(ctx, `ALTER TABLE hospital_schedule_day ADD CONSTRAINT schedule_test_failure CHECK(start_time <> '09:45')`); err != nil {
+			t.Fatal(err)
+		}
+		err = srv.UpdateHospitalSchedules(ctx, admin, []domain.HospitalScheduleDayInput{
+			{DayOfWeek: 1, StartTime: "09:15", EndTime: "17:00", IsClosed: false},
+			{DayOfWeek: 2, StartTime: "09:45", EndTime: "17:00", IsClosed: false}, // violates constraint!
+		})
+		_, _ = db.Exec(ctx, `ALTER TABLE hospital_schedule_day DROP CONSTRAINT IF EXISTS schedule_test_failure`)
+		if err == nil {
+			t.Fatal("expected DB error on schedule save")
+		}
+		// Verify day 1 was completely rolled back
+		scheds, err = srv.HospitalSchedules(ctx, admin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range scheds {
+			if s.DayOfWeek == 1 && s.StartTime != "08:00" {
+				t.Fatalf("expected day 1 to remain 08:00 after late DB rollback, got %s", s.StartTime)
+			}
+		}
+	})
+
+	t.Run("S2: front CMS batch atomicity and duplicate rejection", func(t *testing.T) {
+		// Set baseline
+		if err := srv.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+			{Key: "home_atomic_test", Value: "Initial Value", Type: "home"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// 1. Invalid trailing item (empty key)
+		invalidTrailing := []domain.FrontCMSSettingInput{
+			{Key: "home_atomic_test", Value: "New Mutated Value", Type: "home"},
+			{Key: "", Value: "Blank Key", Type: "home"},
+		}
+		if err := srv.UpdateFrontCMSSettings(ctx, admin, invalidTrailing); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for invalid trailing CMS item, got %v", err)
+		}
+		// Verify baseline unchanged
+		cmsList, err := srv.FrontCMSSettings(ctx, admin, "home")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range cmsList {
+			if c.Key == "home_atomic_test" && c.Value != "Initial Value" {
+				t.Fatalf("expected home_atomic_test to remain 'Initial Value', got '%s'", c.Value)
+			}
+		}
+
+		// 2. Duplicate key rejection
+		dupBatch := []domain.FrontCMSSettingInput{
+			{Key: "home_dup_key", Value: "Val 1", Type: "home"},
+			{Key: "home_dup_key", Value: "Val 2", Type: "home"},
+		}
+		if err := srv.UpdateFrontCMSSettings(ctx, admin, dupBatch); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for duplicate key in CMS batch, got %v", err)
+		}
+	})
+
+	t.Run("S3: general settings and schedule server-side validation", func(t *testing.T) {
+		// Direct blank required key must return ErrValidation
+		for _, reqKey := range []string{"app_name", "company_name", "hospital_email", "hospital_phone", "hospital_address", "current_currency", "about_us"} {
+			err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+				reqKey: "",
+			})
+			if !errors.Is(err, domain.ErrValidation) {
+				t.Fatalf("expected ErrValidation for blank required key %q, got %v", reqKey, err)
+			}
+		}
+
+		// Invalid email format
+		err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"hospital_email": "not-an-email-address",
+		})
+		if !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for malformed email, got %v", err)
+		}
+
+		// Invalid currency format (must be 3 alpha chars)
+		err = srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"current_currency": "INVALID_LONG",
+		})
+		if !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for malformed currency, got %v", err)
+		}
+
+		// Invalid schedule day input time format (not HH:MM)
+		invDay := domain.HospitalScheduleDayInput{
+			DayOfWeek: 1,
+			StartTime: "25:00", // invalid!
+			EndTime:   "17:00",
+			IsClosed:  false,
+		}
+		if err := invDay.Validate(); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for invalid schedule time, got %v", err)
+		}
+
+		// Schedule day with StartTime >= EndTime
+		invDay2 := domain.HospitalScheduleDayInput{
+			DayOfWeek: 1,
+			StartTime: "17:00",
+			EndTime:   "08:00",
+			IsClosed:  false,
+		}
+		if err := invDay2.Validate(); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation for StartTime >= EndTime, got %v", err)
+		}
+
+		// Closed day with valid optional times or blank times must pass validation
+		closedDay := domain.HospitalScheduleDayInput{
+			DayOfWeek: 7,
+			StartTime: "",
+			EndTime:   "",
+			IsClosed:  true,
+		}
+		if err := closedDay.Validate(); err != nil {
+			t.Fatalf("expected valid closed day, got %v", err)
+		}
+
+		// HTTP API endpoint direct request test: malformed request returns 422
+		authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user": map[string]any{"id": admin.ID},
+				"session": map[string]any{"userId": admin.ID, "expiresAt": time.Now().Add(time.Hour)},
+			})
+		}))
+		defer authSrv.Close()
+
+		handler := httpapi.Server{
+			CMSSettings: srv,
+			Actors:      store,
+			AuthURL:     authSrv.URL,
+			Origin:      "http://hospital.test",
+			Client:      authSrv.Client(),
+		}.Handler()
+
+		malformedBody, _ := json.Marshal(map[string]string{
+			"app_name": "", // blank required field!
+		})
+		req := httptest.NewRequest("POST", "/v1/general-settings", bytes.NewReader(malformedBody))
+		req.Header.Set("Cookie", "session=admin-token")
+		req.Header.Set("Origin", "http://hospital.test")
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected HTTP 422 Unprocessable Entity for direct malformed request, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("S4: attachment retirement on settings update & 404 on retired token", func(t *testing.T) {
+		files, err := privatefiles.New(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer files.Close()
+		attSrv := application.AttachmentsService{Store: store, Files: files}
+		cmsWithFiles := application.CMSSettingsService{Store: store, Files: files, Now: time.Now}
+
+		// 1. Upload initial logo A
+		pngDataA := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+		attA, err := attSrv.UploadPublic(ctx, admin, "logo_a.png", pngDataA)
+		if err != nil {
+			t.Fatal("failed to upload logo A", err)
+		}
+		urlA := "/api/hms/attachments/" + attA.Token + "/content"
+
+		// Save settings referencing urlA
+		if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"app_logo": urlA,
+		}); err != nil {
+			t.Fatal("failed to set logo A", err)
+		}
+
+		// Verify token A is downloadable
+		_, readerA, err := attSrv.Download(ctx, domain.Actor{}, attA.Token)
+		if err != nil {
+			t.Fatal("expected token A to be downloadable while referenced", err)
+		}
+		readerA.Close()
+
+		// 2. Upload replacement logo B
+		attB, err := attSrv.UploadPublic(ctx, admin, "logo_b.png", pngDataA)
+		if err != nil {
+			t.Fatal("failed to upload logo B", err)
+		}
+		urlB := "/api/hms/attachments/" + attB.Token + "/content"
+
+		// Save settings referencing urlB (replacing urlA)
+		if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"app_logo": urlB,
+		}); err != nil {
+			t.Fatal("failed to set logo B", err)
+		}
+
+		// 3. Verify unreferenced token A has been retired (returns ErrNotFound)
+		_, _, err = attSrv.Download(ctx, domain.Actor{}, attA.Token)
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound for retired token A, got %v", err)
+		}
+
+		// Verify newly referenced token B remains downloadable
+		_, readerB, err := attSrv.Download(ctx, domain.Actor{}, attB.Token)
+		if err != nil {
+			t.Fatalf("expected token B to be downloadable, got %v", err)
+		}
+		readerB.Close()
+	})
+
+	t.Run("S5: concurrent secret preserve-vs-replace regression", func(t *testing.T) {
+		// Set initial secret
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"stripe_secret": "stripe-initial-secret-v1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Client A reads settings (receives redacted placeholder [CONFIGURED])
+		clientARead, err := srv.GeneralSettings(ctx, admin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if clientARead["stripe_secret"] != domain.SecretConfiguredPlaceholder {
+			t.Fatalf("expected redacted placeholder, got %s", clientARead["stripe_secret"])
+		}
+
+		// Client B concurrently replaces the secret with a fresh value
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"stripe_secret": "stripe-concurrent-updated-secret-v2",
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Client A now submits their form without changing the secret (sending placeholder [CONFIGURED] alongside company_name update)
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"stripe_secret": domain.SecretConfiguredPlaceholder,
+			"company_name":  "Client A Updated Company Name",
+		}); err != nil {
+			t.Fatal("Client A save failed", err)
+		}
+
+		// Assert: Client B's fresh secret was NOT overwritten with Client A's stale initial value!
+		rawDB, err := store.GeneralSettings(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rawDB["stripe_secret"] != "stripe-concurrent-updated-secret-v2" {
+			t.Fatalf("concurrency violation: expected stripe_secret to remain Client B's update 'stripe-concurrent-updated-secret-v2', but got %q", rawDB["stripe_secret"])
+		}
+		if rawDB["company_name"] != "Client A Updated Company Name" {
+			t.Fatalf("expected company_name updated, got %q", rawDB["company_name"])
+		}
+	})
 }

@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,6 +16,28 @@ var SettingsSecretKeys = map[string]bool{
 	"phonepe_salt_key":       true,
 	"paystack_secret_key":    true,
 }
+
+var GeneralSettingRequiredKeys = map[string]bool{
+	"app_name":            true,
+	"company_name":        true,
+	"hospital_name":       true,
+	"hospital_email":      true,
+	"hospital_phone":      true,
+	"hospital_from_day":   true,
+	"hospital_start_day":  true,
+	"hospital_from_time":  true,
+	"hospital_start_time": true,
+	"hospital_address":    true,
+	"current_currency":    true,
+	"currency":            true,
+	"about_us":            true,
+}
+
+var (
+	emailRegex    = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	timeHHMMRegex = regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d$`)
+	currencyRegex = regexp.MustCompile(`^[A-Za-z]{3}$`)
+)
 
 const SecretConfiguredPlaceholder = "[CONFIGURED]"
 
@@ -33,6 +57,45 @@ func (i *GeneralSettingInput) Validate() error {
 	i.Value = strings.TrimSpace(i.Value)
 	if i.Key == "" || len(i.Key) > 128 {
 		return ErrValidation
+	}
+	// Direct requests attempting to blank out or set whitespace for required fields must be rejected
+	if GeneralSettingRequiredKeys[i.Key] && i.Value == "" {
+		return ErrValidation
+	}
+	switch i.Key {
+	case "hospital_email":
+		if i.Value != "" && !emailRegex.MatchString(i.Value) {
+			return ErrValidation
+		}
+	case "current_currency", "currency":
+		if i.Value != "" && !currencyRegex.MatchString(i.Value) {
+			return ErrValidation
+		}
+	case "hospital_from_time", "hospital_start_time":
+		if i.Value != "" && !timeHHMMRegex.MatchString(i.Value) {
+			return ErrValidation
+		}
+	case "hospital_from_day", "hospital_start_day":
+		if i.Value != "" {
+			dayNum, err := strconv.Atoi(i.Value)
+			if err == nil {
+				if dayNum < 1 || dayNum > 7 {
+					return ErrValidation
+				}
+			} else {
+				validDays := map[string]bool{
+					"monday": true, "tuesday": true, "wednesday": true,
+					"thursday": true, "friday": true, "saturday": true, "sunday": true,
+				}
+				if !validDays[strings.ToLower(i.Value)] {
+					return ErrValidation
+				}
+			}
+		}
+	case "hospital_phone":
+		if i.Value != "" && len(i.Value) < 7 {
+			return ErrValidation
+		}
 	}
 	return nil
 }
@@ -60,11 +123,20 @@ func (i *HospitalScheduleDayInput) Validate() error {
 	}
 	i.StartTime = strings.TrimSpace(i.StartTime)
 	i.EndTime = strings.TrimSpace(i.EndTime)
-	if !i.IsClosed {
-		if len(i.StartTime) < 4 || len(i.EndTime) < 4 {
+	if i.IsClosed {
+		if i.StartTime != "" && !timeHHMMRegex.MatchString(i.StartTime) {
 			return ErrValidation
 		}
-		if i.StartTime >= i.EndTime {
+		if i.EndTime != "" && !timeHHMMRegex.MatchString(i.EndTime) {
+			return ErrValidation
+		}
+	} else {
+		if !timeHHMMRegex.MatchString(i.StartTime) || !timeHHMMRegex.MatchString(i.EndTime) {
+			return ErrValidation
+		}
+		st, err1 := time.Parse("15:04", i.StartTime)
+		et, err2 := time.Parse("15:04", i.EndTime)
+		if err1 != nil || err2 != nil || !st.Before(et) {
 			return ErrValidation
 		}
 	}

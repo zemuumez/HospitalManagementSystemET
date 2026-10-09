@@ -16,6 +16,7 @@ type AttachmentsRepository interface {
 	SaveAttachment(ctx context.Context, a domain.Actor, token string, input domain.CreateSecureAttachmentInput) (domain.SecureAttachment, error)
 	GetAttachmentByToken(ctx context.Context, token string) (domain.SecureAttachment, error)
 	ListPatientAttachments(ctx context.Context, patientID string) ([]domain.SecureAttachment, error)
+	DeleteAttachment(ctx context.Context, a domain.Actor, token string) (string, error)
 }
 
 type AttachmentScanner interface {
@@ -108,4 +109,18 @@ func (s AttachmentsService) Release(ctx context.Context, a domain.Actor, token s
 		return err
 	}
 	return s.Store.ReleaseAttachment(ctx, a, token)
+}
+
+func (s AttachmentsService) RetireAttachment(ctx context.Context, a domain.Actor, token string) error {
+	if a.Role != "admin" && !a.Can("settings.manage") {
+		return domain.ErrForbidden
+	}
+	storagePath, err := s.Store.DeleteAttachment(ctx, a, token)
+	if err != nil {
+		return err
+	}
+	if s.Files != nil && storagePath != "" {
+		_ = s.Files.Remove(ctx, storagePath)
+	}
+	return nil
 }
