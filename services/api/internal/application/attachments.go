@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"strings"
 
 	"hms.local/api/internal/domain"
@@ -120,7 +121,9 @@ func (s AttachmentsService) RetireAttachment(ctx context.Context, a domain.Actor
 		return err
 	}
 	if s.Files != nil && storagePath != "" {
-		_ = s.Files.Remove(ctx, storagePath)
+		if err := s.Files.Remove(ctx, storagePath); err != nil {
+			log.Printf("failed to remove retired attachment file %s: %v", storagePath, err)
+		}
 	}
 	return nil
 }

@@ -7,12 +7,41 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"hms.local/api/internal/domain"
 )
 
 func (s Server) attachments(w http.ResponseWriter, r *http.Request, a domain.Actor) bool {
 	switch {
+	case r.URL.Path == "/v1/attachments/cleanup" && r.Method == "POST":
+		if a.Role != "admin" && !a.Can("settings.manage") {
+			fail(w, domain.ErrForbidden)
+			return true
+		}
+		var body struct {
+			OlderThanSeconds int `json:"olderThanSeconds"`
+		}
+		if r.Body != nil && r.ContentLength > 0 {
+			if !decode(w, r, &body) {
+				return true
+			}
+		}
+		threshold := 24 * time.Hour
+		if body.OlderThanSeconds > 0 {
+			threshold = time.Duration(body.OlderThanSeconds) * time.Second
+		}
+		count, err := s.CMSSettings.RunOperationalAttachmentCleanup(r.Context(), a, threshold)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, http.StatusOK, map[string]any{
+			"cleaned":   count,
+			"threshold": threshold.String(),
+		})
+		return true
+
 	case strings.HasPrefix(r.URL.Path, "/v1/attachments/") && strings.HasSuffix(r.URL.Path, "/release") && r.Method == "POST":
 		token := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/attachments/"), "/release")
 		if err := s.Attachments.Release(r.Context(), a, token); err != nil {

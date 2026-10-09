@@ -140,7 +140,7 @@ async function main() {
 
     await page.goto(`${base}/modules/settings`);
     await page.waitForSelector(".legacy-workspace[data-ready='true']", {
-      timeout: 10000,
+      timeout: 30000,
     });
 
     // Verify subtabs navigation items

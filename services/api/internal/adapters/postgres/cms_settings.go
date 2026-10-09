@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,39 +33,85 @@ func (s Store) GeneralSettings(ctx context.Context) (map[string]string, error) {
 	return settings, nil
 }
 
-func (s Store) UpdateGeneralSetting(ctx context.Context, a domain.Actor, in domain.GeneralSettingInput) (domain.HospitalGeneralSetting, error) {
-	var out domain.HospitalGeneralSetting
-	tx, err := s.DB.Begin(ctx)
-	if err != nil {
-		return out, err
-	}
-	defer tx.Rollback(ctx)
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO hospital_general_setting (key, value, updated_at)
-		VALUES ($1, $2, clock_timestamp())
-		ON CONFLICT (key) DO UPDATE
-		SET value = EXCLUDED.value, updated_at = clock_timestamp()
-		RETURNING key, value, updated_at
-	`, in.Key, in.Value).Scan(&out.Key, &out.Value, &out.UpdatedAt)
-	if err != nil {
-		return out, clinicalError(err)
-	}
-
-	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'general_setting.updated', $2)`, a.ID, out.Key); err != nil {
-		return out, err
-	}
-	return out, tx.Commit(ctx)
+type lockedAttachment struct {
+	id          string
+	storagePath string
+	isPublic    bool
+	isClinical  bool
 }
 
-// --- Hospital Schedules ---
+// lockAndValidateTokensTx locks all candidate tokens in secure_attachment in stable alphabetical order.
+// Newly bound tokens are validated to guarantee they exist and are appropriate public nonclinical assets.
+func lockAndValidateTokensTx(ctx context.Context, tx pgx.Tx, boundTokens map[string]bool, displacedTokens map[string]bool) (map[string]lockedAttachment, error) {
+	allTokensMap := make(map[string]bool)
+	for tok := range boundTokens {
+		allTokensMap[tok] = true
+	}
+	for tok := range displacedTokens {
+		allTokensMap[tok] = true
+	}
+	if len(allTokensMap) == 0 {
+		return nil, nil
+	}
+	allTokens := make([]string, 0, len(allTokensMap))
+	for tok := range allTokensMap {
+		allTokens = append(allTokens, tok)
+	}
+	sort.Strings(allTokens) // Stable alphabetical order prevents deadlocks
 
-func retireDisplacedTokensTx(ctx context.Context, tx pgx.Tx, a domain.Actor, displacedTokens map[string]bool) ([]string, error) {
+	locked := make(map[string]lockedAttachment, len(allTokens))
+	for _, tok := range allTokens {
+		var id, storagePath string
+		var isPublic bool
+		var patientID, encounterID *string
+		err := tx.QueryRow(ctx, `
+			SELECT id, storage_path, is_public, patient_id::text, encounter_id::text
+			FROM secure_attachment
+			WHERE token = $1
+			FOR UPDATE
+		`, tok).Scan(&id, &storagePath, &isPublic, &patientID, &encounterID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			if boundTokens[tok] {
+				// Attempting to bind a non-existent or retired token must fail without saving a broken URL
+				return nil, domain.ErrNotFound
+			}
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		isClinical := (!isPublic || patientID != nil || encounterID != nil)
+		if boundTokens[tok] && isClinical {
+			// Clinical attachments cannot be bound to public hospital settings
+			return nil, domain.ErrValidation
+		}
+		locked[tok] = lockedAttachment{
+			id:          id,
+			storagePath: storagePath,
+			isPublic:    isPublic,
+			isClinical:  isClinical,
+		}
+	}
+	return locked, nil
+}
+
+// retireLockedDisplacedTokensTx checks references under held row locks and safely deletes unreferenced displaced public assets.
+func retireLockedDisplacedTokensTx(ctx context.Context, tx pgx.Tx, a domain.Actor, displacedTokens map[string]bool, locked map[string]lockedAttachment) ([]string, error) {
 	if len(displacedTokens) == 0 {
 		return nil, nil
 	}
-	var removedPaths []string
+	var displacedList []string
 	for tok := range displacedTokens {
+		displacedList = append(displacedList, tok)
+	}
+	sort.Strings(displacedList)
+
+	var removedPaths []string
+	for _, tok := range displacedList {
+		att, exists := locked[tok]
+		if !exists || att.isClinical {
+			continue // Already deleted or strictly protected clinical record
+		}
 		var inUse bool
 		err := tx.QueryRow(ctx, `
 			SELECT EXISTS(
@@ -77,42 +124,44 @@ func retireDisplacedTokensTx(ctx context.Context, tx pgx.Tx, a domain.Actor, dis
 			return nil, err
 		}
 		if inUse {
-			continue // Shared reference protection across general settings and CMS
+			continue // Preserved due to active reference in another setting or CMS
 		}
-
-		var id, storagePath string
-		var isPublic bool
-		var patientID, encounterID *string
-		err = tx.QueryRow(ctx, `
-			SELECT id, storage_path, is_public, patient_id::text, encounter_id::text
-			FROM secure_attachment
-			WHERE token = $1
-			FOR UPDATE
-		`, tok).Scan(&id, &storagePath, &isPublic, &patientID, &encounterID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			continue
-		}
-		if err != nil {
+		if _, err = tx.Exec(ctx, `DELETE FROM secure_attachment WHERE id = $1`, att.id); err != nil {
 			return nil, err
 		}
-		if !isPublic || patientID != nil || encounterID != nil {
-			continue // Strictly preserve clinical attachments
-		}
-
-		if _, err = tx.Exec(ctx, `DELETE FROM secure_attachment WHERE id = $1`, id); err != nil {
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO audit_event (actor_id, action, resource_id)
+			VALUES ($1, 'attachment.retired', $2)
+		`, a.ID, tok); err != nil {
 			return nil, err
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'attachment.retired', $2)`, a.ID, tok); err != nil {
-			return nil, err
-		}
-		removedPaths = append(removedPaths, storagePath)
+		removedPaths = append(removedPaths, att.storagePath)
 	}
 	return removedPaths, nil
+}
+
+func (s Store) UpdateGeneralSetting(ctx context.Context, a domain.Actor, in domain.GeneralSettingInput) (domain.HospitalGeneralSetting, error) {
+	if !a.Can("settings.manage") {
+		return domain.HospitalGeneralSetting{}, domain.ErrForbidden
+	}
+	_, err := s.UpdateGeneralSettings(ctx, a, []domain.GeneralSettingInput{in})
+	if err != nil {
+		return domain.HospitalGeneralSetting{}, err
+	}
+	var out domain.HospitalGeneralSetting
+	err = s.DB.QueryRow(ctx, `SELECT key, value, updated_at FROM hospital_general_setting WHERE key = $1`, in.Key).Scan(&out.Key, &out.Value, &out.UpdatedAt)
+	if err != nil {
+		return domain.HospitalGeneralSetting{}, err
+	}
+	return out, nil
 }
 
 func (s Store) UpdateGeneralSettings(ctx context.Context, a domain.Actor, inputs []domain.GeneralSettingInput) ([]string, error) {
 	if !a.Can("settings.manage") {
 		return nil, domain.ErrForbidden
+	}
+	if len(inputs) == 0 {
+		return nil, nil
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -120,26 +169,55 @@ func (s Store) UpdateGeneralSettings(ctx context.Context, a domain.Actor, inputs
 	}
 	defer tx.Rollback(ctx)
 
-	// Collect candidate displaced tokens only from the keys being modified
-	displaced := make(map[string]bool)
-	for _, in := range inputs {
+	// Sort input keys to ensure consistent row-lock order
+	inputsCopy := make([]domain.GeneralSettingInput, len(inputs))
+	copy(inputsCopy, inputs)
+	sort.Slice(inputsCopy, func(i, j int) bool { return inputsCopy[i].Key < inputsCopy[j].Key })
+
+	boundTokens := make(map[string]bool)
+	allOldTokens := make(map[string]bool)
+	allNewTokens := make(map[string]bool)
+
+	for _, in := range inputsCopy {
 		var prevVal string
-		_ = tx.QueryRow(ctx, `SELECT value FROM hospital_general_setting WHERE key = $1`, in.Key).Scan(&prevVal)
-		oldTokens := tokenRegex.FindAllString(prevVal, -1)
-		newTokens := tokenRegex.FindAllString(in.Value, -1)
-		newSet := make(map[string]bool, len(newTokens))
-		for _, t := range newTokens {
-			newSet[t] = true
+		err := tx.QueryRow(ctx, `SELECT value FROM hospital_general_setting WHERE key = $1 FOR UPDATE`, in.Key).Scan(&prevVal)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
 		}
+		oldTokens := tokenRegex.FindAllString(prevVal, -1)
 		for _, t := range oldTokens {
-			if !newSet[t] {
-				displaced[t] = true
+			allOldTokens[t] = true
+		}
+		if !domain.SettingsSecretKeys[in.Key] {
+			newTokens := tokenRegex.FindAllString(in.Value, -1)
+			for _, t := range newTokens {
+				allNewTokens[t] = true
+				boundTokens[t] = true
 			}
 		}
 	}
 
-	for _, in := range inputs {
-		if _, err = tx.Exec(ctx, `INSERT INTO hospital_general_setting(key,value,updated_at) VALUES($1,$2,clock_timestamp()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=clock_timestamp()`, in.Key, in.Value); err != nil {
+	displacedTokens := make(map[string]bool)
+	for t := range allOldTokens {
+		if !allNewTokens[t] {
+			displacedTokens[t] = true
+		}
+	}
+
+	// 1. Lock all incoming and displaced tokens in stable alphabetical order and validate bound assets
+	locked, err := lockAndValidateTokensTx(ctx, tx, boundTokens, displacedTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Persist updated setting values
+	for _, in := range inputsCopy {
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO hospital_general_setting(key, value, updated_at)
+			VALUES($1, $2, clock_timestamp())
+			ON CONFLICT(key) DO UPDATE
+			SET value = EXCLUDED.value, updated_at = clock_timestamp()
+		`, in.Key, in.Value); err != nil {
 			return nil, clinicalError(err)
 		}
 		if err = pharmacyAudit(ctx, tx, a, "general_setting.updated", in.Key); err != nil {
@@ -147,7 +225,8 @@ func (s Store) UpdateGeneralSettings(ctx context.Context, a domain.Actor, inputs
 		}
 	}
 
-	removedPaths, err := retireDisplacedTokensTx(ctx, tx, a, displaced)
+	// 3. Under the held row locks, retire unreferenced displaced tokens
+	removedPaths, err := retireLockedDisplacedTokensTx(ctx, tx, a, displacedTokens, locked)
 	if err != nil {
 		return nil, err
 	}
@@ -261,56 +340,75 @@ func (s Store) FrontCMSSettings(ctx context.Context, typeFilter string) ([]domai
 }
 
 func (s Store) UpdateFrontCMSSetting(ctx context.Context, a domain.Actor, in domain.FrontCMSSettingInput) (domain.FrontCMSSetting, error) {
+	if !a.Can("cms.manage") {
+		return domain.FrontCMSSetting{}, domain.ErrForbidden
+	}
+	_, err := s.UpdateFrontCMSSettings(ctx, a, []domain.FrontCMSSettingInput{in})
+	if err != nil {
+		return domain.FrontCMSSetting{}, err
+	}
 	var out domain.FrontCMSSetting
-	tx, err := s.DB.Begin(ctx)
+	err = s.DB.QueryRow(ctx, `SELECT key, value, type, updated_at FROM front_cms_setting WHERE key = $1`, in.Key).Scan(&out.Key, &out.Value, &out.Type, &out.UpdatedAt)
 	if err != nil {
-		return out, err
+		return domain.FrontCMSSetting{}, err
 	}
-	defer tx.Rollback(ctx)
-
-	err = tx.QueryRow(ctx, `
-		INSERT INTO front_cms_setting (key, value, type, updated_at)
-		VALUES ($1, $2, $3, clock_timestamp())
-		ON CONFLICT (key) DO UPDATE
-		SET value = EXCLUDED.value, type = EXCLUDED.type, updated_at = clock_timestamp()
-		RETURNING key, value, type, updated_at
-	`, in.Key, in.Value, in.Type).Scan(&out.Key, &out.Value, &out.Type, &out.UpdatedAt)
-	if err != nil {
-		return out, clinicalError(err)
-	}
-
-	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'front_cms.updated', $2)`, a.ID, out.Key); err != nil {
-		return out, err
-	}
-	return out, tx.Commit(ctx)
+	return out, nil
 }
 
 func (s Store) UpdateFrontCMSSettings(ctx context.Context, a domain.Actor, settings []domain.FrontCMSSettingInput) ([]string, error) {
+	if !a.Can("cms.manage") {
+		return nil, domain.ErrForbidden
+	}
+	if len(settings) == 0 {
+		return nil, nil
+	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
 
-	// Collect candidate displaced tokens only from the keys being modified
-	displaced := make(map[string]bool)
-	for _, in := range settings {
+	// Sort input keys to guarantee stable row-lock order
+	settingsCopy := make([]domain.FrontCMSSettingInput, len(settings))
+	copy(settingsCopy, settings)
+	sort.Slice(settingsCopy, func(i, j int) bool { return settingsCopy[i].Key < settingsCopy[j].Key })
+
+	boundTokens := make(map[string]bool)
+	allOldTokens := make(map[string]bool)
+	allNewTokens := make(map[string]bool)
+
+	for _, in := range settingsCopy {
 		var prevVal string
-		_ = tx.QueryRow(ctx, `SELECT value FROM front_cms_setting WHERE key = $1`, in.Key).Scan(&prevVal)
-		oldTokens := tokenRegex.FindAllString(prevVal, -1)
-		newTokens := tokenRegex.FindAllString(in.Value, -1)
-		newSet := make(map[string]bool, len(newTokens))
-		for _, t := range newTokens {
-			newSet[t] = true
+		err := tx.QueryRow(ctx, `SELECT value FROM front_cms_setting WHERE key = $1 FOR UPDATE`, in.Key).Scan(&prevVal)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
 		}
+		oldTokens := tokenRegex.FindAllString(prevVal, -1)
 		for _, t := range oldTokens {
-			if !newSet[t] {
-				displaced[t] = true
-			}
+			allOldTokens[t] = true
+		}
+		newTokens := tokenRegex.FindAllString(in.Value, -1)
+		for _, t := range newTokens {
+			allNewTokens[t] = true
+			boundTokens[t] = true
 		}
 	}
 
-	for _, in := range settings {
+	displacedTokens := make(map[string]bool)
+	for t := range allOldTokens {
+		if !allNewTokens[t] {
+			displacedTokens[t] = true
+		}
+	}
+
+	// 1. Lock all incoming and displaced tokens in stable alphabetical order and validate bound assets
+	locked, err := lockAndValidateTokensTx(ctx, tx, boundTokens, displacedTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Persist updated settings values
+	for _, in := range settingsCopy {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO front_cms_setting (key, value, type, updated_at)
 			VALUES ($1, $2, $3, clock_timestamp())
@@ -325,7 +423,8 @@ func (s Store) UpdateFrontCMSSettings(ctx context.Context, a domain.Actor, setti
 		}
 	}
 
-	removedPaths, err := retireDisplacedTokensTx(ctx, tx, a, displaced)
+	// 3. Under the held row locks, retire unreferenced displaced tokens
+	removedPaths, err := retireLockedDisplacedTokensTx(ctx, tx, a, displacedTokens, locked)
 	if err != nil {
 		return nil, err
 	}
@@ -350,50 +449,78 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 	}
 	defer tx.Rollback(ctx)
 
+	// Bounded work per run (LIMIT 100) and stable order (ORDER BY token ASC)
 	rows, err := tx.Query(ctx, `
-		SELECT id, token, storage_path
+		SELECT id, token, storage_path, is_public, patient_id::text, encounter_id::text
 		FROM secure_attachment
 		WHERE is_public = true
 		  AND patient_id IS NULL
 		  AND encounter_id IS NULL
 		  AND created_at < clock_timestamp() - make_interval(secs => $1)
-		  AND NOT EXISTS (
-		    SELECT 1 FROM hospital_general_setting WHERE value LIKE '%' || secure_attachment.token || '%'
-		  )
-		  AND NOT EXISTS (
-		    SELECT 1 FROM front_cms_setting WHERE value LIKE '%' || secure_attachment.token || '%'
-		  )
-		FOR UPDATE
+		ORDER BY token ASC
+		LIMIT 100
+		FOR UPDATE SKIP LOCKED
 	`, intervalSec)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var ids, tokens, paths []string
+	type cand struct {
+		id          string
+		token       string
+		storagePath string
+		isPublic    bool
+		patientID   *string
+		encounterID *string
+	}
+	var candidates []cand
 	for rows.Next() {
-		var id, token, path string
-		if err := rows.Scan(&id, &token, &path); err != nil {
+		var c cand
+		if err := rows.Scan(&c.id, &c.token, &c.storagePath, &c.isPublic, &c.patientID, &c.encounterID); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
-		tokens = append(tokens, token)
-		paths = append(paths, path)
+		candidates = append(candidates, c)
 	}
 	rows.Close()
 
-	for i, id := range ids {
-		if _, err = tx.Exec(ctx, `DELETE FROM secure_attachment WHERE id = $1`, id); err != nil {
+	var removedPaths []string
+	for _, c := range candidates {
+		// Strictly protect clinical attachments
+		if !c.isPublic || c.patientID != nil || c.encounterID != nil {
+			continue
+		}
+		// Under the token's held row lock, check if still referenced
+		var inUse bool
+		err := tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM hospital_general_setting WHERE value LIKE '%' || $1 || '%'
+			) OR EXISTS(
+				SELECT 1 FROM front_cms_setting WHERE value LIKE '%' || $1 || '%'
+			)
+		`, c.token).Scan(&inUse)
+		if err != nil {
 			return nil, err
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'attachment.retired', $2)`, a.ID, tokens[i]); err != nil {
+		if inUse {
+			continue // Preserved due to active reference in general settings or CMS
+		}
+		if _, err = tx.Exec(ctx, `DELETE FROM secure_attachment WHERE id = $1`, c.id); err != nil {
 			return nil, err
 		}
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO audit_event (actor_id, action, resource_id)
+			VALUES ($1, 'attachment.retired', $2)
+		`, a.ID, c.token); err != nil {
+			return nil, err
+		}
+		removedPaths = append(removedPaths, c.storagePath)
 	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return paths, nil
+	return removedPaths, nil
 }
 
 func (s Store) RetireUnreferencedAttachments(ctx context.Context, a domain.Actor) ([]string, error) {

@@ -92,16 +92,50 @@ Stored in `hospital_general_setting` with strict secret masking:
 
 ## 5. Attachment Storage Lifecycle for System Assets
 
+### 5.1 Upload and Public Asset Access
 1. **Upload (`POST /v1/attachments`)**:
-   - Supports system assets with `isPublic=true` and optional `patientId` (permitted for actors with `settings.manage` or role `admin`).
+   - Supports system assets with `isPublic=true` and empty `patientId` (permitted for actors with `settings.manage` or role `admin`).
    - Mime type detection: `image/png`, `image/jpeg`, `image/webp`.
    - Size limit: 25 MiB.
+   - Computes SHA-256 hash and assigns `uploader_id`.
    - Generates non-predictable token and persists in `secure_attachment`.
 2. **Download (`GET /v1/attachments/{token}/content`)**:
    - When `is_public` is true, returns the file stream immediately without requiring patient ownership or care-team assignment, allowing browsers to render logos and favicons.
-3. **Replacement & Removal**:
-   - Setting `logo_url` or `favicon_url` to the new attachment content URL updates `hospital_general_setting`.
-   - Setting to `""` or clicking Remove clears the setting reference.
+
+### 5.2 Binding, Replacement & Retirement Protocol (R1a)
+To eliminate races between concurrent settings saves and attachment retirements:
+1. **Alphabetical Lock Ordering Protocol**:
+   - All referenced and displacing attachment tokens are collected and deduplicated.
+   - Tokens are acquired and locked in stable alphabetical order (`ORDER BY token ASC`) inside a PostgreSQL transaction (`SELECT token, is_public, patient_id FROM secure_attachment WHERE token = ANY(...) FOR UPDATE`).
+   - Newly bound tokens are validated: must exist, must have `is_public = true`, and must have empty `patient_id` (rejecting clinical records with `ErrValidation` / 422).
+   - If any bound token does not exist in `secure_attachment`, the transaction immediately aborts with `ErrNotFound` (404), preventing dangling image URLs from ever persisting.
+2. **Atomic Displacement & Reference Verification**:
+   - Previous setting values are read under `FOR UPDATE`.
+   - Setting rows are updated atomically within the transaction.
+   - For any token displaced by the update, the transaction verifies that no active setting in either `hospital_general_setting` or `front_cms_setting` still references the token before marking it for retirement.
+   - If no references remain, the attachment row is deleted from `secure_attachment` under the held lock, and the disk file removal is dispatched.
+3. **Single-Item Method Coordination**:
+   - Single-item persistence methods (`UpdateGeneralSetting`, `UpdateFrontCMSSetting`) delegate directly through the unified batch transaction methods to guarantee identical row-locking, validation, and displaced-token cleanup semantics.
+
+### 5.3 Operational Abandoned Attachment Cleanup (R1b)
+Assets uploaded without being saved into settings or displaced before completion are cleaned via bounded, observable operational jobs:
+1. **Cleanup Semantics (`CleanupAbandonedAttachments`)**:
+   - Targets only public, non-clinical attachments (`is_public = true AND (patient_id IS NULL OR patient_id = '')`).
+   - Enforces an age threshold (`created_at < NOW() - older_than`, default 24h).
+   - Bounded work per run: `LIMIT 100` with non-blocking concurrency: `ORDER BY token ASC FOR UPDATE SKIP LOCKED`.
+   - Under the held row lock, verifies `NOT EXISTS` across both `hospital_general_setting` and `front_cms_setting` before deleting database records and returning tokens for disk file removal.
+2. **Observable Error Handling**:
+   - Both operational cleanup file removal (`RunOperationalAttachmentCleanup`) and direct retirement (`RetireAttachment`) log disk removal failures using structured logging (`log.Printf`) rather than discarding errors.
+3. **Operational Invocation Channels**:
+   - **Administrative REST Endpoint**:
+     `POST /v1/attachments/cleanup?older_than=24h`
+     - Requires `settings.manage` permission (returns 403 Forbidden for non-administrators).
+     - Returns `{ "cleaned": <count>, "threshold": "<duration>" }`.
+   - **Worker CLI One-Shot Command**:
+     `worker -cleanup-attachments [-older-than=24h]`
+     - Executes a single bounded cleanup sweep against PostgreSQL and local storage, exiting with code 0 upon completion.
+   - **Worker Scheduled Background Job**:
+     - Continuous daemon background ticker running hourly operational cleanup with a 24-hour retention threshold.
 
 ---
 

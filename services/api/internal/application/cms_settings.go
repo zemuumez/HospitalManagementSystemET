@@ -81,7 +81,20 @@ func (s CMSSettingsService) UpdateGeneralSetting(ctx context.Context, a domain.A
 	if err := in.Validate(); err != nil {
 		return domain.HospitalGeneralSetting{}, err
 	}
-	return s.Store.UpdateGeneralSetting(ctx, a, in)
+	if err := s.UpdateGeneralSettings(ctx, a, map[string]string{in.Key: in.Value}); err != nil {
+		return domain.HospitalGeneralSetting{}, err
+	}
+	raw, err := s.Store.GeneralSettings(ctx)
+	if err != nil {
+		return domain.HospitalGeneralSetting{}, err
+	}
+	var updatedAt time.Time
+	if s.Now != nil {
+		updatedAt = s.Now()
+	} else {
+		updatedAt = time.Now()
+	}
+	return domain.HospitalGeneralSetting{Key: in.Key, Value: raw[in.Key], UpdatedAt: updatedAt}, nil
 }
 
 func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.Actor, settings map[string]string) error {
@@ -178,7 +191,16 @@ func (s CMSSettingsService) UpdateFrontCMSSetting(ctx context.Context, a domain.
 	if err := in.Validate(); err != nil {
 		return domain.FrontCMSSetting{}, err
 	}
-	return s.Store.UpdateFrontCMSSetting(ctx, a, in)
+	if err := s.UpdateFrontCMSSettings(ctx, a, []domain.FrontCMSSettingInput{in}); err != nil {
+		return domain.FrontCMSSetting{}, err
+	}
+	var updatedAt time.Time
+	if s.Now != nil {
+		updatedAt = s.Now()
+	} else {
+		updatedAt = time.Now()
+	}
+	return domain.FrontCMSSetting{Key: in.Key, Value: in.Value, Type: in.Type, UpdatedAt: updatedAt}, nil
 }
 
 func (s CMSSettingsService) UpdateFrontCMSSettings(ctx context.Context, a domain.Actor, settings []domain.FrontCMSSettingInput) error {
@@ -211,14 +233,19 @@ func (s CMSSettingsService) UpdateFrontCMSSettings(ctx context.Context, a domain
 	return nil
 }
 
-func (s CMSSettingsService) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, olderThan time.Duration) error {
+func (s CMSSettingsService) RunOperationalAttachmentCleanup(ctx context.Context, a domain.Actor, olderThan time.Duration) (int, error) {
 	if !a.Can("settings.manage") {
-		return domain.ErrForbidden
+		return 0, domain.ErrForbidden
+	}
+	if olderThan <= 0 {
+		olderThan = 24 * time.Hour
 	}
 	paths, err := s.Store.CleanupAbandonedAttachments(ctx, a, olderThan)
 	if err != nil {
-		return err
+		log.Printf("operational attachment cleanup database failure: %v", err)
+		return 0, err
 	}
+	cleaned := len(paths)
 	if s.Files != nil {
 		for _, p := range paths {
 			if err := s.Files.Remove(ctx, p); err != nil {
@@ -226,7 +253,13 @@ func (s CMSSettingsService) CleanupAbandonedAttachments(ctx context.Context, a d
 			}
 		}
 	}
-	return nil
+	log.Printf("operational attachment cleanup complete: retired %d abandoned attachments (threshold: %v)", cleaned, olderThan)
+	return cleaned, nil
+}
+
+func (s CMSSettingsService) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, olderThan time.Duration) error {
+	_, err := s.RunOperationalAttachmentCleanup(ctx, a, olderThan)
+	return err
 }
 
 // --- Testimonials ---

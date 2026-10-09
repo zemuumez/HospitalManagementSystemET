@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -798,9 +799,14 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			t.Fatal("failed to set home_banner D", err)
 		}
 
-		// Now update front CMS replacing home_banner with urlB
+		// Now update front CMS replacing home_banner with a new valid banner E
+		attE, err := attSrv.UploadPublic(ctx, admin, "replacement_banner.png", pngDataA)
+		if err != nil {
+			t.Fatal("failed to upload replacement banner E", err)
+		}
+		urlE := "/api/hms/attachments/" + attE.Token + "/content"
 		if err := cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
-			{Key: "home_banner", Value: urlB, Type: "home"},
+			{Key: "home_banner", Value: urlE, Type: "home"},
 		}); err != nil {
 			t.Fatal("failed to displace home_banner D", err)
 		}
@@ -852,9 +858,339 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			t.Fatalf("aged referenced attachment D should NOT be cleaned up: %v", err)
 		}
 		readerD2.Close()
+
+		// 8. R1a deterministic concurrency probe holding lock on T
+		{
+			attProbe, err := attSrv.UploadPublic(ctx, admin, "probe.png", pngDataA)
+			if err != nil {
+				t.Fatal("failed to upload probe attachment", err)
+			}
+			urlProbe := "/api/hms/attachments/" + attProbe.Token + "/content"
+			// Save initial logo referencing attProbe
+			if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": urlProbe,
+			}); err != nil {
+				t.Fatal("failed to set probe logo", err)
+			}
+
+			// In a separate test connection, hold row lock on attProbe
+			holdConn, err := db.Acquire(ctx)
+			if err != nil {
+				t.Fatal("failed to acquire test connection", err)
+			}
+			holdTx, err := holdConn.Begin(ctx)
+			if err != nil {
+				holdConn.Release()
+				t.Fatal("failed to begin hold tx", err)
+			}
+			var probeRowID string
+			if err := holdTx.QueryRow(ctx, `SELECT id FROM secure_attachment WHERE token = $1 FOR UPDATE`, attProbe.Token).Scan(&probeRowID); err != nil {
+				_ = holdTx.Rollback(ctx)
+				holdConn.Release()
+				t.Fatal("failed to lock probe attachment", err)
+			}
+
+			// Goroutine A: UpdateGeneralSettings displaces attProbe (app_logo: "")
+			errChA := make(chan error, 1)
+			go func() {
+				errChA <- cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+					"app_logo": "",
+				})
+			}()
+
+			// Poll until Goroutine A is blocked on the held attachment row lock
+			for i := 0; i < 50; i++ {
+				var count int
+				_ = db.QueryRow(ctx, `SELECT COUNT(*) FROM pg_locks WHERE NOT granted`).Scan(&count)
+				if count > 0 {
+					break
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+
+			// Goroutine B: UpdateFrontCMSSettings binds attProbe (review_banner: urlProbe)
+			// Because binding participates in the lock protocol, it also blocks on attProbe!
+			errChB := make(chan error, 1)
+			go func() {
+				errChB <- cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+					{Key: "review_banner", Value: urlProbe, Type: "review"},
+				})
+			}()
+
+			// Give Goroutine B a moment to queue behind the lock
+			time.Sleep(50 * time.Millisecond)
+
+			// Release hold lock
+			_ = holdTx.Rollback(ctx)
+			holdConn.Release()
+
+			errA := <-errChA
+			errB := <-errChB
+
+			if errA != nil {
+				t.Fatalf("UpdateGeneralSettings failed: %v", errA)
+			}
+
+			// Validate invariant: if CMS contains attProbe, attProbe MUST be downloadable (never retired/deleted)
+			cmsItems, err := store.FrontCMSSettings(ctx, "review")
+			if err != nil {
+				t.Fatal("failed to query CMS settings", err)
+			}
+			var cmsHasProbe bool
+			for _, item := range cmsItems {
+				if item.Key == "review_banner" && strings.Contains(item.Value, attProbe.Token) {
+					cmsHasProbe = true
+				}
+			}
+			if cmsHasProbe {
+				// Binding won: attProbe must be downloadable!
+				_, reader, err := attSrv.Download(ctx, domain.Actor{}, attProbe.Token)
+				if err != nil {
+					t.Fatalf("successfully bound CMS image was retired: %v", err)
+				}
+				reader.Close()
+			} else {
+				// Retirement won: binding must have been rejected
+				if errB == nil {
+					t.Fatal("expected binding to fail when retirement won")
+				}
+				if !errors.Is(errB, domain.ErrNotFound) {
+					t.Fatalf("expected ErrNotFound when binding retired token, got %v", errB)
+				}
+			}
+		}
+
+		// 9. Deterministic Ordering Outcome A: Binding wins -> retirement preserves reference
+		{
+			attWin, err := attSrv.UploadPublic(ctx, admin, "win.png", pngDataA)
+			if err != nil {
+				t.Fatal("failed to upload win attachment", err)
+			}
+			urlWin := "/api/hms/attachments/" + attWin.Token + "/content"
+			// Save in general settings
+			if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": urlWin,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Binding wins: bind in CMS first
+			if err := cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+				{Key: "home_banner", Value: urlWin, Type: "home"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Now displace from general settings
+			if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": "",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Assert: attWin is preserved and downloadable because CMS references it
+			_, readerWin, err := attSrv.Download(ctx, domain.Actor{}, attWin.Token)
+			if err != nil {
+				t.Fatalf("expected win token to be preserved, got error: %v", err)
+			}
+			readerWin.Close()
+		}
+
+		// 10. Deterministic Ordering Outcome B: Retirement wins -> binding rejects missing token
+		{
+			attRet, err := attSrv.UploadPublic(ctx, admin, "ret.png", pngDataA)
+			if err != nil {
+				t.Fatal("failed to upload ret attachment", err)
+			}
+			urlRet := "/api/hms/attachments/" + attRet.Token + "/content"
+			// Save in general settings
+			if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": urlRet,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Retirement wins: displace and retire from general settings
+			if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": "",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Verify token was deleted
+			_, _, err = attSrv.Download(ctx, domain.Actor{}, attRet.Token)
+			if !errors.Is(err, domain.ErrNotFound) {
+				t.Fatalf("expected ErrNotFound for retired token, got %v", err)
+			}
+			// Now attempt to bind retired token in CMS
+			err = cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+				{Key: "home_banner", Value: urlRet, Type: "home"},
+			})
+			if !errors.Is(err, domain.ErrNotFound) {
+				t.Fatalf("expected ErrNotFound when binding already-retired token, got %v", err)
+			}
+			// Verify broken URL was NOT persisted in CMS
+			cmsItems, _ := store.FrontCMSSettings(ctx, "home")
+			for _, item := range cmsItems {
+				if item.Key == "home_banner" && strings.Contains(item.Value, attRet.Token) {
+					t.Fatalf("broken URL with retired token was persisted in CMS: %s", item.Value)
+				}
+			}
+		}
+
+		// 11. Binding clinical attachment is rejected (ErrValidation)
+		{
+			clinicalID := "11111111-1111-1111-1111-111111111111"
+			clinicalToken := "c1111111111111111111111111111111"
+			_, err := db.Exec(ctx, `
+				INSERT INTO secure_attachment (id, token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public)
+				VALUES ($1, $2, 'clinical.pdf', 'application/pdf', 1024, 'clinical.pdf', $3, $4, false)
+				ON CONFLICT (id) DO NOTHING
+			`, clinicalID, clinicalToken, strings.Repeat("a", 64), admin.ID)
+			if err != nil {
+				t.Fatalf("failed to insert clinical fixture: %v", err)
+			}
+
+			// Attempt to bind clinical token to app_logo
+			err = cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+				"app_logo": "/v1/attachments/" + clinicalToken + "/content",
+			})
+			if !errors.Is(err, domain.ErrValidation) {
+				t.Fatalf("expected ErrValidation when binding private/clinical attachment, got %v", err)
+			}
+		}
+
+		// 12. R1b: Operational cleanup entry point with aged, pending, referenced, and clinical fixtures
+		{
+			// Fixture 1: Aged unreferenced public asset (>24h)
+			attAgedUnref, err := attSrv.UploadPublic(ctx, admin, "aged_unref.png", pngDataA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = db.Exec(ctx, `UPDATE secure_attachment SET created_at = clock_timestamp() - interval '48 hours' WHERE token = $1`, attAgedUnref.Token)
+
+			// Fixture 2: Recent pending public asset (<24h)
+			attRecentPending, err := attSrv.UploadPublic(ctx, admin, "recent_pending.png", pngDataA)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Fixture 3: Aged referenced public asset (>24h, in CMS home_banner)
+			attAgedRef, err := attSrv.UploadPublic(ctx, admin, "aged_ref.png", pngDataA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, _ = db.Exec(ctx, `UPDATE secure_attachment SET created_at = clock_timestamp() - interval '48 hours' WHERE token = $1`, attAgedRef.Token)
+			if err := cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+				{Key: "home_banner", Value: "/v1/attachments/" + attAgedRef.Token + "/content", Type: "home"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			// Fixture 4: Aged clinical private asset (>24h, is_public=false)
+			clinToken := "c4444444444444444444444444444444"
+			clinID := "44444444-4444-4444-4444-444444444444"
+			_, err = db.Exec(ctx, `
+				INSERT INTO secure_attachment (id, token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, created_at)
+				VALUES ($1, $2, 'clinical_lab.pdf', 'application/pdf', 512, 'clinical_lab.pdf', $3, $4, false, clock_timestamp() - interval '48 hours')
+				ON CONFLICT (id) DO NOTHING
+			`, clinID, clinToken, strings.Repeat("b", 64), admin.ID)
+			if err != nil {
+				t.Fatalf("failed to insert clinical fixture 4: %v", err)
+			}
+
+			// Test operational entry point: RunOperationalAttachmentCleanup
+			cleanedCount, err := cmsWithFiles.RunOperationalAttachmentCleanup(ctx, admin, 24*time.Hour)
+			if err != nil {
+				t.Fatalf("operational cleanup failed: %v", err)
+			}
+			if cleanedCount < 1 {
+				t.Fatalf("expected at least 1 cleaned attachment, got %d", cleanedCount)
+			}
+
+			// Assert Fixture 1 (aged unreferenced) is deleted
+			_, _, err = attSrv.Download(ctx, domain.Actor{}, attAgedUnref.Token)
+			if !errors.Is(err, domain.ErrNotFound) {
+				t.Fatalf("expected Fixture 1 to be deleted, got %v", err)
+			}
+
+			// Assert Fixture 2 (recent pending) is preserved
+			_, readerRecent, err := attSrv.Download(ctx, domain.Actor{}, attRecentPending.Token)
+			if err != nil {
+				t.Fatalf("Fixture 2 (recent pending) must be preserved: %v", err)
+			}
+			readerRecent.Close()
+
+			// Assert Fixture 3 (aged referenced) is preserved
+			_, readerRef, err := attSrv.Download(ctx, domain.Actor{}, attAgedRef.Token)
+			if err != nil {
+				t.Fatalf("Fixture 3 (aged referenced) must be preserved: %v", err)
+			}
+			readerRef.Close()
+
+			// Assert Fixture 4 (aged clinical) is preserved
+			var clinExists bool
+			_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token = $1)`, clinToken).Scan(&clinExists)
+			if !clinExists {
+				t.Fatal("Fixture 4 (clinical) must NEVER be touched by abandoned cleanup")
+			}
+
+			// Test HTTP operational maintenance endpoint POST /v1/attachments/cleanup
+			authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"user":    map[string]any{"id": admin.ID},
+					"session": map[string]any{"userId": admin.ID, "expiresAt": time.Now().Add(time.Hour)},
+				})
+			}))
+			defer authSrv.Close()
+
+			httpHandler := httpapi.Server{
+				CMSSettings: cmsWithFiles,
+				Attachments: attSrv,
+				Actors:      store,
+				AuthURL:     authSrv.URL,
+				Origin:      "http://hospital.test",
+				Client:      authSrv.Client(),
+			}.Handler()
+
+			// Admin call to POST /v1/attachments/cleanup
+			cleanReq := httptest.NewRequest("POST", "/v1/attachments/cleanup", strings.NewReader(`{"olderThanSeconds":86400}`))
+			cleanReq.Header.Set("Cookie", "session=admin-token")
+			cleanReq.Header.Set("Origin", "http://hospital.test")
+			cleanReq.Header.Set("Content-Type", "application/json")
+			cleanRec := httptest.NewRecorder()
+			httpHandler.ServeHTTP(cleanRec, cleanReq)
+			if cleanRec.Code != http.StatusOK {
+				t.Fatalf("expected HTTP 200 from POST /v1/attachments/cleanup, got %d: %s", cleanRec.Code, cleanRec.Body.String())
+			}
+
+			// Doctor (non-admin) call to POST /v1/attachments/cleanup -> 403 Forbidden
+			docAuthSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"user":    map[string]any{"id": doctor.ID},
+					"session": map[string]any{"userId": doctor.ID, "expiresAt": time.Now().Add(time.Hour)},
+				})
+			}))
+			defer docAuthSrv.Close()
+
+			docHttpHandler := httpapi.Server{
+				CMSSettings: cmsWithFiles,
+				Attachments: attSrv,
+				Actors:      store,
+				AuthURL:     docAuthSrv.URL,
+				Origin:      "http://hospital.test",
+				Client:      docAuthSrv.Client(),
+			}.Handler()
+
+			docReq := httptest.NewRequest("POST", "/v1/attachments/cleanup", nil)
+			docReq.Header.Set("Cookie", "session=doctor-token")
+			docReq.Header.Set("Origin", "http://hospital.test")
+			docRec := httptest.NewRecorder()
+			docHttpHandler.ServeHTTP(docRec, docReq)
+			if docRec.Code != http.StatusForbidden {
+				t.Fatalf("expected HTTP 403 Forbidden for non-admin cleanup, got %d: %s", docRec.Code, docRec.Body.String())
+			}
+		}
 	})
 
-	t.Run("S5: concurrent secret preserve-vs-replace regression", func(t *testing.T) {
+	t.Run("S5: concurrent secret preservation under unrelated-field saves regression", func(t *testing.T) {
 		// Set initial secret
 		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
 			"stripe_secret": "stripe-initial-secret-v1",
