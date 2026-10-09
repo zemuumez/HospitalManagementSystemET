@@ -201,6 +201,28 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 			}
 			write(w, 201, cat)
 			return true
+		case strings.HasPrefix(r.URL.Path, "/v1/operation-categories/") && r.Method == "GET":
+			id := strings.TrimPrefix(r.URL.Path, "/v1/operation-categories/")
+			cat, err := s.ServicesOperations.OperationCategory(r.Context(), a, id)
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, cat)
+			return true
+		case strings.HasPrefix(r.URL.Path, "/v1/operation-categories/") && (r.Method == "PUT" || r.Method == "PATCH"):
+			id := strings.TrimPrefix(r.URL.Path, "/v1/operation-categories/")
+			var in domain.OperationCategoryInput
+			if !decode(w, r, &in) {
+				return true
+			}
+			cat, err := s.ServicesOperations.UpdateOperationCategory(r.Context(), a, id, in)
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, cat)
+			return true
 		case strings.HasPrefix(r.URL.Path, "/v1/operation-categories/") && r.Method == "DELETE":
 			id := strings.TrimPrefix(r.URL.Path, "/v1/operation-categories/")
 			if err := s.ServicesOperations.DeleteOperationCategory(r.Context(), a, id); err != nil {
@@ -298,6 +320,30 @@ func (s Server) servicesOperations(w http.ResponseWriter, r *http.Request, a dom
 				return true
 			}
 			write(w, 201, cf)
+			return true
+
+		case strings.HasPrefix(r.URL.Path, "/v1/custom-fields/") && r.Method == "GET":
+			id := strings.TrimPrefix(r.URL.Path, "/v1/custom-fields/")
+			cf, err := s.ServicesOperations.CustomField(r.Context(), a, id)
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, cf)
+			return true
+
+		case strings.HasPrefix(r.URL.Path, "/v1/custom-fields/") && (r.Method == "PUT" || r.Method == "PATCH"):
+			id := strings.TrimPrefix(r.URL.Path, "/v1/custom-fields/")
+			var in domain.CustomFieldInput
+			if !decode(w, r, &in) {
+				return true
+			}
+			cf, err := s.ServicesOperations.UpdateCustomField(r.Context(), a, id, in)
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, cf)
 			return true
 
 		case strings.HasPrefix(r.URL.Path, "/v1/custom-fields/") && r.Method == "DELETE":

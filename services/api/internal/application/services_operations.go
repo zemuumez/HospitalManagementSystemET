@@ -25,6 +25,8 @@ type ServicesOperationsStore interface {
 
 	CreateOperationCategory(context.Context, domain.Actor, domain.OperationCategoryInput) (domain.OperationCategory, error)
 	OperationCategories(context.Context, domain.Actor) ([]domain.OperationCategory, error)
+	OperationCategory(context.Context, domain.Actor, string) (domain.OperationCategory, error)
+	UpdateOperationCategory(context.Context, domain.Actor, string, domain.OperationCategoryInput) (domain.OperationCategory, error)
 	DeleteOperationCategory(context.Context, domain.Actor, string) error
 	CreateOperation(context.Context, domain.Actor, domain.HospitalOperationInput) (domain.HospitalOperation, error)
 	UpdateOperation(context.Context, domain.Actor, string, domain.HospitalOperationInput) (domain.HospitalOperation, error)
@@ -33,6 +35,8 @@ type ServicesOperationsStore interface {
 	DeleteOperation(context.Context, domain.Actor, string) error
 
 	CreateCustomField(context.Context, domain.Actor, domain.CustomFieldInput) (domain.CustomField, error)
+	CustomField(context.Context, domain.Actor, string) (domain.CustomField, error)
+	UpdateCustomField(context.Context, domain.Actor, string, domain.CustomFieldInput) (domain.CustomField, error)
 	DeleteCustomField(context.Context, domain.Actor, string) error
 	CustomFields(context.Context, domain.Actor, string) ([]domain.CustomField, error)
 
@@ -181,7 +185,7 @@ func (s ServicesOperationsService) Service(ctx context.Context, a domain.Actor, 
 
 // Operation Categories & Operations
 func (s ServicesOperationsService) CreateOperationCategory(ctx context.Context, a domain.Actor, in domain.OperationCategoryInput) (domain.OperationCategory, error) {
-	if !a.Can("operations.manage") {
+	if !a.Can("settings.manage") {
 		return domain.OperationCategory{}, domain.ErrForbidden
 	}
 	if err := in.Validate(); err != nil {
@@ -191,14 +195,37 @@ func (s ServicesOperationsService) CreateOperationCategory(ctx context.Context, 
 }
 
 func (s ServicesOperationsService) OperationCategories(ctx context.Context, a domain.Actor) ([]domain.OperationCategory, error) {
-	if !a.Can("operations.read") {
+	if !a.Can("operations.read") && !a.Can("settings.read") {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.OperationCategories(ctx, a)
 }
 
+func (s ServicesOperationsService) OperationCategory(ctx context.Context, a domain.Actor, id string) (domain.OperationCategory, error) {
+	if !a.Can("operations.read") && !a.Can("settings.read") {
+		return domain.OperationCategory{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.OperationCategory{}, domain.ErrValidation
+	}
+	return s.Store.OperationCategory(ctx, a, id)
+}
+
+func (s ServicesOperationsService) UpdateOperationCategory(ctx context.Context, a domain.Actor, id string, in domain.OperationCategoryInput) (domain.OperationCategory, error) {
+	if !a.Can("settings.manage") {
+		return domain.OperationCategory{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.OperationCategory{}, domain.ErrValidation
+	}
+	if err := in.Validate(); err != nil {
+		return domain.OperationCategory{}, err
+	}
+	return s.Store.UpdateOperationCategory(ctx, a, id, in)
+}
+
 func (s ServicesOperationsService) DeleteOperationCategory(ctx context.Context, a domain.Actor, id string) error {
-	if !a.Can("operations.manage") {
+	if !a.Can("settings.manage") {
 		return domain.ErrForbidden
 	}
 	if !domain.UUIDPattern.MatchString(id) {
@@ -269,6 +296,29 @@ func (s ServicesOperationsService) CreateCustomField(ctx context.Context, a doma
 		return domain.CustomField{}, err
 	}
 	return s.Store.CreateCustomField(ctx, a, in)
+}
+
+func (s ServicesOperationsService) CustomField(ctx context.Context, a domain.Actor, id string) (domain.CustomField, error) {
+	if !a.Can("settings.read") {
+		return domain.CustomField{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.CustomField{}, domain.ErrValidation
+	}
+	return s.Store.CustomField(ctx, a, id)
+}
+
+func (s ServicesOperationsService) UpdateCustomField(ctx context.Context, a domain.Actor, id string, in domain.CustomFieldInput) (domain.CustomField, error) {
+	if !a.Can("settings.manage") {
+		return domain.CustomField{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.CustomField{}, domain.ErrValidation
+	}
+	if err := in.Validate(); err != nil {
+		return domain.CustomField{}, err
+	}
+	return s.Store.UpdateCustomField(ctx, a, id, in)
 }
 
 func (s ServicesOperationsService) DeleteCustomField(ctx context.Context, a domain.Actor, id string) error {

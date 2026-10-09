@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"hms.local/api/internal/domain"
 )
 
@@ -388,6 +390,46 @@ func (s Store) OperationCategories(ctx context.Context, a domain.Actor) ([]domai
 	return out, rows.Err()
 }
 
+func (s Store) OperationCategory(ctx context.Context, a domain.Actor, id string) (domain.OperationCategory, error) {
+	var oc domain.OperationCategory
+	err := s.DB.QueryRow(ctx, `SELECT id, name, created_at, updated_at FROM operation_category WHERE id = $1`, id).
+		Scan(&oc.ID, &oc.Name, &oc.CreatedAt, &oc.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oc, domain.ErrNotFound
+	}
+	if err != nil {
+		return oc, clinicalError(err)
+	}
+	return oc, nil
+}
+
+func (s Store) UpdateOperationCategory(ctx context.Context, a domain.Actor, id string, in domain.OperationCategoryInput) (domain.OperationCategory, error) {
+	out := domain.OperationCategory{ID: id, Name: in.Name}
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback(ctx)
+
+	err = tx.QueryRow(ctx, `
+		UPDATE operation_category
+		SET name = $1, updated_at = clock_timestamp()
+		WHERE id = $2
+		RETURNING created_at, updated_at
+	`, out.Name, id).Scan(&out.CreatedAt, &out.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, domain.ErrNotFound
+	}
+	if err != nil {
+		return out, clinicalError(err)
+	}
+
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'operation_category.updated', $2)`, a.ID, id); err != nil {
+		return out, err
+	}
+	return out, tx.Commit(ctx)
+}
+
 func (s Store) DeleteOperationCategory(ctx context.Context, a domain.Actor, id string) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -607,6 +649,58 @@ func (s Store) DeleteCustomField(ctx context.Context, a domain.Actor, id string)
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (s Store) CustomField(ctx context.Context, a domain.Actor, id string) (domain.CustomField, error) {
+	var cf domain.CustomField
+	err := s.DB.QueryRow(ctx, `
+		SELECT id, module_name, field_type, field_name, is_required, values, grid, created_at, updated_at
+		FROM custom_field
+		WHERE id = $1
+	`, id).Scan(&cf.ID, &cf.ModuleName, &cf.FieldType, &cf.FieldName, &cf.IsRequired, &cf.Values, &cf.Grid, &cf.CreatedAt, &cf.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return cf, domain.ErrNotFound
+	}
+	if err != nil {
+		return cf, clinicalError(err)
+	}
+	return cf, nil
+}
+
+func (s Store) UpdateCustomField(ctx context.Context, a domain.Actor, id string, in domain.CustomFieldInput) (domain.CustomField, error) {
+	out := domain.CustomField{
+		ID:         id,
+		ModuleName: in.ModuleName,
+		FieldType:  in.FieldType,
+		FieldName:  in.FieldName,
+		IsRequired: in.IsRequired,
+		Values:     in.Values,
+		Grid:       in.Grid,
+	}
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback(ctx)
+
+	err = tx.QueryRow(ctx, `
+		UPDATE custom_field
+		SET module_name = $1, field_type = $2, field_name = $3, is_required = $4, values = $5, grid = $6, updated_at = clock_timestamp()
+		WHERE id = $7
+		RETURNING created_at, updated_at
+	`, out.ModuleName, out.FieldType, out.FieldName, out.IsRequired, out.Values, out.Grid, id).
+		Scan(&out.CreatedAt, &out.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, domain.ErrNotFound
+	}
+	if err != nil {
+		return out, clinicalError(err)
+	}
+
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event (actor_id, action, resource_id) VALUES ($1, 'custom_field.updated', $2)`, a.ID, id); err != nil {
+		return out, err
+	}
+	return out, tx.Commit(ctx)
 }
 
 func (s Store) CustomFields(ctx context.Context, a domain.Actor, moduleName string) ([]domain.CustomField, error) {

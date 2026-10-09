@@ -177,6 +177,21 @@ func (s Store) DeleteAttachment(ctx context.Context, a domain.Actor, token strin
 		return "", domain.ErrForbidden
 	}
 
+	var inUse bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM hospital_general_setting WHERE value LIKE '%' || $1 || '%'
+		) OR EXISTS(
+			SELECT 1 FROM front_cms_setting WHERE value LIKE '%' || $1 || '%'
+		)
+	`, token).Scan(&inUse)
+	if err != nil {
+		return "", err
+	}
+	if inUse {
+		return "", domain.ErrInUse
+	}
+
 	_, err = tx.Exec(ctx, `DELETE FROM secure_attachment WHERE id = $1`, id)
 	if err != nil {
 		return "", err

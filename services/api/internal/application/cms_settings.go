@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"hms.local/api/internal/domain"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -11,7 +12,7 @@ import (
 type CMSSettingsStore interface {
 	GeneralSettings(context.Context) (map[string]string, error)
 	UpdateGeneralSetting(context.Context, domain.Actor, domain.GeneralSettingInput) (domain.HospitalGeneralSetting, error)
-	UpdateGeneralSettings(context.Context, domain.Actor, []domain.GeneralSettingInput) error
+	UpdateGeneralSettings(context.Context, domain.Actor, []domain.GeneralSettingInput) ([]string, error)
 
 	HospitalSchedules(context.Context) ([]domain.HospitalScheduleDay, error)
 	UpdateHospitalSchedule(context.Context, domain.Actor, domain.HospitalScheduleDayInput) (domain.HospitalScheduleDay, error)
@@ -19,8 +20,9 @@ type CMSSettingsStore interface {
 
 	FrontCMSSettings(context.Context, string) ([]domain.FrontCMSSetting, error)
 	UpdateFrontCMSSetting(context.Context, domain.Actor, domain.FrontCMSSettingInput) (domain.FrontCMSSetting, error)
-	UpdateFrontCMSSettings(context.Context, domain.Actor, []domain.FrontCMSSettingInput) error
+	UpdateFrontCMSSettings(context.Context, domain.Actor, []domain.FrontCMSSettingInput) ([]string, error)
 
+	CleanupAbandonedAttachments(context.Context, domain.Actor, time.Duration) ([]string, error)
 	RetireUnreferencedAttachments(context.Context, domain.Actor) ([]string, error)
 
 	Testimonials(context.Context, *int) ([]domain.CMSTestimonial, error)
@@ -82,17 +84,6 @@ func (s CMSSettingsService) UpdateGeneralSetting(ctx context.Context, a domain.A
 	return s.Store.UpdateGeneralSetting(ctx, a, in)
 }
 
-func (s CMSSettingsService) retireUnreferencedPublicAttachments(ctx context.Context, a domain.Actor) {
-	if s.Files != nil {
-		paths, err := s.Store.RetireUnreferencedAttachments(ctx, a)
-		if err == nil {
-			for _, p := range paths {
-				_ = s.Files.Remove(ctx, p)
-			}
-		}
-	}
-}
-
 func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.Actor, settings map[string]string) error {
 	if !a.Can("settings.manage") {
 		return domain.ErrForbidden
@@ -119,11 +110,17 @@ func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.
 	}
 	// Validate the entire form before writing, and lock keys in stable order.
 	sort.Slice(inputs, func(i, j int) bool { return inputs[i].Key < inputs[j].Key })
-	if err := s.Store.UpdateGeneralSettings(ctx, a, inputs); err != nil {
+	displacedPaths, err := s.Store.UpdateGeneralSettings(ctx, a, inputs)
+	if err != nil {
 		return err
 	}
-	// S4: Clean up any public logo/favicon attachment that is no longer referenced anywhere
-	s.retireUnreferencedPublicAttachments(ctx, a)
+	if s.Files != nil {
+		for _, p := range displacedPaths {
+			if err := s.Files.Remove(ctx, p); err != nil {
+				log.Printf("failed to remove displaced attachment file %s: %v", p, err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -200,11 +197,35 @@ func (s CMSSettingsService) UpdateFrontCMSSettings(ctx context.Context, a domain
 		seenKeys[in.Key] = true
 	}
 	// Aggregate repository-level transaction covering all writes and audit events
-	if err := s.Store.UpdateFrontCMSSettings(ctx, a, settings); err != nil {
+	displacedPaths, err := s.Store.UpdateFrontCMSSettings(ctx, a, settings)
+	if err != nil {
 		return err
 	}
-	// S4: Clean up any public CMS attachment that is no longer referenced anywhere
-	s.retireUnreferencedPublicAttachments(ctx, a)
+	if s.Files != nil {
+		for _, p := range displacedPaths {
+			if err := s.Files.Remove(ctx, p); err != nil {
+				log.Printf("failed to remove displaced CMS attachment file %s: %v", p, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s CMSSettingsService) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, olderThan time.Duration) error {
+	if !a.Can("settings.manage") {
+		return domain.ErrForbidden
+	}
+	paths, err := s.Store.CleanupAbandonedAttachments(ctx, a, olderThan)
+	if err != nil {
+		return err
+	}
+	if s.Files != nil {
+		for _, p := range paths {
+			if err := s.Files.Remove(ctx, p); err != nil {
+				log.Printf("failed to remove abandoned attachment file %s: %v", p, err)
+			}
+		}
+	}
 	return nil
 }
 
