@@ -345,4 +345,174 @@ func testServicesOperations(t *testing.T, db *pgxpool.Pool, store Store, actors 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for DELETE unreferenced category, got %d: %s", rec.Code, rec.Body.String())
 	}
+
+	// 9. Operation Categories and Custom Fields Edit Flows (R2)
+	// Create fresh operation category to edit
+	editCat, err := srv.CreateOperationCategory(ctx, admin, domain.OperationCategoryInput{
+		Name: "Orthopedic Initial",
+	})
+	if err != nil {
+		t.Fatalf("failed to create category for edit: %v", err)
+	}
+
+	// Update category via PUT
+	upCatPayload, _ := json.Marshal(domain.OperationCategoryInput{
+		Name: "Orthopedic & Joint Surgery",
+	})
+	req = httptest.NewRequest("PUT", "/v1/operation-categories/"+editCat.ID, bytes.NewReader(upCatPayload))
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for PUT /v1/operation-categories/{id}, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify persistence via GET /v1/operation-categories/{id}
+	req = httptest.NewRequest("GET", "/v1/operation-categories/"+editCat.ID, nil)
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for GET /v1/operation-categories/{id}, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var catRes domain.OperationCategory
+	_ = json.Unmarshal(rec.Body.Bytes(), &catRes)
+	if catRes.Name != "Orthopedic & Joint Surgery" {
+		t.Fatalf("expected updated category name 'Orthopedic & Joint Surgery', got %q", catRes.Name)
+	}
+
+	// Validation rejection on empty name
+	badCatPayload, _ := json.Marshal(domain.OperationCategoryInput{Name: ""})
+	req = httptest.NewRequest("PUT", "/v1/operation-categories/"+editCat.ID, bytes.NewReader(badCatPayload))
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for empty category name, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Conflict rejection on duplicate category name
+	conflictCat, err := srv.CreateOperationCategory(ctx, admin, domain.OperationCategoryInput{
+		Name: "Duplicate Target Name",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dupCatPayload, _ := json.Marshal(domain.OperationCategoryInput{Name: "Duplicate Target Name"})
+	req = httptest.NewRequest("PUT", "/v1/operation-categories/"+editCat.ID, bytes.NewReader(dupCatPayload))
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict for duplicate category name, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = srv.DeleteOperationCategory(ctx, admin, conflictCat.ID)
+
+	// Non-admin rejection (e.g. doctor) on update category -> 403 Forbidden
+	nonAdminAuthSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"user":    map[string]any{"id": doctor.ID},
+			"session": map[string]any{"userId": doctor.ID, "expiresAt": time.Now().Add(time.Hour)},
+		})
+	}))
+	defer nonAdminAuthSrv.Close()
+
+	nonAdminHandler := httpapi.Server{
+		ServicesOperations: srv,
+		Actors:             store,
+		AuthURL:            nonAdminAuthSrv.URL,
+		Origin:             "http://hospital.test",
+		Client:             nonAdminAuthSrv.Client(),
+	}.Handler()
+
+	req = httptest.NewRequest("PUT", "/v1/operation-categories/"+editCat.ID, bytes.NewReader(upCatPayload))
+	req.Header.Set("Cookie", "session=doctor-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	nonAdminHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for doctor updating category, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Custom Field Edit Tests
+	editCF, err := srv.CreateCustomField(ctx, admin, domain.CustomFieldInput{
+		ModuleName: "patients",
+		FieldType:  "text",
+		FieldName:  "Emergency Contact Name Initial",
+		IsRequired: false,
+		Grid:       12,
+	})
+	if err != nil {
+		t.Fatalf("failed to create custom field: %v", err)
+	}
+
+	// Update custom field via PUT
+	upCFPayload, _ := json.Marshal(domain.CustomFieldInput{
+		ModuleName: "patients",
+		FieldType:  "text",
+		FieldName:  "Primary Emergency Contact Full Name",
+		IsRequired: true,
+		Grid:       6,
+	})
+	req = httptest.NewRequest("PUT", "/v1/custom-fields/"+editCF.ID, bytes.NewReader(upCFPayload))
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for PUT /v1/custom-fields/{id}, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify persistence via GET /v1/custom-fields/{id}
+	req = httptest.NewRequest("GET", "/v1/custom-fields/"+editCF.ID, nil)
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for GET /v1/custom-fields/{id}, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var cfRes domain.CustomField
+	_ = json.Unmarshal(rec.Body.Bytes(), &cfRes)
+	if cfRes.FieldName != "Primary Emergency Contact Full Name" || !cfRes.IsRequired || cfRes.Grid != 6 {
+		t.Fatalf("unexpected custom field after update: %+v", cfRes)
+	}
+
+	// Validation rejection on invalid grid
+	badCFPayload, _ := json.Marshal(domain.CustomFieldInput{
+		ModuleName: "patients",
+		FieldType:  "text",
+		FieldName:  "Valid Name",
+		Grid:       99,
+	})
+	req = httptest.NewRequest("PUT", "/v1/custom-fields/"+editCF.ID, bytes.NewReader(badCFPayload))
+	req.Header.Set("Cookie", "session=admin-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	httpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for grid > 12, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Non-admin rejection (e.g. doctor) on update custom field -> 403 Forbidden
+	req = httptest.NewRequest("PUT", "/v1/custom-fields/"+editCF.ID, bytes.NewReader(upCFPayload))
+	req.Header.Set("Cookie", "session=doctor-token")
+	req.Header.Set("Origin", "http://hospital.test")
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	nonAdminHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for doctor updating custom field, got %d: %s", rec.Code, rec.Body.String())
+	}
 }

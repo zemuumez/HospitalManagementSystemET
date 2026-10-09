@@ -725,6 +725,133 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			t.Fatalf("expected token B to be downloadable, got %v", err)
 		}
 		readerB.Close()
+
+		// 4. Pending upload surviving unrelated settings save
+		attC, err := attSrv.UploadPublic(ctx, admin, "pending_logo.png", pngDataA)
+		if err != nil {
+			t.Fatal("failed to upload pending logo C", err)
+		}
+		// Unrelated settings update: updating company_name without referencing attC
+		if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"company_name": "Hospital Care Ltd",
+		}); err != nil {
+			t.Fatal("failed unrelated settings update", err)
+		}
+		// Assert pending logo C was NOT deleted
+		_, readerC, err := attSrv.Download(ctx, domain.Actor{}, attC.Token)
+		if err != nil {
+			t.Fatalf("pending upload C should survive unrelated save, but got err: %v", err)
+		}
+		readerC.Close()
+
+		// 5. Direct retirement rejected while referenced (domain.ErrInUse / HTTP 409)
+		// attB is currently referenced as app_logo
+		_, err = store.DeleteAttachment(ctx, admin, attB.Token)
+		if !errors.Is(err, domain.ErrInUse) {
+			t.Fatalf("expected ErrInUse on direct deletion of in-use attachment B, got %v", err)
+		}
+
+		// Also test HTTP endpoint rejection
+		authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user":    map[string]any{"id": admin.ID},
+				"session": map[string]any{"userId": admin.ID, "expiresAt": time.Now().Add(time.Hour)},
+			})
+		}))
+		defer authSrv.Close()
+
+		httpHandler := httpapi.Server{
+			CMSSettings: cmsWithFiles,
+			Attachments: attSrv,
+			Actors:      store,
+			AuthURL:     authSrv.URL,
+			Origin:      "http://hospital.test",
+			Client:      authSrv.Client(),
+		}.Handler()
+
+		delReq := httptest.NewRequest("DELETE", "/v1/attachments/"+attB.Token, nil)
+		delReq.Header.Set("Cookie", "session=admin-token")
+		delReq.Header.Set("Origin", "http://hospital.test")
+		delRec := httptest.NewRecorder()
+		httpHandler.ServeHTTP(delRec, delReq)
+		if delRec.Code != http.StatusConflict {
+			t.Fatalf("expected HTTP 409 Conflict for DELETE in-use attachment, got %d: %s", delRec.Code, delRec.Body.String())
+		}
+
+		// 6. Shared reference preserved across general & CMS
+		attD, err := attSrv.UploadPublic(ctx, admin, "shared_logo.png", pngDataA)
+		if err != nil {
+			t.Fatal("failed to upload shared logo D", err)
+		}
+		urlD := "/api/hms/attachments/" + attD.Token + "/content"
+		// Reference in general settings
+		if err := cmsWithFiles.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"app_logo": urlD,
+		}); err != nil {
+			t.Fatal("failed to set app_logo D", err)
+		}
+		// Also reference in front CMS settings
+		if err := cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+			{Key: "home_banner", Value: urlD, Type: "home"},
+		}); err != nil {
+			t.Fatal("failed to set home_banner D", err)
+		}
+
+		// Now update front CMS replacing home_banner with urlB
+		if err := cmsWithFiles.UpdateFrontCMSSettings(ctx, admin, []domain.FrontCMSSettingInput{
+			{Key: "home_banner", Value: urlB, Type: "home"},
+		}); err != nil {
+			t.Fatal("failed to displace home_banner D", err)
+		}
+
+		// Token D was displaced from CMS, BUT it is still referenced in general settings (app_logo)
+		// Therefore it MUST NOT be retired!
+		_, readerD, err := attSrv.Download(ctx, domain.Actor{}, attD.Token)
+		if err != nil {
+			t.Fatalf("shared reference D must be preserved because general setting still references it, got err: %v", err)
+		}
+		readerD.Close()
+
+		// 7. Bounded abandoned cleanup with olderThan threshold
+		attF, err := attSrv.UploadPublic(ctx, admin, "abandoned.png", pngDataA)
+		if err != nil {
+			t.Fatal("failed to upload abandoned attachment F", err)
+		}
+		// Immediate cleanup: attF is brand new (<24h), so it must NOT be cleaned up
+		if err := cmsWithFiles.CleanupAbandonedAttachments(ctx, admin, 24*time.Hour); err != nil {
+			t.Fatal("cleanup error", err)
+		}
+		_, readerF, err := attSrv.Download(ctx, domain.Actor{}, attF.Token)
+		if err != nil {
+			t.Fatalf("new upload F (<24h) should NOT be cleaned up: %v", err)
+		}
+		readerF.Close()
+
+		// Artificially age attF by 48 hours in DB
+		if _, err := db.Exec(ctx, `UPDATE secure_attachment SET created_at = clock_timestamp() - interval '48 hours' WHERE token = $1`, attF.Token); err != nil {
+			t.Fatal("failed to age attachment F", err)
+		}
+		// Also age referenced attD by 48 hours to ensure referenced old files are NOT cleaned up
+		if _, err := db.Exec(ctx, `UPDATE secure_attachment SET created_at = clock_timestamp() - interval '48 hours' WHERE token = $1`, attD.Token); err != nil {
+			t.Fatal("failed to age attachment D", err)
+		}
+
+		// Run bounded cleanup with 24h threshold
+		if err := cmsWithFiles.CleanupAbandonedAttachments(ctx, admin, 24*time.Hour); err != nil {
+			t.Fatal("cleanup error", err)
+		}
+		// Assert: attF is now deleted (ErrNotFound)
+		_, _, err = attSrv.Download(ctx, domain.Actor{}, attF.Token)
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("aged unreferenced attachment F should be cleaned up, got %v", err)
+		}
+		// Assert: aged referenced attD remains untouched
+		_, readerD2, err := attSrv.Download(ctx, domain.Actor{}, attD.Token)
+		if err != nil {
+			t.Fatalf("aged referenced attachment D should NOT be cleaned up: %v", err)
+		}
+		readerD2.Close()
 	})
 
 	t.Run("S5: concurrent secret preserve-vs-replace regression", func(t *testing.T) {
@@ -769,6 +896,36 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 		}
 		if rawDB["company_name"] != "Client A Updated Company Name" {
 			t.Fatalf("expected company_name updated, got %q", rawDB["company_name"])
+		}
+
+		// True overlapping concurrent goroutine test:
+		// Launch 10 concurrent saves where some preserve secrets and others update company name
+		errCh := make(chan error, 10)
+		for i := 0; i < 10; i++ {
+			go func(idx int) {
+				if idx%2 == 0 {
+					errCh <- srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+						"stripe_secret": domain.SecretConfiguredPlaceholder,
+						"hospital_city": "Addis Ababa",
+					})
+				} else {
+					errCh <- srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+						"hospital_phone": "+251911000111",
+					})
+				}
+			}(i)
+		}
+		for i := 0; i < 10; i++ {
+			if gErr := <-errCh; gErr != nil {
+				t.Fatalf("concurrent save error: %v", gErr)
+			}
+		}
+		rawDBAfter, err := store.GeneralSettings(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rawDBAfter["stripe_secret"] != "stripe-concurrent-updated-secret-v2" {
+			t.Fatalf("stripe_secret corrupted after concurrent saves: got %q", rawDBAfter["stripe_secret"])
 		}
 	})
 }

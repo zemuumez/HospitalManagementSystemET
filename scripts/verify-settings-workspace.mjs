@@ -938,7 +938,7 @@ async function main() {
     );
 
     // Verify row in table
-    const catRow = page.locator('tr:has-text("Cardiothoracic Surgery")');
+    let catRow = page.locator('tr:has-text("Cardiothoracic Surgery")');
     await catRow.waitFor({ state: "visible" });
 
     // Verify search filter
@@ -950,13 +950,29 @@ async function main() {
     assert(await catRow.isVisible(), "Filtered category row must be visible");
     await searchInput.fill("");
 
-    // Create operation using this category to test foreign key delete conflict
+    // Edit Category (R2)
+    await catRow.locator('button[title="Edit"]').click();
+    await page.waitForSelector('h3:has-text("Edit Operation Category")');
+    const nameField = page.locator('input[placeholder="Enter category name"]');
+    await nameField.fill("Cardiothoracic & Vascular Surgery");
+    await page.click('div.fixed form button[type="submit"]:has-text("Save")');
+    await page.waitForSelector(
+      'div[role="status"]:has-text("Operation category updated successfully")',
+    );
+
+    // Reload and verify persistence after reload and in DB
+    await page.reload();
+    await page.waitForSelector('h2:has-text("Operation Categories")');
+    catRow = page.locator('tr:has-text("Cardiothoracic & Vascular Surgery")');
+    await catRow.waitFor({ state: "visible" });
+
+    // Verify updated category in DB
     const dbCatId = (
       await db.query(
-        "SELECT id FROM operation_category WHERE name = 'Cardiothoracic Surgery'",
+        "SELECT id FROM operation_category WHERE name = 'Cardiothoracic & Vascular Surgery'",
       )
     ).rows[0]?.id;
-    assert(dbCatId, "Category must exist in DB");
+    assert(dbCatId, "Updated category must exist in DB");
 
     const createdOp = (
       await db.query(
@@ -1150,12 +1166,50 @@ async function main() {
     );
 
     // Verify row in table
-    const cfRow = page.locator('tr:has-text("National Health ID Number")');
+    let cfRow = page.locator('tr:has-text("National Health ID Number")');
     await cfRow.waitFor({ state: "visible" });
     const cfReqBadge = await cfRow
       .locator('span:has-text("Yes")')
       .textContent();
     assert(cfReqBadge.includes("Yes"), "Must show Yes badge for required");
+
+    // Edit Custom Field (R2)
+    await cfRow.locator('button[title="Edit"]').click();
+    await page.waitForSelector('h3:has-text("Edit Custom Field")');
+    const cfNameInput = page.locator(
+      'div.fixed input[placeholder*="Blood Pressure Note"]',
+    );
+    await cfNameInput.fill("National Primary Health ID Number");
+    await page.selectOption(
+      'div.fixed label:has-text("Grid Width") select',
+      "12",
+    );
+    await page.click('div.fixed form button[type="submit"]:has-text("Save")');
+    await page.waitForSelector(
+      'div[role="status"]:has-text("Custom field updated successfully")',
+    );
+
+    // Reload and verify persistence after reload
+    await page.reload();
+    await page.waitForSelector('h2:has-text("Custom Fields")');
+    cfRow = page.locator('tr:has-text("National Primary Health ID Number")');
+    await cfRow.waitFor({ state: "visible" });
+    const gridText = await cfRow.locator("td:has-text('/12')").textContent();
+    assert(
+      gridText.includes("12/12"),
+      "Updated custom field must persist 12/12 grid width",
+    );
+
+    // Verify DB persistence of update
+    const dbUpdatedCf = (
+      await db.query(
+        "SELECT id, grid FROM custom_field WHERE field_name = 'National Primary Health ID Number'",
+      )
+    ).rows[0];
+    assert(
+      dbUpdatedCf && dbUpdatedCf.grid === 12,
+      "Updated custom field with grid 12 must exist in DB",
+    );
 
     // Test module filter: filter by appointments -> row hidden
     const modFilter = page.locator(
@@ -1185,7 +1239,7 @@ async function main() {
 
     const dbCf = (
       await db.query(
-        "SELECT id FROM custom_field WHERE field_name = 'National Health ID Number'",
+        "SELECT id FROM custom_field WHERE field_name = 'National Primary Health ID Number'",
       )
     ).rows[0];
     assert(!dbCf, "Custom field must be deleted from DB");
@@ -1233,6 +1287,57 @@ async function main() {
       "Payment gateway card must NOT have hardcoded dark background #161c28 in light theme",
     );
 
+    // Dark Mode Verification: Toggle theme to Dark Mode
+    const darkToggleBtn = page.locator('button[aria-label="Use dark theme"]');
+    if (await darkToggleBtn.isVisible()) {
+      await darkToggleBtn.click();
+      await page.waitForSelector(".legacy-shell.legacy-dark", {
+        timeout: 3000,
+      });
+      const isDarkActive = await page
+        .locator(".legacy-shell.legacy-dark")
+        .isVisible();
+      assert(
+        isDarkActive,
+        "Dark mode must apply .legacy-dark class to workspace shell",
+      );
+
+      // Verify dark theme card background is dark and not pure light white
+      const darkCard = page.locator(".legacy-card").first();
+      const darkCardBg = await darkCard.evaluate((el) => {
+        return window.getComputedStyle(el).backgroundColor;
+      });
+      console.log("Dark mode card background computed color:", darkCardBg);
+      assert.notEqual(
+        darkCardBg,
+        "rgb(255, 255, 255)",
+        "Card background in dark mode must not be plain white",
+      );
+
+      // Verify dark mode heading text contrast (must be light text)
+      const darkH2 = page.locator(".legacy-dark h2").first();
+      const darkH2Color = await darkH2.evaluate((el) => {
+        return window.getComputedStyle(el).color;
+      });
+      console.log("Dark mode h2 computed text color:", darkH2Color);
+      assert.notEqual(
+        darkH2Color,
+        "rgb(15, 23, 42)",
+        "Dark mode heading must not have dark slate text",
+      );
+
+      await page.screenshot({
+        path: resolve(screenshotsDir, "17_dark_mode_contrast.png"),
+      });
+
+      // Switch back to light theme
+      const lightToggleBtn = page.locator(
+        'button[aria-label="Use light theme"]',
+      );
+      await lightToggleBtn.click();
+      await page.waitForTimeout(300);
+    }
+
     // Localization verification: Switch to Amharic (am)
     await page.goto(`${base}/modules/settings`);
     await page.waitForSelector(".legacy-workspace[data-ready='true']");
@@ -1240,7 +1345,7 @@ async function main() {
     await page.click('form button[type="submit"]');
     await page.waitForSelector('h2:has-text("አጠቃላይ ቅንብሮች")');
 
-    // Verify Amharic translation in UI
+    // Verify Amharic translation in General Settings
     const amharicTitle = await page
       .locator('h2:has-text("አጠቃላይ ቅንብሮች")')
       .isVisible();
@@ -1249,7 +1354,20 @@ async function main() {
       "Amharic title 'አጠቃላይ ቅንብሮች' must be visible after switching language to Amharic",
     );
 
+    // Verify Amharic translation on Currencies tab
+    await page.goto(`${base}/modules/currency-settings`);
+    await page.waitForSelector('h2:has-text("ምንዛሬዎች")');
+    const amharicCurrenciesTitle = await page
+      .locator('h2:has-text("ምንዛሬዎች")')
+      .isVisible();
+    assert(
+      amharicCurrenciesTitle,
+      "Amharic Currencies title 'ምንዛሬዎች' must be visible on currencies tab",
+    );
+
     // Switch back to English
+    await page.goto(`${base}/modules/settings`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
     await page.selectOption('form select:has(option[value="en"])', "en");
     await page.click('form button[type="submit"]');
     await page.waitForSelector('h2:has-text("General Settings")');
@@ -1258,7 +1376,7 @@ async function main() {
       path: resolve(screenshotsDir, "17_contrast_and_localization.png"),
     });
     console.log(
-      "✔ Journey 17 Passed: Contrast parity and Amharic localization verified.",
+      "✔ Journey 17 Passed: Contrast parity (light + dark) and Amharic multi-tab localization verified.",
     );
 
     console.log("\n=======================================================");
