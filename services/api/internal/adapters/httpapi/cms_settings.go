@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"hms.local/api/internal/domain"
 	"net/http"
 	"strconv"
@@ -52,16 +53,35 @@ func (s Server) cmsSettings(w http.ResponseWriter, r *http.Request, a domain.Act
 			return true
 
 		case r.URL.Path == "/v1/hospital-schedules" && (r.Method == "POST" || r.Method == "PUT"):
-			var in domain.HospitalScheduleDayInput
-			if !decode(w, r, &in) {
+			var raw json.RawMessage
+			if !decode(w, r, &raw) {
 				return true
 			}
-			day, err := s.CMSSettings.UpdateHospitalSchedule(r.Context(), a, in)
-			if err != nil {
-				fail(w, err)
+			var list []domain.HospitalScheduleDayInput
+			if err := json.Unmarshal(raw, &list); err == nil && len(list) > 0 {
+				if err := s.CMSSettings.UpdateHospitalSchedules(r.Context(), a, list); err != nil {
+					fail(w, err)
+					return true
+				}
+				schedules, err := s.CMSSettings.HospitalSchedules(r.Context(), a)
+				if err != nil {
+					fail(w, err)
+					return true
+				}
+				write(w, 200, map[string]any{"saved": true, "hospital_schedules": schedules})
 				return true
 			}
-			write(w, 200, day)
+			var single domain.HospitalScheduleDayInput
+			if err := json.Unmarshal(raw, &single); err == nil {
+				day, err := s.CMSSettings.UpdateHospitalSchedule(r.Context(), a, single)
+				if err != nil {
+					fail(w, err)
+					return true
+				}
+				write(w, 200, day)
+				return true
+			}
+			fail(w, domain.ErrValidation)
 			return true
 		}
 	}
@@ -80,16 +100,36 @@ func (s Server) cmsSettings(w http.ResponseWriter, r *http.Request, a domain.Act
 			return true
 
 		case r.URL.Path == "/v1/front-cms-settings" && (r.Method == "POST" || r.Method == "PUT"):
-			var in domain.FrontCMSSettingInput
-			if !decode(w, r, &in) {
+			var raw json.RawMessage
+			if !decode(w, r, &raw) {
 				return true
 			}
-			setting, err := s.CMSSettings.UpdateFrontCMSSetting(r.Context(), a, in)
-			if err != nil {
-				fail(w, err)
+			var list []domain.FrontCMSSettingInput
+			if err := json.Unmarshal(raw, &list); err == nil && len(list) > 0 {
+				if err := s.CMSSettings.UpdateFrontCMSSettings(r.Context(), a, list); err != nil {
+					fail(w, err)
+					return true
+				}
+				typeFilter := r.URL.Query().Get("type")
+				updated, err := s.CMSSettings.FrontCMSSettings(r.Context(), a, typeFilter)
+				if err != nil {
+					fail(w, err)
+					return true
+				}
+				write(w, 200, map[string]any{"saved": true, "front_cms_settings": updated})
 				return true
 			}
-			write(w, 200, setting)
+			var single domain.FrontCMSSettingInput
+			if err := json.Unmarshal(raw, &single); err == nil {
+				setting, err := s.CMSSettings.UpdateFrontCMSSetting(r.Context(), a, single)
+				if err != nil {
+					fail(w, err)
+					return true
+				}
+				write(w, 200, setting)
+				return true
+			}
+			fail(w, domain.ErrValidation)
 			return true
 		}
 	}

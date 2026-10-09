@@ -62,6 +62,9 @@ func (s AttachmentsService) GetAttachmentByToken(ctx context.Context, a domain.A
 	if err != nil {
 		return domain.SecureAttachment{}, err
 	}
+	if att.IsPublic {
+		return att, nil
+	}
 	if a.Role == "patient" && !att.PatientReleased {
 		return domain.SecureAttachment{}, domain.ErrForbidden
 	}

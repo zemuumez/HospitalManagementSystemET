@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+var SettingsSecretKeys = map[string]bool{
+	"open_ai_key":            true,
+	"stripe_secret":          true,
+	"paypal_secret":          true,
+	"razorpay_secret":        true,
+	"flutterwave_secret_key": true,
+	"phonepe_salt_key":       true,
+	"paystack_secret_key":    true,
+}
+
+const SecretConfiguredPlaceholder = "[CONFIGURED]"
+
 type HospitalGeneralSetting struct {
 	Key       string    `json:"key"`
 	Value     string    `json:"value"`

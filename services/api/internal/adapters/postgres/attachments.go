@@ -11,7 +11,13 @@ import (
 // A token locates a record; it never grants access. Patient ownership and care
 // assignment are checked against current database records for every request.
 func (s Store) AuthorizeAttachment(ctx context.Context, a domain.Actor, patientID, encounterID *string) error {
-	if patientID == nil || !domain.UUIDPattern.MatchString(*patientID) {
+	if patientID == nil {
+		if a.Role == "admin" || a.Can("settings.manage") {
+			return nil
+		}
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(*patientID) {
 		return domain.ErrValidation
 	}
 	var allowed bool

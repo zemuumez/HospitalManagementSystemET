@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"hms.local/api/internal/adapters/httpapi"
+	"hms.local/api/internal/adapters/privatefiles"
 	"hms.local/api/internal/application"
 	"hms.local/api/internal/domain"
 )
@@ -342,4 +343,138 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 for GET /v1/testimonials, got %d: %s", rec.Code, rec.Body.String())
 	}
+
+	t.Run("provider secrets protection and lifecycle", func(t *testing.T) {
+		// Set a secret
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"open_ai_key":   "sk-test-secret-value-12345",
+			"stripe_secret": "sk_live_stripe_secret_67890",
+		}); err != nil {
+			t.Fatal("failed to set secrets", err)
+		}
+
+		// Read via GeneralSettings: secrets must be redacted
+		readSettings, err := srv.GeneralSettings(ctx, admin)
+		if err != nil {
+			t.Fatal("failed to read settings", err)
+		}
+		if readSettings["open_ai_key"] != domain.SecretConfiguredPlaceholder {
+			t.Fatalf("expected open_ai_key redacted to %s, got %s", domain.SecretConfiguredPlaceholder, readSettings["open_ai_key"])
+		}
+		if readSettings["stripe_secret"] != domain.SecretConfiguredPlaceholder {
+			t.Fatalf("expected stripe_secret redacted, got %s", readSettings["stripe_secret"])
+		}
+
+		// Verify database stores the actual plaintext secret
+		rawDB, err := store.GeneralSettings(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rawDB["open_ai_key"] != "sk-test-secret-value-12345" {
+			t.Fatalf("expected DB to store actual secret, got %s", rawDB["open_ai_key"])
+		}
+
+		// Save form with placeholder unchanged: secret must NOT be overwritten
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"open_ai_key":   domain.SecretConfiguredPlaceholder,
+			"hospital_name": "Hospital Name With Secret Retained",
+		}); err != nil {
+			t.Fatal("failed to update with placeholder", err)
+		}
+		rawDB, err = store.GeneralSettings(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rawDB["open_ai_key"] != "sk-test-secret-value-12345" {
+			t.Fatalf("expected secret to be preserved when placeholder sent, got %s", rawDB["open_ai_key"])
+		}
+
+		// Replace secret with new string
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"open_ai_key": "sk-new-replaced-key-99999",
+		}); err != nil {
+			t.Fatal("failed to update secret", err)
+		}
+		rawDB, err = store.GeneralSettings(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rawDB["open_ai_key"] != "sk-new-replaced-key-99999" {
+			t.Fatalf("expected replaced secret in DB, got %s", rawDB["open_ai_key"])
+		}
+
+		// Explicit clearing with empty string
+		if err := srv.UpdateGeneralSettings(ctx, admin, map[string]string{
+			"open_ai_key": "",
+		}); err != nil {
+			t.Fatal("failed to clear secret", err)
+		}
+		rawDB, err = store.GeneralSettings(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rawDB["open_ai_key"] != "" {
+			t.Fatalf("expected cleared secret in DB, got %s", rawDB["open_ai_key"])
+		}
+		readSettings, err = srv.GeneralSettings(ctx, admin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if readSettings["open_ai_key"] != "" {
+			t.Fatalf("expected cleared secret to read empty string, got %s", readSettings["open_ai_key"])
+		}
+	})
+
+	t.Run("batch hospital schedules update", func(t *testing.T) {
+		batch := []domain.HospitalScheduleDayInput{
+			{DayOfWeek: 1, StartTime: "08:30", EndTime: "17:30", IsClosed: false},
+			{DayOfWeek: 2, StartTime: "08:30", EndTime: "17:30", IsClosed: false},
+		}
+		if err := srv.UpdateHospitalSchedules(ctx, admin, batch); err != nil {
+			t.Fatal("failed batch update schedules", err)
+		}
+		scheds, err := srv.HospitalSchedules(ctx, admin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range scheds {
+			if s.DayOfWeek == 1 && (s.StartTime != "08:30" || s.EndTime != "17:30") {
+				t.Fatalf("expected Monday schedule updated, got %+v", s)
+			}
+		}
+	})
+
+	t.Run("public attachment upload and unauthenticated content download", func(t *testing.T) {
+		files, err := privatefiles.New(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer files.Close()
+		attSrv := application.AttachmentsService{Store: store, Files: files}
+		// Admin uploads public logo
+		pngData := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+		att, err := attSrv.UploadPublic(ctx, admin, "hospital_logo.png", pngData)
+		if err != nil {
+			t.Fatal("failed to upload public logo", err)
+		}
+		if !att.IsPublic {
+			t.Fatal("expected IsPublic to be true")
+		}
+
+		// Non-admin role cannot upload public attachment
+		_, err = attSrv.UploadPublic(ctx, doctor, "fake_logo.png", pngData)
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("expected ErrForbidden for non-admin UploadPublic, got %v", err)
+		}
+
+		// Download with anonymous Actor{} succeeds because it is public
+		meta, reader, err := attSrv.Download(ctx, domain.Actor{}, att.Token)
+		if err != nil {
+			t.Fatal("failed to download public attachment", err)
+		}
+		reader.Close()
+		if meta.FileName != "hospital_logo.png" {
+			t.Fatalf("expected hospital_logo.png, got %s", meta.FileName)
+		}
+	})
 }

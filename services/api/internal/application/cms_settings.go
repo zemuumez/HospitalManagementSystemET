@@ -4,6 +4,7 @@ import (
 	"context"
 	"hms.local/api/internal/domain"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -36,12 +37,38 @@ func (s CMSSettingsService) GeneralSettings(ctx context.Context, a domain.Actor)
 	if a.ID != "" && !a.Can("settings.read") {
 		return nil, domain.ErrForbidden
 	}
-	return s.Store.GeneralSettings(ctx)
+	raw, err := s.Store.GeneralSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		if domain.SettingsSecretKeys[k] {
+			if strings.TrimSpace(v) != "" {
+				out[k] = domain.SecretConfiguredPlaceholder
+			} else {
+				out[k] = ""
+			}
+		} else {
+			out[k] = v
+		}
+	}
+	return out, nil
 }
 
 func (s CMSSettingsService) UpdateGeneralSetting(ctx context.Context, a domain.Actor, in domain.GeneralSettingInput) (domain.HospitalGeneralSetting, error) {
 	if !a.Can("settings.manage") {
 		return domain.HospitalGeneralSetting{}, domain.ErrForbidden
+	}
+	if domain.SettingsSecretKeys[in.Key] {
+		trimmed := strings.TrimSpace(in.Value)
+		if trimmed == domain.SecretConfiguredPlaceholder || trimmed == "********" {
+			existing, err := s.Store.GeneralSettings(ctx)
+			if err != nil {
+				return domain.HospitalGeneralSetting{}, err
+			}
+			in.Value = existing[in.Key]
+		}
 	}
 	if err := in.Validate(); err != nil {
 		return domain.HospitalGeneralSetting{}, err
@@ -53,10 +80,20 @@ func (s CMSSettingsService) UpdateGeneralSettings(ctx context.Context, a domain.
 	if !a.Can("settings.manage") {
 		return domain.ErrForbidden
 	}
+	existing, err := s.Store.GeneralSettings(ctx)
+	if err != nil {
+		return err
+	}
 	inputs := make([]domain.GeneralSettingInput, 0, len(settings))
 	seen := make(map[string]bool)
 	for k, v := range settings {
 		in := domain.GeneralSettingInput{Key: k, Value: v}
+		if domain.SettingsSecretKeys[in.Key] {
+			trimmed := strings.TrimSpace(in.Value)
+			if trimmed == domain.SecretConfiguredPlaceholder || trimmed == "********" {
+				in.Value = existing[in.Key]
+			}
+		}
 		if err := in.Validate(); err != nil {
 			return err
 		}
@@ -88,6 +125,21 @@ func (s CMSSettingsService) UpdateHospitalSchedule(ctx context.Context, a domain
 		return domain.HospitalScheduleDay{}, err
 	}
 	return s.Store.UpdateHospitalSchedule(ctx, a, in)
+}
+
+func (s CMSSettingsService) UpdateHospitalSchedules(ctx context.Context, a domain.Actor, days []domain.HospitalScheduleDayInput) error {
+	if !a.Can("settings.manage") {
+		return domain.ErrForbidden
+	}
+	for _, in := range days {
+		if err := in.Validate(); err != nil {
+			return err
+		}
+		if _, err := s.Store.UpdateHospitalSchedule(ctx, a, in); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // --- Front CMS Settings ---

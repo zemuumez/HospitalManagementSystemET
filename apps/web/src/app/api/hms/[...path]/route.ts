@@ -65,9 +65,13 @@ const allowedRoot = new Set([
   "notice-boards",
   "inventory",
   "front-settings",
+  "front-cms-settings",
   "settings",
   "general-settings",
   "hospital-schedules",
+  "modules-setting",
+  "module-settings",
+  "attachments",
   "reviews",
   "doctor-departments",
   "doctor-schedules",
@@ -216,6 +220,9 @@ function isAllowedPath(path: string[]): boolean {
     if (path[0] === "inventory" && ["categories", "items"].includes(path[1])) {
       return true;
     }
+    if (path[0] === "attachments" && path[2] === "content") {
+      return true;
+    }
   }
 
   return false;
@@ -231,7 +238,12 @@ async function proxy(
   const origin = process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3000";
   if (request.method !== "GET" && request.headers.get("origin") !== origin)
     return Response.json({ error: "Origin not allowed" }, { status: 403 });
-  let body: string | undefined;
+  const isAttachmentUpload =
+    path[0] === "attachments" && request.method === "POST";
+  const maxBytes = isAttachmentUpload ? 26 * 1024 * 1024 : 32768;
+  let body: BodyInit | undefined;
+  const reqContentType =
+    request.headers.get("content-type") || "application/json";
   if (request.method !== "GET") {
     const reader = request.body?.getReader();
     const chunks: Uint8Array[] = [];
@@ -241,14 +253,15 @@ async function proxy(
         const chunk = await reader.read();
         if (chunk.done) break;
         bytes += chunk.value.byteLength;
-        if (bytes > 32768) {
+        if (bytes > maxBytes) {
           await reader.cancel();
           return Response.json({ error: "Request too large" }, { status: 413 });
         }
         chunks.push(chunk.value);
       }
     }
-    body = Buffer.concat(chunks).toString("utf8");
+    const merged = Buffer.concat(chunks);
+    body = isAttachmentUpload ? merged : merged.toString("utf8");
   }
   try {
     const response = await fetch(
@@ -260,7 +273,7 @@ async function proxy(
         signal: AbortSignal.timeout(16000),
         redirect: "error",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": reqContentType,
           Cookie: request.headers.get("cookie") ?? "",
           Origin: origin,
           "Idempotency-Key": request.headers.get("idempotency-key") ?? "",
@@ -277,8 +290,8 @@ async function proxy(
     }
     const contentType =
       response.headers.get("content-type") || "application/json";
-    const text = await response.text();
-    return new Response(text, {
+    const buf = await response.arrayBuffer();
+    return new Response(buf, {
       status: response.status,
       headers: {
         "Content-Type": contentType,

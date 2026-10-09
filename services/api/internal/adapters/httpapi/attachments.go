@@ -44,7 +44,17 @@ func (s Server) attachments(w http.ResponseWriter, r *http.Request, a domain.Act
 			fail(w, domain.ErrValidation)
 			return true
 		}
-		patientID := r.FormValue("patientId")
+		patientID := strings.TrimSpace(r.FormValue("patientId"))
+		isPublic := r.FormValue("isPublic") == "true"
+		if isPublic || patientID == "" {
+			att, err := s.Attachments.UploadPublic(r.Context(), a, header.Filename, data)
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, http.StatusCreated, att)
+			return true
+		}
 		var encounterID *string
 		if value := r.FormValue("encounterId"); value != "" {
 			encounterID = &value

@@ -184,6 +184,11 @@ func (s Server) Handler() http.Handler {
 		}
 		a, err := s.identify(r)
 		if err != nil {
+			if r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/v1/attachments/") && strings.HasSuffix(r.URL.Path, "/content") {
+				if s.attachments(w, r, domain.Actor{}) {
+					return
+				}
+			}
 			write(w, 401, map[string]string{"error": "Sign in to continue", "code": "UNAUTHENTICATED"})
 			return
 		}

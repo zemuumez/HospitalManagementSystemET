@@ -64,6 +64,54 @@ func (s AttachmentsService) Upload(ctx context.Context, a domain.Actor, name str
 	return att, err
 }
 
+func (s AttachmentsService) UploadPublic(ctx context.Context, a domain.Actor, name string, data []byte) (domain.SecureAttachment, error) {
+	if s.Files == nil {
+		return domain.SecureAttachment{}, domain.ErrUnavailable
+	}
+	if a.Role != "admin" && !a.Can("settings.manage") {
+		return domain.SecureAttachment{}, domain.ErrForbidden
+	}
+	if len(data) == 0 || len(data) > MaxAttachmentBytes || strings.ContainsAny(name, "/\\\r\n\x00") {
+		return domain.SecureAttachment{}, domain.ErrValidation
+	}
+	mimeType := strings.Split(http.DetectContentType(data), ";")[0]
+	switch mimeType {
+	case "image/jpeg", "image/png", "image/webp", "image/x-icon", "image/vnd.microsoft.icon":
+	default:
+		return domain.SecureAttachment{}, domain.ErrValidation
+	}
+	hash := sha256.Sum256(data)
+	input := domain.CreateSecureAttachmentInput{
+		FileName:      name,
+		MimeType:      mimeType,
+		FileSizeBytes: int64(len(data)),
+		Sha256Hash:    hex.EncodeToString(hash[:]),
+		IsPublic:      true,
+		StoragePath:   "pending",
+	}
+	if err := input.Validate(); err != nil {
+		return domain.SecureAttachment{}, err
+	}
+	if s.Scanner == nil && s.RequireScan {
+		return domain.SecureAttachment{}, domain.ErrUnavailable
+	}
+	if s.Scanner != nil {
+		if err := s.Scanner.Scan(ctx, data); err != nil {
+			return domain.SecureAttachment{}, err
+		}
+	}
+	key, err := s.Files.Put(ctx, data)
+	if err != nil {
+		return domain.SecureAttachment{}, err
+	}
+	input.StoragePath = key
+	att, err := s.CreateAttachment(ctx, a, input)
+	if err != nil {
+		_ = s.Files.Remove(ctx, key)
+	}
+	return att, err
+}
+
 func (s AttachmentsService) Download(ctx context.Context, a domain.Actor, token string) (domain.SecureAttachment, io.ReadCloser, error) {
 	att, err := s.GetAttachmentByToken(ctx, a, token)
 	if err != nil {
