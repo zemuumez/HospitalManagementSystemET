@@ -97,6 +97,14 @@ async function main() {
   );
   writeFileSync(samplePngPath, pngBuffer);
 
+  // Create distinct second valid PNG file for attachment replacement test
+  const samplePngPath2 = resolve(screenshotsDir, "test_logo_2.png");
+  const pngBuffer2 = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAADklEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  writeFileSync(samplePngPath2, pngBuffer2);
+
   const browser = await chromium.launch({
     headless: true,
     executablePath:
@@ -154,8 +162,17 @@ async function main() {
     );
     assert(subtabs.includes("Currencies"), "Expected Currencies subtab");
     assert(
+      subtabs.includes("Operation Categories"),
+      "Expected Operation Categories subtab",
+    );
+    assert(subtabs.includes("Operations"), "Expected Operations subtab");
+    assert(
       subtabs.includes("Payment Gateways"),
       "Expected Payment Gateways subtab",
+    );
+    assert(
+      subtabs.includes("Add Custom Fields"),
+      "Expected Add Custom Fields subtab",
     );
     assert(
       subtabs.includes("Patient Queue Theme"),
@@ -422,6 +439,17 @@ async function main() {
       "Logo URL must point to authorized attachment endpoint",
     );
 
+    // S4 Assertions: Image decoding and rendering verification (naturalWidth > 0)
+    await page.waitForFunction(() => {
+      const img = document.querySelector('img[alt="App Logo Preview"]');
+      return img && img.complete && img.naturalWidth > 0;
+    });
+
+    await page.waitForFunction(() => {
+      const img = document.querySelector('img[alt="Favicon Preview"]');
+      return img && img.complete && img.naturalWidth > 0;
+    });
+
     // Verify unauthenticated download of public logo attachment
     const downloadRes = await fetch(`${base}${dbLogoUrl}`);
     assert.equal(
@@ -435,7 +463,69 @@ async function main() {
       `Expected image/png, got ${contentType}`,
     );
 
-    // Test logo removal
+    // Verify persistence across reload and fresh session
+    await page.reload();
+    await page.waitForSelector('img[alt="App Logo Preview"]');
+    await page.waitForFunction(() => {
+      const img = document.querySelector('img[alt="App Logo Preview"]');
+      return img && img.complete && img.naturalWidth > 0;
+    });
+
+    const freshLogoContext = await browser.newContext();
+    const freshLogoPage = await freshLogoContext.newPage();
+    await performLogin(freshLogoPage, adminEmail, adminPassword);
+    await freshLogoPage.goto(`${base}/modules/settings`);
+    await freshLogoPage.waitForSelector('img[alt="App Logo Preview"]');
+    await freshLogoPage.waitForFunction(() => {
+      const img = document.querySelector('img[alt="App Logo Preview"]');
+      return img && img.complete && img.naturalWidth > 0;
+    });
+    await freshLogoContext.close();
+
+    // S4: Image Replacement Lifecycle (Retires Token A)
+    const tokenA = dbLogoUrl.split("/attachments/")[1].split("/")[0];
+    const logoFileInputAgain = page
+      .locator('input[type="file"][accept*="image/png"]')
+      .first();
+    await logoFileInputAgain.setInputFiles(samplePngPath2);
+    await page.waitForSelector(
+      'div[role="status"]:has-text("uploaded successfully")',
+    );
+    await page.click('button:has-text("Save Settings")');
+    await page.waitForSelector(
+      'div[role="status"]:has-text("General settings saved successfully")',
+    );
+
+    const dbLogoUrl2 = (
+      await db.query(
+        "SELECT value FROM hospital_general_setting WHERE key = 'logo_url'",
+      )
+    ).rows[0]?.value;
+    const tokenB = dbLogoUrl2.split("/attachments/")[1].split("/")[0];
+    assert.notEqual(tokenA, tokenB, "New upload must assign new token");
+
+    await page.waitForFunction(() => {
+      const img = document.querySelector('img[alt="App Logo Preview"]');
+      return img && img.complete && img.naturalWidth > 0;
+    });
+
+    // Old token A must be retired in DB / storage, returning 404
+    const retiredResA = await fetch(
+      `${base}/api/hms/attachments/${tokenA}/content`,
+    );
+    assert.equal(
+      retiredResA.status,
+      404,
+      "Replaced attachment token A must be retired and return 404",
+    );
+
+    // Newly replaced token B must be accessible
+    const activeResB = await fetch(
+      `${base}/api/hms/attachments/${tokenB}/content`,
+    );
+    assert.equal(activeResB.status, 200, "Active token B must return 200");
+
+    // S4: Image Removal Lifecycle (Retires Token B)
     await page.click('button:has-text("Remove")');
     await page.click('button:has-text("Save Settings")');
     await page.waitForSelector(
@@ -453,11 +543,21 @@ async function main() {
       "Logo URL must be cleared in DB upon removal",
     );
 
+    // Old token B must now also be retired, returning 404
+    const retiredResB = await fetch(
+      `${base}/api/hms/attachments/${tokenB}/content`,
+    );
+    assert.equal(
+      retiredResB.status,
+      404,
+      "Removed attachment token B must be retired and return 404",
+    );
+
     await page.screenshot({
       path: resolve(screenshotsDir, "06_settings_logo_attachment.png"),
     });
     console.log(
-      "✔ Journey 6 Passed: Public attachment lifecycle (upload, retrieval, removal) verified.",
+      "✔ Journey 6 Passed: Public attachment lifecycle (upload, preview decoding, replacement, removal, retirement) verified.",
     );
 
     // -----------------------------------------------------------------------
@@ -761,47 +861,408 @@ async function main() {
     );
 
     // -----------------------------------------------------------------------
-    // Journey 13: Non-Admin Rejection
+    // Journey 13: Non-Admin Rejection (All Settings Routes & APIs)
     // -----------------------------------------------------------------------
     console.log("\n[Journey 13] Non-Admin Rejection...");
     const docContext = await browser.newContext();
     const docPage = await docContext.newPage();
     await performLogin(docPage, docEmail, docPassword);
 
-    await docPage.goto(`${base}/modules/settings`);
-    await docPage.waitForSelector('h2:has-text("Access Denied")', {
-      timeout: 5000,
-    });
-    const accessDeniedVisible = await docPage.isVisible(
-      'h2:has-text("Access Denied")',
-    );
-    assert(
-      accessDeniedVisible,
-      "Non-admin doctor must be blocked by Access Denied banner",
-    );
+    // Verify non-admin doctor is rejected on all Settings tabs
+    const restrictedTabs = [
+      "/modules/settings",
+      "/modules/operation-categories",
+      "/modules/operations",
+      "/modules/add-custom-fields",
+    ];
+    for (const tabPath of restrictedTabs) {
+      await docPage.goto(`${base}${tabPath}`);
+      await docPage.waitForSelector('h2:has-text("Access Denied")', {
+        timeout: 5000,
+      });
+      const accessDeniedVisible = await docPage.isVisible(
+        'h2:has-text("Access Denied")',
+      );
+      assert(
+        accessDeniedVisible,
+        `Non-admin doctor must be blocked by Access Denied banner on ${tabPath}`,
+      );
+    }
 
-    // Also verify API 403 response
-    const apiRes = await docPage.evaluate(async () => {
-      const res = await fetch("/api/hms/general-settings");
-      return { status: res.status };
-    });
-    console.log("Doctor direct API fetch status:", apiRes.status);
-    assert.equal(
-      apiRes.status,
-      403,
-      "Doctor direct GET /api/hms/general-settings must return 403 Forbidden",
-    );
+    // Verify direct API 403 Forbidden responses
+    const restrictedEndpoints = [
+      "/api/hms/general-settings",
+      "/api/hms/custom-fields",
+      "/api/hms/module-settings",
+      "/api/hms/hospital-schedules",
+    ];
+    for (const endpoint of restrictedEndpoints) {
+      const apiStatus = await docPage.evaluate(async (url) => {
+        const res = await fetch(url);
+        return res.status;
+      }, endpoint);
+      console.log(`Doctor direct fetch ${endpoint} status:`, apiStatus);
+      assert.equal(
+        apiStatus,
+        403,
+        `Doctor direct GET ${endpoint} must return 403 Forbidden`,
+      );
+    }
 
     await docPage.screenshot({
       path: resolve(screenshotsDir, "13_non_admin_rejection.png"),
     });
     await docContext.close();
     console.log(
-      "✔ Journey 13 Passed: Non-admin rejected with Access Denied banner and 403 Forbidden.",
+      "✔ Journey 13 Passed: Non-admin rejected across all settings routes with Access Denied banner and 403 Forbidden.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 14: Operation Categories CRUD & Foreign Key Conflict (S1)
+    // -----------------------------------------------------------------------
+    console.log(
+      "\n[Journey 14] Operation Categories CRUD & Foreign Key Conflict...",
+    );
+    await page.goto(`${base}/modules/operation-categories`);
+    await page.waitForSelector('h2:has-text("Operation Categories")');
+
+    // Create Category
+    await page.click('button:has-text("New Operation Category")');
+    await page.waitForSelector('h3:has-text("New Operation Category")');
+    await page
+      .locator('input[placeholder="Enter category name"]')
+      .fill("Cardiothoracic Surgery");
+    await page.click('div.fixed form button[type="submit"]:has-text("Save")');
+    await page.waitForSelector(
+      'div[role="status"]:has-text("Operation category created successfully")',
+    );
+
+    // Verify row in table
+    const catRow = page.locator('tr:has-text("Cardiothoracic Surgery")');
+    await catRow.waitFor({ state: "visible" });
+
+    // Verify search filter
+    const searchInput = page.locator(
+      'input[placeholder="Search categories..."]',
+    );
+    await searchInput.fill("Cardio");
+    await page.waitForTimeout(300);
+    assert(await catRow.isVisible(), "Filtered category row must be visible");
+    await searchInput.fill("");
+
+    // Create operation using this category to test foreign key delete conflict
+    const dbCatId = (
+      await db.query(
+        "SELECT id FROM operation_category WHERE name = 'Cardiothoracic Surgery'",
+      )
+    ).rows[0]?.id;
+    assert(dbCatId, "Category must exist in DB");
+
+    const createdOp = (
+      await db.query(
+        "INSERT INTO hospital_operation (operation_category_id, name, description, status, created_at, updated_at) VALUES ($1, 'CABG Surgery', 'Coronary artery bypass graft', 1, clock_timestamp(), clock_timestamp()) RETURNING id",
+        [dbCatId],
+      )
+    ).rows[0];
+
+    // Attempt to delete category with active operation
+    page.once("dialog", (dialog) => dialog.accept());
+    await catRow.locator('button[title="Delete"]').click();
+
+    // Verify conflict error alert
+    const conflictAlert = page.locator('div.alert-notice[role="alert"]');
+    await conflictAlert.waitFor({ state: "visible", timeout: 5000 });
+    const conflictText = await conflictAlert.textContent();
+    console.log("Conflict alert text:", conflictText);
+    assert(
+      conflictText.includes("in use") ||
+        conflictText.includes("Failed to delete") ||
+        conflictText.includes("conflict"),
+      "Must show conflict notice when deleting category in use",
+    );
+
+    // Delete operation first
+    await db.query("DELETE FROM hospital_operation WHERE id = $1", [
+      createdOp.id,
+    ]);
+
+    // Now delete category again
+    page.once("dialog", (dialog) => dialog.accept());
+    await catRow.locator('button[title="Delete"]').click();
+    await page.waitForSelector(
+      'div[role="status"]:has-text("deleted successfully")',
+    );
+
+    // Verify row removed from DB
+    const dbDeletedCat = (
+      await db.query("SELECT id FROM operation_category WHERE id = $1", [
+        dbCatId,
+      ])
+    ).rows[0];
+    assert(!dbDeletedCat, "Category must be removed from DB");
+
+    await page.screenshot({
+      path: resolve(screenshotsDir, "14_operation_categories_crud.png"),
+    });
+    console.log(
+      "✔ Journey 14 Passed: Operation Categories CRUD, search, and conflict protection verified.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 15: Operations CRUD, Category Filter & Status Toggle (S1)
+    // -----------------------------------------------------------------------
+    console.log(
+      "\n[Journey 15] Operations CRUD, Category Filter & Status Toggle...",
+    );
+    let generalCat = (
+      await db.query("SELECT id, name FROM operation_category LIMIT 1")
+    ).rows[0];
+    if (!generalCat) {
+      generalCat = (
+        await db.query(
+          "INSERT INTO operation_category (name, created_at, updated_at) VALUES ('General Surgery', clock_timestamp(), clock_timestamp()) RETURNING id, name",
+        )
+      ).rows[0];
+    }
+
+    await page.goto(`${base}/modules/operations`);
+    await page.waitForSelector('h2:has-text("Operations")');
+
+    // Create Operation
+    await page.click('button:has-text("New Operation")');
+    await page.waitForSelector('h3:has-text("New Operation")');
+    await page
+      .locator('input[placeholder="Enter operation name"]')
+      .fill("Laparoscopic Cholecystectomy");
+    await page.selectOption(
+      'div.fixed select:has(option:has-text("Select Category"))',
+      generalCat.id,
+    );
+    await page
+      .locator('textarea[placeholder*="description"]')
+      .fill("Minimally invasive gallbladder removal");
+    await page.selectOption(
+      'div.fixed select:has(option:has-text("Active"))',
+      "1",
+    );
+    await page.click('div.fixed form button[type="submit"]:has-text("Save")');
+    await page.waitForSelector(
+      'div[role="status"]:has-text("Operation created successfully")',
+    );
+
+    // Verify row in table
+    const opRow = page.locator('tr:has-text("Laparoscopic Cholecystectomy")');
+    await opRow.waitFor({ state: "visible" });
+    const badgeText = await opRow
+      .locator('span:has-text("Active")')
+      .textContent();
+    assert(
+      badgeText.includes("Active"),
+      "Operation status badge must be Active",
+    );
+
+    // Edit Operation: change name and status to Inactive
+    await opRow.locator('button[title="Edit"]').click();
+    await page.waitForSelector('h3:has-text("Edit Operation")');
+    await page
+      .locator('input[placeholder="Enter operation name"]')
+      .fill("Laparoscopic Cholecystectomy (Elective)");
+    await page.selectOption(
+      'div.fixed select:has(option:has-text("Active"))',
+      "0",
+    );
+    await page.click('div.fixed form button[type="submit"]:has-text("Save")');
+    await page.waitForSelector(
+      'div[role="status"]:has-text("Operation updated successfully")',
+    );
+
+    // Verify edited row
+    const updatedOpRow = page.locator(
+      'tr:has-text("Laparoscopic Cholecystectomy (Elective)")',
+    );
+    await updatedOpRow.waitFor({ state: "visible" });
+    const updatedBadge = await updatedOpRow
+      .locator('span:has-text("Inactive")')
+      .textContent();
+    assert(
+      updatedBadge.includes("Inactive"),
+      "Operation status badge must be Inactive",
+    );
+
+    // Category Filter test
+    const catSelect = page.locator(
+      'select:has(option:has-text("All Categories"))',
+    );
+    await catSelect.selectOption(generalCat.id);
+    await page.waitForTimeout(300);
+    assert(await updatedOpRow.isVisible(), "Filtered row must be visible");
+
+    // Delete Operation
+    page.once("dialog", (dialog) => dialog.accept());
+    await updatedOpRow.locator('button[title="Delete"]').click();
+    await page.waitForSelector(
+      'div[role="status"]:has-text("deleted successfully")',
+    );
+
+    const dbOp = (
+      await db.query(
+        "SELECT id FROM hospital_operation WHERE name = 'Laparoscopic Cholecystectomy (Elective)'",
+      )
+    ).rows[0];
+    assert(!dbOp, "Operation must be deleted from DB");
+
+    await page.screenshot({
+      path: resolve(screenshotsDir, "15_operations_crud.png"),
+    });
+    console.log(
+      "✔ Journey 15 Passed: Operations CRUD, category filtering, and status toggle verified.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 16: Custom Fields CRUD & Module Filter (S1)
+    // -----------------------------------------------------------------------
+    console.log("\n[Journey 16] Custom Fields CRUD & Module Filter...");
+    await page.goto(`${base}/modules/add-custom-fields`);
+    await page.waitForSelector('h2:has-text("Custom Fields")');
+
+    // Create Custom Field
+    await page.click('button:has-text("New Custom Field")');
+    await page.waitForSelector('h3:has-text("New Custom Field")');
+    await page.selectOption(
+      'div.fixed select:has(option:has-text("Patients"))',
+      "patients",
+    );
+    await page.selectOption(
+      'div.fixed select:has(option:has-text("Text"))',
+      "text",
+    );
+    await page
+      .locator('div.fixed input[placeholder*="Blood Pressure Note"]')
+      .fill("National Health ID Number");
+    await page.selectOption(
+      'div.fixed label:has-text("Grid Width") select',
+      "6",
+    );
+    await page.locator('input[type="checkbox"]').check(); // Is Required
+    await page.click('div.fixed form button[type="submit"]:has-text("Save")');
+    await page.waitForSelector(
+      'div[role="status"]:has-text("Custom field created successfully")',
+    );
+
+    // Verify row in table
+    const cfRow = page.locator('tr:has-text("National Health ID Number")');
+    await cfRow.waitFor({ state: "visible" });
+    const cfReqBadge = await cfRow
+      .locator('span:has-text("Yes")')
+      .textContent();
+    assert(cfReqBadge.includes("Yes"), "Must show Yes badge for required");
+
+    // Test module filter: filter by appointments -> row hidden
+    const modFilter = page.locator(
+      'select:has(option:has-text("All Modules"))',
+    );
+    await modFilter.selectOption("appointments");
+    await page.waitForTimeout(300);
+    assert(
+      !(await cfRow.isVisible()),
+      "Row must be hidden when filtering by appointments",
+    );
+
+    // Filter back to patients -> row visible
+    await modFilter.selectOption("patients");
+    await page.waitForTimeout(300);
+    assert(
+      await cfRow.isVisible(),
+      "Row must be visible when filtering by patients",
+    );
+
+    // Delete Custom Field
+    page.once("dialog", (dialog) => dialog.accept());
+    await cfRow.locator('button[title="Delete"]').click();
+    await page.waitForSelector(
+      'div[role="status"]:has-text("deleted successfully")',
+    );
+
+    const dbCf = (
+      await db.query(
+        "SELECT id FROM custom_field WHERE field_name = 'National Health ID Number'",
+      )
+    ).rows[0];
+    assert(!dbCf, "Custom field must be deleted from DB");
+
+    await page.screenshot({
+      path: resolve(screenshotsDir, "16_custom_fields_crud.png"),
+    });
+    console.log(
+      "✔ Journey 16 Passed: Custom Fields CRUD and module filtering verified.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 17: Light & Dark Theme Contrast and Localization Parity (S6)
+    // -----------------------------------------------------------------------
+    console.log(
+      "\n[Journey 17] Light & Dark Theme Contrast and Localization Parity...",
+    );
+    await page.goto(`${base}/modules/currency-settings`);
+    await page.waitForSelector('h2:has-text("Currencies")');
+
+    // Verify Light mode contrast: Currency row text color must NOT be white rgb(255, 255, 255)
+    const currencyNameEl = page.locator('tr:has-text("US Dollar") td').first();
+    const computedColor = await currencyNameEl.evaluate((el) => {
+      return window.getComputedStyle(el).color;
+    });
+    console.log("Light theme currency name computed color:", computedColor);
+    assert.notEqual(
+      computedColor,
+      "rgb(255, 255, 255)",
+      "Currency name in light mode must NOT have white text color (must be dark/readable)",
+    );
+
+    // Verify payment gateway surfaces do not have hardcoded dark background in light mode
+    await page.goto(`${base}/modules/payment-gateway`);
+    await page.waitForSelector('h2:has-text("Payment Gateways")');
+    const gatewayCard = page.locator("div.border.rounded-lg").first();
+    const cardBg = await gatewayCard.evaluate((el) => {
+      return window.getComputedStyle(el).backgroundColor;
+    });
+    console.log("Payment gateway card background in light theme:", cardBg);
+    // Hardcoded #161c28 is rgb(22, 28, 40)
+    assert.notEqual(
+      cardBg,
+      "rgb(22, 28, 40)",
+      "Payment gateway card must NOT have hardcoded dark background #161c28 in light theme",
+    );
+
+    // Localization verification: Switch to Amharic (am)
+    await page.goto(`${base}/modules/settings`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page.selectOption('form select:has(option[value="am"])', "am");
+    await page.click('form button[type="submit"]');
+    await page.waitForSelector('h2:has-text("አጠቃላይ ቅንብሮች")');
+
+    // Verify Amharic translation in UI
+    const amharicTitle = await page
+      .locator('h2:has-text("አጠቃላይ ቅንብሮች")')
+      .isVisible();
+    assert(
+      amharicTitle,
+      "Amharic title 'አጠቃላይ ቅንብሮች' must be visible after switching language to Amharic",
+    );
+
+    // Switch back to English
+    await page.selectOption('form select:has(option[value="en"])', "en");
+    await page.click('form button[type="submit"]');
+    await page.waitForSelector('h2:has-text("General Settings")');
+
+    await page.screenshot({
+      path: resolve(screenshotsDir, "17_contrast_and_localization.png"),
+    });
+    console.log(
+      "✔ Journey 17 Passed: Contrast parity and Amharic localization verified.",
     );
 
     console.log("\n=======================================================");
-    console.log("ALL 13 SETTINGS WORKSPACE JOURNEYS PASSED SUCCESSFULLY!");
+    console.log("ALL 17 SETTINGS WORKSPACE JOURNEYS PASSED SUCCESSFULLY!");
     console.log("=======================================================\n");
   } finally {
     await browser.close();
