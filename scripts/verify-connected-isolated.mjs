@@ -127,6 +127,7 @@ try {
     APP_ENV: "development",
     NODE_ENV: "development",
     HMS_TEST_ISOLATED_SCHEMA: schema,
+    SCREENSHOT_DIR: resolve(root, `.local/isolated-screenshots-${token}`),
     GOPATH: resolve(root, ".cache/go"),
     GOMODCACHE: resolve(root, ".cache/go-mod"),
     GOCACHE: resolve(root, ".cache/go-build"),

@@ -17,13 +17,17 @@ const base =
   process.env.BASE_URL ||
   process.env.BETTER_AUTH_URL ||
   "http://127.0.0.1:3000";
-const screenshotsDir =
-  process.env.SCREENSHOT_DIR ||
-  (existsSync(
-    "C:/Users/USER/.gemini/antigravity-ide/brain/211d27d4-51d4-4c25-a079-46b35d8664de/screenshots",
-  )
-    ? "C:/Users/USER/.gemini/antigravity-ide/brain/211d27d4-51d4-4c25-a079-46b35d8664de/screenshots"
-    : resolve(process.cwd(), "artifacts/screenshots"));
+const isolatedSchema = process.env.HMS_TEST_ISOLATED_SCHEMA;
+if (!isolatedSchema || !/^hms_browser_[a-f0-9]{24}$/.test(isolatedSchema)) {
+  console.error(
+    "ERROR: verify-doctor-workspace requires isolated schema execution (HMS_TEST_ISOLATED_SCHEMA).",
+  );
+  process.exit(1);
+}
+
+const screenshotsDir = process.env.SCREENSHOT_DIR
+  ? resolve(process.env.SCREENSHOT_DIR)
+  : resolve(process.cwd(), ".local/screenshots");
 mkdirSync(screenshotsDir, { recursive: true });
 
 const db = new Pool({ connectionString: databaseUrl });
@@ -41,6 +45,14 @@ async function main() {
   console.log("=== Starting Hardened Doctor Workspace Verification ===");
   console.log(`Target Base URL: ${base}`);
   console.log(`Screenshots Directory: ${screenshotsDir}`);
+
+  const currentSchema = (await db.query("SELECT current_schema() AS name"))
+    .rows[0]?.name;
+  assert.equal(
+    currentSchema,
+    isolatedSchema,
+    `Database connection search_path must be active on isolated schema ${isolatedSchema}`,
+  );
 
   // Resolve Admin Credentials: Use environment variables or provision ephemeral test admin
   let adminEmail = process.env.ADMIN_EMAIL;
@@ -220,7 +232,7 @@ async function main() {
 
     const timestamp = Date.now();
     const docName = `Dr. Sophia Vance ${timestamp.toString().slice(-4)}`;
-    const docEmail = `sophia.vance.${timestamp}@ulshms.local`;
+    let docEmail = `sophia.vance.${timestamp}@ulshms.local`;
     const docPassword = "DoctorSecure1234!";
 
     await page.locator('input[placeholder="Dr. John Doe"]').fill(docName);
@@ -418,16 +430,68 @@ async function main() {
     console.log("Doctor details modal verified.");
 
     // -------------------------------------------------------------
-    // Journey 7: Doctor Profile Editing & Database Sync
+    // Journey 7: Doctor Profile Editing & Database Sync (R1 & R3)
     // -------------------------------------------------------------
-    console.log("Step 7: Editing doctor profile...");
+    console.log(
+      "Step 7: Editing doctor profile (validating R1 clearing, R1 required validation, and R3 email editing)...",
+    );
     await row.locator('button[aria-label="Edit"]').click();
     await page.waitForSelector(".modal-backdrop-custom");
 
+    // 1. R3: Admin Email editing - verify email field is present and enabled for admin
+    const emailInput = page.locator("#edit-doc-email");
+    assert.equal(
+      await emailInput.count(),
+      1,
+      "Edit modal must contain email field",
+    );
+    assert.equal(
+      await emailInput.isDisabled(),
+      false,
+      "Email field must be enabled for admin",
+    );
+
+    // Test duplicate email conflict rejection (using admin's email)
+    await emailInput.fill(adminEmail);
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.waitForSelector(".modal-backdrop-custom", { timeout: 3000 });
+    const dupCheckDb = await db.query(
+      'SELECT email FROM "user" WHERE id = $1',
+      [createdDoctorId],
+    );
+    assert.equal(
+      dupCheckDb.rows[0].email,
+      docEmail,
+      "Duplicate email must not mutate database",
+    );
+
+    // Supply new valid email for doctor
+    const updatedDocEmail = `qa-doctor-renamed-${timestamp}@ulshms.local`;
+    await emailInput.fill(updatedDocEmail);
+
+    // 2. R1: Test required fields reject blank inputs
+    const designationInput = page.locator("#edit-doc-designation");
+    const origDesignation = await designationInput.inputValue();
+    await designationInput.fill("");
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.waitForSelector(".modal-backdrop-custom", { timeout: 3000 });
+    // Restore designation
+    await designationInput.fill(origDesignation);
+
+    // 3. R1: Deliberately clear all optional fields
+    // Optional fields populated earlier: phone, dob, bloodGroup, address1, address2, city, zip, description
+    await page.locator("#edit-doc-address1").fill("");
+    await page.locator("#edit-doc-address2").fill("");
+    await page.locator("#edit-doc-city").fill("");
+    await page.locator("#edit-doc-zip").fill("");
+    await page.locator("#edit-doc-dob").fill("");
+    await page.locator("#edit-doc-description").fill("");
+    await page.locator("#edit-doc-phone").fill("");
+    // Select empty blood group
+    await page.locator("#edit-doc-blood-group").selectOption({ value: "" });
+
     // Update OPD charge to 520
-    const editOpdInput = page
-      .locator('.modal-backdrop-custom input[type="number"]')
-      .first();
+    const editOpdInput = page.locator("#edit-doc-opd-charge");
     await editOpdInput.fill("520");
 
     const [editResp] = await Promise.all([
@@ -444,18 +508,71 @@ async function main() {
       timeout: 15000,
     });
 
-    // Assert database update
-    const dbOpdCheck = await db.query(
-      "SELECT opd_charge FROM doctor_profile WHERE user_id = $1",
+    // Update local docEmail tracking
+    docEmail = updatedDocEmail;
+
+    // Assert database update: optional fields are cleared, email updated, OPD charge updated
+    const dbDocCheck = await db.query(
+      `SELECT dp.opd_charge, dp.description, u.email, sp.details
+       FROM doctor_profile dp
+       JOIN "user" u ON u.id = dp.user_id
+       LEFT JOIN staff_profile sp ON sp.user_id = dp.user_id
+       WHERE dp.user_id = $1`,
       [createdDoctorId],
     );
     assert.equal(
-      Number(dbOpdCheck.rows[0].opd_charge),
+      Number(dbDocCheck.rows[0].opd_charge),
       520,
       "Doctor profile in DB must update to 520",
     );
+    assert.equal(
+      dbDocCheck.rows[0].email,
+      updatedDocEmail,
+      "Doctor email in DB must update to new email",
+    );
+    assert.equal(
+      dbDocCheck.rows[0].description,
+      "",
+      "Doctor description in DB must be cleared to empty string",
+    );
+    const updatedDetails = dbDocCheck.rows[0].details || {};
+    assert.equal(
+      updatedDetails.phone || "",
+      "",
+      "Doctor phone must be cleared in staff_profile details",
+    );
+    assert.equal(
+      updatedDetails.dateOfBirth || "",
+      "",
+      "Doctor dateOfBirth must be cleared in staff_profile details",
+    );
+    assert.equal(
+      updatedDetails.bloodGroup || "",
+      "",
+      "Doctor bloodGroup must be cleared in staff_profile details",
+    );
+    assert.equal(
+      updatedDetails.address1 || "",
+      "",
+      "Doctor address1 must be cleared in staff_profile details",
+    );
+    assert.equal(
+      updatedDetails.address2 || "",
+      "",
+      "Doctor address2 must be cleared in staff_profile details",
+    );
+    assert.equal(
+      updatedDetails.city || "",
+      "",
+      "Doctor city must be cleared in staff_profile details",
+    );
+    assert.equal(
+      updatedDetails.postalCode || "",
+      "",
+      "Doctor postalCode must be cleared in staff_profile details",
+    );
 
-    // Reload and assert UI
+    // Reload and assert UI: 520 ETB appears in row, and Details view reflects cleared fields
     await page.reload();
     await page.waitForSelector(`tr:has-text("${docName}")`, { timeout: 15000 });
     const updatedRow = page.locator(`tr:has-text("${docName}")`);
@@ -463,8 +580,28 @@ async function main() {
       await updatedRow.textContent().then((t) => t.includes("520 ETB")),
       "520 ETB must appear in UI",
     );
+
+    // Open Details view to verify cleared fields are empty in UI
+    await updatedRow.locator('button[aria-label="View Details"]').click();
+    await page.waitForSelector(".modal-backdrop-custom");
+    const detailBodyText = await page
+      .locator(".modal-body-custom")
+      .textContent();
+    assert(
+      !detailBodyText.includes("123 Medical Center Blvd"),
+      "Cleared address1 must not appear in details",
+    );
+    assert(
+      !detailBodyText.includes("Experienced cardiologist"),
+      "Cleared description must not appear in details",
+    );
+    await page.getByRole("button", { name: "Close" }).click();
+    await page.waitForSelector(".modal-backdrop-custom", { state: "detached" });
+
     await page.screenshot({ path: `${screenshotsDir}/06_doctor_edited.png` });
-    console.log("Doctor profile edit verified.");
+    console.log(
+      "Doctor profile edit (R1 clearing, R1 required validation, R3 email update) verified.",
+    );
 
     // -------------------------------------------------------------
     // Journey 8: Status Revocation (Active -> Inactive -> Active)
@@ -961,9 +1098,11 @@ async function main() {
     console.log("Unreferenced doctor deletion verified.");
 
     // -------------------------------------------------------------
-    // Journey 16: Restricted Doctor Role Scoping
+    // Journey 16: Restricted Doctor Role Scoping & Self-Edit (R2)
     // -------------------------------------------------------------
-    console.log("Step 16: Verifying doctor role restrictions...");
+    console.log(
+      "Step 16: Verifying doctor role restrictions and self-edit (R2)...",
+    );
     const docContext = await browser.newContext({
       viewport: { width: 1440, height: 960 },
     });
@@ -1013,88 +1152,211 @@ async function main() {
       "Status toggle switch must be disabled for non-admin",
     );
 
+    // Doctor self-edit: Doctor sees edit button on their own row
+    const selfEditBtn = docPage.locator(
+      `tr:has-text("${docName}") button[aria-label="Edit"]`,
+    );
+    assert.equal(
+      await selfEditBtn.count(),
+      1,
+      "Doctor must see Edit button on their own record",
+    );
+    await selfEditBtn.click();
+    await docPage.waitForSelector(".modal-backdrop-custom");
+
+    // Verify Department select is disabled for doctor actor
+    const docDeptSelect = docPage.locator("#edit-doc-dept");
+    assert.equal(
+      await docDeptSelect.isDisabled(),
+      true,
+      "Department select must be disabled for doctor actor",
+    );
+
+    // Verify Email input is disabled for doctor actor
+    const docEmailInput = docPage.locator("#edit-doc-email");
+    assert.equal(
+      await docEmailInput.isDisabled(),
+      true,
+      "Email input must be disabled for doctor actor",
+    );
+
+    // Doctor updates their own qualification and phone
+    const selfQualInput = docPage.locator("#edit-doc-qual");
+    await selfQualInput.fill("MD, PhD, Fellow of Cardiology");
+    const selfPhoneInput = docPage.locator("#edit-doc-phone");
+    await selfPhoneInput.fill("+251911998877");
+
+    // Submit self-edit
+    let interceptedDeptId = "NOT_CALLED";
+    const [selfEditResp] = await Promise.all([
+      docPage.waitForResponse(async (r) => {
+        if (
+          r.url().includes(`/api/hms/doctors/${createdDoctorId}`) &&
+          r.request().method() === "PUT"
+        ) {
+          try {
+            const postData = JSON.parse(r.request().postData() || "{}");
+            interceptedDeptId = postData.departmentId;
+          } catch {}
+          return true;
+        }
+        return false;
+      }),
+      docPage.getByRole("button", { name: "Save Changes" }).click(),
+    ]);
+    assert.equal(
+      selfEditResp.status(),
+      200,
+      "Doctor self-edit without department must succeed with 200",
+    );
+    assert.equal(
+      interceptedDeptId,
+      undefined,
+      "Doctor self-edit request payload must omit departmentId",
+    );
+    await docPage.waitForSelector(".modal-backdrop-custom", {
+      state: "detached",
+      timeout: 15000,
+    });
+
+    // Assert database updated with doctor self-edit
+    const selfDocDb = await db.query(
+      "SELECT qualification FROM doctor_profile WHERE user_id = $1",
+      [createdDoctorId],
+    );
+    assert.equal(
+      selfDocDb.rows[0].qualification,
+      "MD, PhD, Fellow of Cardiology",
+      "Doctor qualification must update after self-edit",
+    );
+    const selfPhoneDb = await db.query(
+      "SELECT details->>'phone' AS phone FROM staff_profile WHERE user_id = $1",
+      [createdDoctorId],
+    );
+    assert.equal(
+      selfPhoneDb.rows[0].phone,
+      "+251911998877",
+      "Doctor phone must update after self-edit",
+    );
+
+    // Direct API regression test: Unauthorized department modification by doctor returns 403
+    const directTamperResp = await docPage.evaluate(
+      async ({ docId, depId }) => {
+        const res = await fetch(`/api/hms/doctors/${docId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Dr. Tamper Attempt",
+            departmentId: depId,
+            specialist: "Cardiology",
+            designation: "Consultant",
+            qualification: "MBBS",
+            gender: "female",
+            version: 3,
+          }),
+        });
+        return { status: res.status };
+      },
+      { docId: createdDoctorId, depId: deptId },
+    );
+    assert.equal(
+      directTamperResp.status,
+      403,
+      "Direct department change attempt by doctor must return 403 Forbidden",
+    );
+
     await docPage.screenshot({
       path: `${screenshotsDir}/13_doctor_role_restricted.png`,
     });
-    console.log("Doctor role scoping verified.");
+    console.log("Doctor role scoping and self-edit (R2) verified.");
     await docContext.close();
 
     console.log(
       "=== All 16 Browser Verification Journeys Passed Successfully! ===",
     );
   } finally {
-    console.log("Performing full fixture cleanup...");
+    console.log("Cleaning up created test fixtures...");
+    const cleanupErrors = [];
     // Clean up created appointments
     for (const apptId of createdAppointmentIds) {
-      await db
-        .query("DELETE FROM appointment WHERE id = $1", [apptId])
-        .catch(() => {});
+      try {
+        await db.query("DELETE FROM appointment WHERE id = $1", [apptId]);
+      } catch (e) {
+        cleanupErrors.push(
+          `Failed to delete appointment ${apptId}: ${e.message}`,
+        );
+      }
     }
     // Clean up created patients
     for (const patId of createdPatientIds) {
-      await db
-        .query("DELETE FROM appointment WHERE patient_id = $1", [patId])
-        .catch(() => {});
-      await db
-        .query("DELETE FROM patient WHERE id = $1", [patId])
-        .catch(() => {});
+      try {
+        await db.query("DELETE FROM appointment WHERE patient_id = $1", [
+          patId,
+        ]);
+        await db.query("DELETE FROM patient WHERE id = $1", [patId]);
+      } catch (e) {
+        cleanupErrors.push(`Failed to delete patient ${patId}: ${e.message}`);
+      }
     }
     // Clean up created doctors
     for (const docId of createdDoctorIds) {
-      await db
-        .query("DELETE FROM appointment WHERE doctor_id = $1", [docId])
-        .catch(() => {});
-      await db
-        .query("DELETE FROM doctor_holiday WHERE doctor_id = $1", [docId])
-        .catch(() => {});
-      await db
-        .query("DELETE FROM doctor_lunch_break WHERE doctor_id = $1", [docId])
-        .catch(() => {});
-      await db
-        .query("DELETE FROM doctor_opd_charge WHERE doctor_id = $1", [docId])
-        .catch(() => {});
-      await db
-        .query("DELETE FROM doctor_hours WHERE doctor_id = $1", [docId])
-        .catch(() => {});
-      await db
-        .query("DELETE FROM doctor_profile WHERE user_id = $1", [docId])
-        .catch(() => {});
-      await db
-        .query("DELETE FROM staff_access WHERE user_id = $1", [docId])
-        .catch(() => {});
-      await db
-        .query('DELETE FROM account WHERE "userId" = $1', [docId])
-        .catch(() => {});
-      await db
-        .query('DELETE FROM session WHERE "userId" = $1', [docId])
-        .catch(() => {});
-      await db
-        .query('DELETE FROM "user" WHERE id = $1', [docId])
-        .catch(() => {});
+      try {
+        await db.query("DELETE FROM appointment WHERE doctor_id = $1", [docId]);
+        await db.query("DELETE FROM doctor_holiday WHERE doctor_id = $1", [
+          docId,
+        ]);
+        await db.query("DELETE FROM doctor_lunch_break WHERE doctor_id = $1", [
+          docId,
+        ]);
+        await db.query("DELETE FROM doctor_opd_charge WHERE doctor_id = $1", [
+          docId,
+        ]);
+        await db.query("DELETE FROM doctor_hours WHERE doctor_id = $1", [
+          docId,
+        ]);
+        await db.query("DELETE FROM doctor_profile WHERE user_id = $1", [
+          docId,
+        ]);
+        await db.query("DELETE FROM staff_profile WHERE user_id = $1", [docId]);
+        await db.query("DELETE FROM staff_access WHERE user_id = $1", [docId]);
+        await db.query('DELETE FROM account WHERE "userId" = $1', [docId]);
+        await db.query('DELETE FROM session WHERE "userId" = $1', [docId]);
+        await db.query('DELETE FROM "user" WHERE id = $1', [docId]);
+      } catch (e) {
+        cleanupErrors.push(`Failed to delete doctor ${docId}: ${e.message}`);
+      }
     }
     // Clean up ephemeral admin and other created users
     for (const uId of createdUserIds) {
-      await db
-        .query("DELETE FROM staff_access WHERE user_id = $1", [uId])
-        .catch(() => {});
-      await db
-        .query('DELETE FROM account WHERE "userId" = $1', [uId])
-        .catch(() => {});
-      await db
-        .query('DELETE FROM session WHERE "userId" = $1', [uId])
-        .catch(() => {});
-      await db.query('DELETE FROM "user" WHERE id = $1', [uId]).catch(() => {});
+      try {
+        await db.query("DELETE FROM staff_access WHERE user_id = $1", [uId]);
+        await db.query('DELETE FROM account WHERE "userId" = $1', [uId]);
+        await db.query('DELETE FROM session WHERE "userId" = $1', [uId]);
+        await db.query('DELETE FROM "user" WHERE id = $1', [uId]);
+      } catch (e) {
+        cleanupErrors.push(`Failed to delete user ${uId}: ${e.message}`);
+      }
     }
     // Clean up created departments
     for (const depId of createdDepartmentIds) {
-      await db
-        .query("DELETE FROM doctor_department WHERE id = $1", [depId])
-        .catch(() => {});
+      try {
+        await db.query("DELETE FROM doctor_department WHERE id = $1", [depId]);
+      } catch (e) {
+        cleanupErrors.push(
+          `Failed to delete department ${depId}: ${e.message}`,
+        );
+      }
     }
 
-    await browser.close().catch(() => {});
-    await db.end().catch(() => {});
-    console.log("Fixture cleanup completed.");
+    await browser
+      ?.close()
+      .catch((e) => cleanupErrors.push(`Browser close: ${e.message}`));
+    await db?.end().catch((e) => cleanupErrors.push(`DB end: ${e.message}`));
+    if (cleanupErrors.length > 0) {
+      console.warn("Cleanup encountered errors:\n" + cleanupErrors.join("\n"));
+    } else {
+      console.log("Fixture cleanup completed cleanly.");
+    }
   }
 }
 

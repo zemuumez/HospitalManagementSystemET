@@ -246,6 +246,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   // Edit Doctor modal state
   const [editingDoctor, setEditingDoctor] = useState<DoctorItem | null>(null);
   const [editDocName, setEditDocName] = useState("");
+  const [editDocEmail, setEditDocEmail] = useState("");
   const [editDocDeptId, setEditDocDeptId] = useState("");
   const [editDocSpecialist, setEditDocSpecialist] = useState("");
   const [editDocDesignation, setEditDocDesignation] = useState("");
@@ -565,6 +566,7 @@ export function DoctorsWorkspace({ id }: { id: string }) {
   const openEditDoctor = (doc: DoctorItem) => {
     setEditingDoctor(doc);
     setEditDocName(doc.name);
+    setEditDocEmail(doc.email || "");
     setEditDocDeptId(doc.departmentId || "");
     setEditDocSpecialist(doc.specialist || doc.department || "");
     setEditDocDesignation(doc.designation || "");
@@ -588,34 +590,74 @@ export function DoctorsWorkspace({ id }: { id: string }) {
     e.preventDefault();
     if (!editingDoctor) return;
 
+    const isDoctorActor = currentUser?.role === "doctor";
+
+    // Required fields validation
+    if (!editDocName.trim()) {
+      setApiErrorBanner(t("Doctor Name is required."));
+      return;
+    }
+    if (isAdmin && !editDocEmail.trim()) {
+      setApiErrorBanner(t("Email is required."));
+      return;
+    }
+    if (!editDocSpecialist.trim()) {
+      setApiErrorBanner(t("Specialist is required."));
+      return;
+    }
+    if (!editDocDesignation.trim()) {
+      setApiErrorBanner(t("Designation is required."));
+      return;
+    }
+    if (!editDocQual.trim()) {
+      setApiErrorBanner(t("Qualification is required."));
+      return;
+    }
+    if (!editDocGender) {
+      setApiErrorBanner(t("Gender is required."));
+      return;
+    }
+
     setIsSubmitting(true);
     setApiErrorBanner("");
     setApiSuccessBanner("");
 
     try {
+      const payload: Record<string, any> = {
+        name: editDocName.trim(),
+        specialist: editDocSpecialist.trim(),
+        designation: editDocDesignation.trim(),
+        qualification: editDocQual.trim(),
+        gender: editDocGender,
+        // Optional fields: send explicit strings to support deliberate clearing in DB
+        phone: editDocPhone.trim(),
+        dateOfBirth: editDocDob,
+        bloodGroup: editDocBloodGroup,
+        address1: editDocAddress1.trim(),
+        address2: editDocAddress2.trim(),
+        city: editDocCity.trim(),
+        zip: editDocZip.trim(),
+        description: editDocDescription.trim(),
+        opdCharge: parseFloat(editDocOpdCharge) || 0,
+        appointmentCharge: parseFloat(editDocApptCharge) || 0,
+        slotMinutes: parseInt(editDocSlotMinutes) || 60,
+        version: editingDoctor.version,
+      };
+
+      // Email update is an admin privilege; omitted for doctor actors
+      if (isAdmin && editDocEmail.trim()) {
+        payload.email = editDocEmail.trim();
+      }
+
+      // Department change is forbidden for doctor actors; omit departmentId for doctor actors
+      if (!isDoctorActor && editDocDeptId) {
+        payload.departmentId = editDocDeptId;
+      }
+
       const res = await fetch(`/api/hms/doctors/${editingDoctor.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editDocName.trim(),
-          departmentId: editDocDeptId || undefined,
-          specialist: editDocSpecialist.trim(),
-          designation: editDocDesignation.trim() || undefined,
-          qualification: editDocQual.trim(),
-          gender: editDocGender || undefined,
-          phone: editDocPhone.trim() || undefined,
-          dateOfBirth: editDocDob || undefined,
-          bloodGroup: editDocBloodGroup || undefined,
-          address1: editDocAddress1.trim() || undefined,
-          address2: editDocAddress2.trim() || undefined,
-          city: editDocCity.trim() || undefined,
-          zip: editDocZip.trim() || undefined,
-          description: editDocDescription.trim() || undefined,
-          opdCharge: parseFloat(editDocOpdCharge) || 0,
-          appointmentCharge: parseFloat(editDocApptCharge) || 0,
-          slotMinutes: parseInt(editDocSlotMinutes) || 60,
-          version: editingDoctor.version,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -624,7 +666,9 @@ export function DoctorsWorkspace({ id }: { id: string }) {
         await loadDoctorsData();
       } else {
         const err = await res.json().catch(() => ({}));
-        setApiErrorBanner(err.error || t("Failed to update doctor profile."));
+        setApiErrorBanner(
+          err.error || err.message || t("Failed to update doctor profile."),
+        );
       }
     } catch {
       setApiErrorBanner(t("Network error updating doctor profile."));
@@ -2525,11 +2569,12 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">
+                  <label htmlFor="edit-doc-name" className="form-label-custom">
                     {t("Doctor Name")}:{" "}
                     <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
+                    id="edit-doc-name"
                     required
                     className="form-input-custom"
                     value={editDocName}
@@ -2537,10 +2582,36 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">
+                  <label htmlFor="edit-doc-email" className="form-label-custom">
+                    {t("Email")}: <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
+                  <input
+                    id="edit-doc-email"
+                    type="email"
+                    required={isAdmin}
+                    disabled={!isAdmin}
+                    className="form-input-custom"
+                    value={editDocEmail}
+                    onChange={(e) => setEditDocEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div>
+                  <label htmlFor="edit-doc-dept" className="form-label-custom">
                     {t("Department")}:
                   </label>
                   <select
+                    id="edit-doc-dept"
+                    disabled={!isAdmin}
                     className="form-select-custom"
                     value={editDocDeptId}
                     onChange={(e) => setEditDocDeptId(e.target.value)}
@@ -2553,36 +2624,22 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "16px",
-                  marginBottom: "16px",
-                }}
-              >
                 <div>
-                  <label className="form-label-custom">
-                    {t("Specialist")}:
+                  <label
+                    htmlFor="edit-doc-specialist"
+                    className="form-label-custom"
+                  >
+                    {t("Specialist")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
+                    id="edit-doc-specialist"
+                    required
                     className="form-input-custom"
                     value={editDocSpecialist}
                     onChange={(e) => setEditDocSpecialist(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label className="form-label-custom">
-                    {t("Designation")}:
-                  </label>
-                  <input
-                    className="form-input-custom"
-                    value={editDocDesignation}
-                    onChange={(e) => setEditDocDesignation(e.target.value)}
-                  />
-                </div>
               </div>
 
               <div
@@ -2594,18 +2651,54 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">
-                    {t("Qualification")}:
+                  <label
+                    htmlFor="edit-doc-designation"
+                    className="form-label-custom"
+                  >
+                    {t("Designation")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
                   </label>
                   <input
+                    id="edit-doc-designation"
+                    required
+                    className="form-input-custom"
+                    value={editDocDesignation}
+                    onChange={(e) => setEditDocDesignation(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="edit-doc-qual" className="form-label-custom">
+                    {t("Qualification")}:{" "}
+                    <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
+                  <input
+                    id="edit-doc-qual"
+                    required
                     className="form-input-custom"
                     value={editDocQual}
                     onChange={(e) => setEditDocQual(e.target.value)}
                   />
                 </div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr",
+                  gap: "16px",
+                  marginBottom: "16px",
+                }}
+              >
                 <div>
-                  <label className="form-label-custom">{t("Gender")}:</label>
+                  <label
+                    htmlFor="edit-doc-gender"
+                    className="form-label-custom"
+                  >
+                    {t("Gender")}: <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
                   <select
+                    id="edit-doc-gender"
+                    required
                     className="form-select-custom"
                     value={editDocGender}
                     onChange={(e) => setEditDocGender(e.target.value)}
@@ -2627,10 +2720,11 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">
+                  <label htmlFor="edit-doc-dob" className="form-label-custom">
                     {t("Date of Birth")}:
                   </label>
                   <input
+                    id="edit-doc-dob"
                     type="date"
                     className="form-input-custom"
                     value={editDocDob}
@@ -2638,10 +2732,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">
+                  <label
+                    htmlFor="edit-doc-blood-group"
+                    className="form-label-custom"
+                  >
                     {t("Blood Group")}:
                   </label>
                   <select
+                    id="edit-doc-blood-group"
                     className="form-select-custom"
                     value={editDocBloodGroup}
                     onChange={(e) => setEditDocBloodGroup(e.target.value)}
@@ -2658,8 +2756,11 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Phone")}:</label>
+                  <label htmlFor="edit-doc-phone" className="form-label-custom">
+                    {t("Phone")}:
+                  </label>
                   <input
+                    id="edit-doc-phone"
                     className="form-input-custom"
                     value={editDocPhone}
                     onChange={(e) => setEditDocPhone(e.target.value)}
@@ -2676,10 +2777,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">
+                  <label
+                    htmlFor="edit-doc-slot-minutes"
+                    className="form-label-custom"
+                  >
                     {t("Slot Duration")}:
                   </label>
                   <select
+                    id="edit-doc-slot-minutes"
                     className="form-select-custom"
                     value={editDocSlotMinutes}
                     onChange={(e) => setEditDocSlotMinutes(e.target.value)}
@@ -2693,10 +2798,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="form-label-custom">
+                  <label
+                    htmlFor="edit-doc-opd-charge"
+                    className="form-label-custom"
+                  >
                     {t("OPD Charge (ETB)")}:
                   </label>
                   <input
+                    id="edit-doc-opd-charge"
                     type="number"
                     min="0"
                     step="0.01"
@@ -2706,10 +2815,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">
+                  <label
+                    htmlFor="edit-doc-appt-charge"
+                    className="form-label-custom"
+                  >
                     {t("Appt Charge (ETB)")}:
                   </label>
                   <input
+                    id="edit-doc-appt-charge"
                     type="number"
                     min="0"
                     step="0.01"
@@ -2729,10 +2842,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">
+                  <label
+                    htmlFor="edit-doc-address1"
+                    className="form-label-custom"
+                  >
                     {t("Address Line 1")}:
                   </label>
                   <input
+                    id="edit-doc-address1"
                     placeholder="Street address"
                     className="form-input-custom"
                     value={editDocAddress1}
@@ -2740,10 +2857,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">
+                  <label
+                    htmlFor="edit-doc-address2"
+                    className="form-label-custom"
+                  >
                     {t("Address Line 2")}:
                   </label>
                   <input
+                    id="edit-doc-address2"
                     placeholder="Apartment, suite, unit"
                     className="form-input-custom"
                     value={editDocAddress2}
@@ -2761,8 +2882,11 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                 }}
               >
                 <div>
-                  <label className="form-label-custom">{t("City")}:</label>
+                  <label htmlFor="edit-doc-city" className="form-label-custom">
+                    {t("City")}:
+                  </label>
                   <input
+                    id="edit-doc-city"
                     placeholder="City"
                     className="form-input-custom"
                     value={editDocCity}
@@ -2770,8 +2894,11 @@ export function DoctorsWorkspace({ id }: { id: string }) {
                   />
                 </div>
                 <div>
-                  <label className="form-label-custom">{t("Zip Code")}:</label>
+                  <label htmlFor="edit-doc-zip" className="form-label-custom">
+                    {t("Zip Code")}:
+                  </label>
                   <input
+                    id="edit-doc-zip"
                     placeholder="Postal code"
                     className="form-input-custom"
                     value={editDocZip}
@@ -2781,10 +2908,14 @@ export function DoctorsWorkspace({ id }: { id: string }) {
               </div>
 
               <div style={{ marginBottom: "20px" }}>
-                <label className="form-label-custom">
+                <label
+                  htmlFor="edit-doc-description"
+                  className="form-label-custom"
+                >
                   {t("Description / Bio")}:
                 </label>
                 <textarea
+                  id="edit-doc-description"
                   rows={2}
                   placeholder="Doctor description, medical background, notes..."
                   className="form-textarea-custom"
