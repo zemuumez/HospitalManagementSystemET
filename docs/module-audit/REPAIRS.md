@@ -65,4 +65,14 @@ These repairs do not establish package/insurance endpoints, complete settings UI
 1. Doctor workspace: remove remaining preview rows/saves and align doctor account creation, department, and absence forms with their actual contracts.
 2. Settings frontend: connect the original field form to the now-available atomic endpoint, including the appropriate image storage contract.
 
+## 2026-10-10: inventory workspace parity and stock integrity
+
+- Complete 4-tab inventory workspace: Items, Item Categories, Item Stocks, and Issued Items.
+- Real PostgreSQL persistence via Go backend (`/v1/inventory/*`) and Next.js proxy (`/api/hms/inventory/*`).
+- Transactional stock mutations: receipts, issues, and returns with idempotency key enforcement.
+- Stock integrity: Insufficient stock protection via `FOR UPDATE` row lock; concurrent overspend serialization; return upper bound check against issued quantity; non-restocked damaged item return tracking with zero balance inflation.
+- Record protection: Referenced `inventory_category` and `inventory_item` deletion blocked with `409 Conflict` (`RECORD_IN_USE`). Clean unreferenced deletion records audit events.
+- Bilingual English and Amharic translation coverage and light/dark theme readability.
+- Verification: Passed isolated PostgreSQL Go test suite (`TestClinicalTransactions/testInventory`) and isolated Playwright browser test suite (19/19 journeys) in temporary QA schema without touching public data. See `INVENTORY-WORKSPACE-PARITY-2026-10-10.md`.
+
 

@@ -29,6 +29,7 @@ const integrationMode = process.argv.includes("--integration");
 const recoveryMode = process.argv.includes("--recovery");
 const doctorWorkspaceMode = process.argv.includes("--doctor-workspace");
 const settingsWorkspaceMode = process.argv.includes("--settings-workspace");
+const inventoryWorkspaceMode = process.argv.includes("--inventory-workspace");
 const dsn = new URL(process.env.DATABASE_URL);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
   throw Error("Browser QA requires a loopback PostgreSQL database");
@@ -325,7 +326,9 @@ try {
                             ? "scripts/verify-doctor-workspace.mjs"
                             : settingsWorkspaceMode
                               ? "scripts/verify-settings-workspace.mjs"
-                              : "scripts/verify-connected.mjs",
+                              : inventoryWorkspaceMode
+                                ? "scripts/verify-inventory-workspace.mjs"
+                                : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,
