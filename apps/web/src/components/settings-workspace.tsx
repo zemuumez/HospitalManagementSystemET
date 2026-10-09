@@ -295,9 +295,22 @@ function GeneralSettingsTab() {
         body: formData,
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        console.error("Attachment upload error:", res.status, data);
-        throw new Error(data.error || "Attachment upload failed");
+        const text = await res.text().catch(() => "");
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {}
+        console.error(
+          "Attachment upload error:",
+          res.status,
+          data.error || text || res.statusText,
+        );
+        throw new Error(
+          data.error ||
+            (res.status === 503
+              ? "Attachment storage service is unavailable. Please ensure the API is running with attachment storage configured."
+              : "Attachment upload failed"),
+        );
       }
       const data = await res.json();
       const contentUrl = `/api/hms/attachments/${data.token}/content`;
@@ -2102,8 +2115,22 @@ function FrontCmsSettingsTab() {
         body: formData,
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Image upload failed");
+        const text = await res.text().catch(() => "");
+        let data: any = {};
+        try {
+          data = JSON.parse(text);
+        } catch {}
+        console.error(
+          "Image upload error:",
+          res.status,
+          data.error || text || res.statusText,
+        );
+        throw new Error(
+          data.error ||
+            (res.status === 503
+              ? "Attachment storage service is unavailable. Please ensure the API is running with attachment storage configured."
+              : "Image upload failed"),
+        );
       }
       const data = await res.json();
       setCmsValues((prev) => ({

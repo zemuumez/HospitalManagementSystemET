@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 )
 
@@ -61,8 +62,13 @@ func main() {
 		scanner = privatefiles.Scanner{Address: address}
 	}
 	var files application.AttachmentFiles
-	if directory := os.Getenv("HMS_ATTACHMENT_DIR"); directory != "" {
-		storage, e := privatefiles.New(directory)
+	attachmentDir := os.Getenv("HMS_ATTACHMENT_DIR")
+	if attachmentDir == "" && os.Getenv("APP_ENV") != "production" {
+		attachmentDir = filepath.Join(".", ".local", "attachments")
+		_ = os.MkdirAll(attachmentDir, 0700)
+	}
+	if attachmentDir != "" {
+		storage, e := privatefiles.New(attachmentDir)
 		if e != nil {
 			slog.Error("Private attachment directory unavailable")
 			os.Exit(1)
