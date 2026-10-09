@@ -57,9 +57,10 @@ type InventoryMovementInput struct {
 }
 type InventoryMovement struct {
 	InventoryMovementInput
-	ID         string    `json:"id"`
-	DeltaMilli int64     `json:"deltaMilli"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID            string    `json:"id"`
+	DeltaMilli    int64     `json:"deltaMilli"`
+	ReturnedMilli int64     `json:"returnedMilli"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 func (i *InventoryMovementInput) Validate() error {

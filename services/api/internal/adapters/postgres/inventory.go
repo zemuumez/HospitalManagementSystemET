@@ -56,6 +56,32 @@ func (s Store) SaveInventoryCategory(ctx context.Context, a domain.Actor, id str
 	}
 	return out, tx.Commit(ctx)
 }
+func (s Store) DeleteInventoryCategory(ctx context.Context, a domain.Actor, id string) error {
+	tx, e := s.DB.Begin(ctx)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(ctx)
+	var inUse bool
+	e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inventory_item WHERE category_id=$1)`, id).Scan(&inUse)
+	if e != nil {
+		return clinicalError(e)
+	}
+	if inUse {
+		return domain.ErrInUse
+	}
+	res, e := tx.Exec(ctx, `DELETE FROM inventory_category WHERE id=$1`, id)
+	if e != nil {
+		return clinicalError(e)
+	}
+	if res.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	if e = pharmacyAudit(ctx, tx, a, "inventory_category.deleted", id); e != nil {
+		return e
+	}
+	return tx.Commit(ctx)
+}
 
 const inventoryItemFields = `id,category_id,name,unit,description,reorder_milli,active,version,balance_milli`
 
@@ -128,12 +154,39 @@ func (s Store) SaveInventoryItem(ctx context.Context, a domain.Actor, id string,
 	}
 	return out, tx.Commit(ctx)
 }
+func (s Store) DeleteInventoryItem(ctx context.Context, a domain.Actor, id string) error {
+	tx, e := s.DB.Begin(ctx)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback(ctx)
+	var inUse bool
+	e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM inventory_movement WHERE item_id=$1)`, id).Scan(&inUse)
+	if e != nil {
+		return clinicalError(e)
+	}
+	if inUse {
+		return domain.ErrInUse
+	}
+	res, e := tx.Exec(ctx, `DELETE FROM inventory_item WHERE id=$1`, id)
+	if e != nil {
+		return clinicalError(e)
+	}
+	if res.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	if e = pharmacyAudit(ctx, tx, a, "inventory_item.deleted", id); e != nil {
+		return e
+	}
+	return tx.Commit(ctx)
+}
 
-const inventoryMovementFields = `id,item_id,kind,quantity_milli,COALESCE(recipient_id,''),COALESCE(original_id::text,''),supplier,store_name,reference,cost_minor,restock,reason,delta_milli,created_at`
+const inventoryMovementFields = `id,item_id,kind,quantity_milli,COALESCE(recipient_id,''),COALESCE(original_id::text,''),supplier,store_name,reference,cost_minor,restock,reason,delta_milli,COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=inventory_movement.id AND r.kind='return'), 0)::bigint,created_at`
+const inventoryMovementInsertFields = `id,item_id,kind,quantity_milli,COALESCE(recipient_id,''),COALESCE(original_id::text,''),supplier,store_name,reference,cost_minor,restock,reason,delta_milli,0::bigint,created_at`
 
 func scanInventoryMovement(row pgx.Row) (domain.InventoryMovement, error) {
 	var m domain.InventoryMovement
-	e := row.Scan(&m.ID, &m.ItemID, &m.Kind, &m.QuantityMilli, &m.RecipientID, &m.OriginalID, &m.Supplier, &m.StoreName, &m.Reference, &m.CostMinor, &m.Restock, &m.Reason, &m.DeltaMilli, &m.CreatedAt)
+	e := row.Scan(&m.ID, &m.ItemID, &m.Kind, &m.QuantityMilli, &m.RecipientID, &m.OriginalID, &m.Supplier, &m.StoreName, &m.Reference, &m.CostMinor, &m.Restock, &m.Reason, &m.DeltaMilli, &m.ReturnedMilli, &m.CreatedAt)
 	return m, clinicalError(e)
 }
 func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.InventoryMovementInput, key string) (domain.InventoryMovement, error) {
@@ -202,7 +255,7 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	if item.BalanceMilli+delta < 0 || item.BalanceMilli+delta > 1000000000000 {
 		return out, domain.ErrStale
 	}
-	out, e = scanInventoryMovement(tx.QueryRow(ctx, `INSERT INTO inventory_movement(item_id,kind,quantity_milli,delta_milli,recipient_id,original_id,supplier,store_name,reference,cost_minor,restock,reason,actor_id,request_key,request_hash) VALUES($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,'')::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING `+inventoryMovementFields, i.ItemID, i.Kind, i.QuantityMilli, delta, i.RecipientID, i.OriginalID, i.Supplier, i.StoreName, i.Reference, i.CostMinor, i.Restock, i.Reason, a.ID, key, wanted))
+	out, e = scanInventoryMovement(tx.QueryRow(ctx, `INSERT INTO inventory_movement(item_id,kind,quantity_milli,delta_milli,recipient_id,original_id,supplier,store_name,reference,cost_minor,restock,reason,actor_id,request_key,request_hash) VALUES($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,'')::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING `+inventoryMovementInsertFields, i.ItemID, i.Kind, i.QuantityMilli, delta, i.RecipientID, i.OriginalID, i.Supplier, i.StoreName, i.Reference, i.CostMinor, i.Restock, i.Reason, a.ID, key, wanted))
 	if e != nil {
 		return out, clinicalError(e)
 	}

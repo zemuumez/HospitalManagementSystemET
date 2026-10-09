@@ -175,6 +175,43 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 			}
 		}
 	})
+	t.Run("deletion protection and permissions", func(t *testing.T) {
+		// Category in use cannot be deleted
+		if err := inv.DeleteCategory(ctx, a, category.ID); !errors.Is(err, domain.ErrInUse) {
+			t.Fatalf("expected ErrInUse deleting referenced category, got %v", err)
+		}
+		// Item in use cannot be deleted
+		if err := inv.DeleteItem(ctx, a, item.ID); !errors.Is(err, domain.ErrInUse) {
+			t.Fatalf("expected ErrInUse deleting referenced item, got %v", err)
+		}
+		// Non-admin cannot delete
+		for _, actor := range actors[1:] {
+			if err := inv.DeleteCategory(ctx, actor, category.ID); !errors.Is(err, domain.ErrForbidden) {
+				t.Fatalf("expected ErrForbidden for %s deleting category, got %v", actor.Role, err)
+			}
+			if err := inv.DeleteItem(ctx, actor, item.ID); !errors.Is(err, domain.ErrForbidden) {
+				t.Fatalf("expected ErrForbidden for %s deleting item, got %v", actor.Role, err)
+			}
+		}
+		// Unreferenced category can be deleted
+		tempCat, err := inv.SaveCategory(ctx, a, "", domain.InventoryCategoryInput{Name: "Disposable Category", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Unreferenced item can be deleted
+		tempItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: tempCat.ID, Name: "Disposable Item", Unit: "pc", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Now delete item cleanly
+		if err := inv.DeleteItem(ctx, a, tempItem.ID); err != nil {
+			t.Fatalf("expected clean deletion of unreferenced item, got %v", err)
+		}
+		// Now delete category cleanly
+		if err := inv.DeleteCategory(ctx, a, tempCat.ID); err != nil {
+			t.Fatalf("expected clean deletion of unreferenced category, got %v", err)
+		}
+	})
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := strings.TrimPrefix(r.Header.Get("Cookie"), "session=")
 		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))
@@ -191,6 +228,10 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		{"admin", "GET", "/v1/inventory/movements?itemId=invalid", "", "", 422},
 		{"admin", "POST", "/v1/inventory/movements", `{"unknown":true}`, "http://hospital.test", 400},
 		{"admin", "POST", "/v1/inventory/movements", `{}`, "http://evil.test", 403},
+		{"admin", "DELETE", "/v1/inventory/categories/" + category.ID, "", "http://hospital.test", 409},
+		{"admin", "DELETE", "/v1/inventory/items/" + item.ID, "", "http://hospital.test", 409},
+		{"doctor", "DELETE", "/v1/inventory/categories/" + category.ID, "", "http://hospital.test", 403},
+		{"doctor", "DELETE", "/v1/inventory/items/" + item.ID, "", "http://hospital.test", 403},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
 		req.Header.Set("Cookie", "session="+tc.actor)

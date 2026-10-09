@@ -36,6 +36,10 @@ func (s Server) inventory(w http.ResponseWriter, r *http.Request, a domain.Actor
 			status = 201
 		}
 		out, e = s.Inventory.SaveCategory(r.Context(), a, id, i)
+	case len(parts) == 2 && parts[0] == "categories" && r.Method == "DELETE":
+		id := parts[1]
+		e = s.Inventory.DeleteCategory(r.Context(), a, id)
+		out = map[string]bool{"deleted": true}
 	case len(parts) == 1 && parts[0] == "items" && r.Method == "GET":
 		var data []domain.InventoryItem
 		data, e = s.Inventory.Items(r.Context(), a, r.URL.Query().Get("search"), r.URL.Query().Get("lowStock") == "true", page)
@@ -52,6 +56,10 @@ func (s Server) inventory(w http.ResponseWriter, r *http.Request, a domain.Actor
 			status = 201
 		}
 		out, e = s.Inventory.SaveItem(r.Context(), a, id, i)
+	case len(parts) == 2 && parts[0] == "items" && r.Method == "DELETE":
+		id := parts[1]
+		e = s.Inventory.DeleteItem(r.Context(), a, id)
+		out = map[string]bool{"deleted": true}
 	case len(parts) == 1 && parts[0] == "movements" && r.Method == "POST":
 		var i domain.InventoryMovementInput
 		if !decode(w, r, &i) {

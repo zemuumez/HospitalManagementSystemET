@@ -8,8 +8,10 @@ import (
 type InventoryRepository interface {
 	InventoryCategories(context.Context, int) ([]domain.InventoryCategory, error)
 	SaveInventoryCategory(context.Context, domain.Actor, string, domain.InventoryCategoryInput) (domain.InventoryCategory, error)
+	DeleteInventoryCategory(context.Context, domain.Actor, string) error
 	InventoryItems(context.Context, string, bool, int) ([]domain.InventoryItem, error)
 	SaveInventoryItem(context.Context, domain.Actor, string, domain.InventoryItemInput) (domain.InventoryItem, error)
+	DeleteInventoryItem(context.Context, domain.Actor, string) error
 	MoveInventory(context.Context, domain.Actor, domain.InventoryMovementInput, string) (domain.InventoryMovement, error)
 	InventoryMovements(context.Context, domain.Actor, string, int) ([]domain.InventoryMovement, error)
 }
@@ -36,6 +38,15 @@ func (i Inventory) SaveCategory(ctx context.Context, a domain.Actor, id string, 
 	}
 	return i.Store.SaveInventoryCategory(ctx, a, id, in)
 }
+func (i Inventory) DeleteCategory(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	return i.Store.DeleteInventoryCategory(ctx, a, id)
+}
 func (i Inventory) Items(ctx context.Context, a domain.Actor, search string, low bool, page int) ([]domain.InventoryItem, error) {
 	if a.Role != "admin" {
 		return nil, domain.ErrForbidden
@@ -56,6 +67,15 @@ func (i Inventory) SaveItem(ctx context.Context, a domain.Actor, id string, in d
 		return domain.InventoryItem{}, e
 	}
 	return i.Store.SaveInventoryItem(ctx, a, id, in)
+}
+func (i Inventory) DeleteItem(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	return i.Store.DeleteInventoryItem(ctx, a, id)
 }
 func (i Inventory) Move(ctx context.Context, a domain.Actor, in domain.InventoryMovementInput, key string) (domain.InventoryMovement, error) {
 	if a.Role != "admin" {
