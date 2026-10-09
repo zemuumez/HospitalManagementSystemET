@@ -77,10 +77,8 @@ func (a Actor) Can(permission string) bool {
 		return a.Role == "admin" || a.Role == "doctor"
 	case "operations.read":
 		return a.Role == "admin" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "receptionist"
-	case "settings.manage":
+	case "settings.manage", "settings.read":
 		return a.Role == "admin"
-	case "settings.read":
-		return a.Role == "admin" || a.Role == "receptionist" || a.Role == "doctor" || a.Role == "nurse" || a.Role == "pharmacist" || a.Role == "accountant" || a.Role == "case_manager" || a.Role == "lab_technician"
 	case "cms.manage":
 		return a.Role == "admin"
 	case "cms.read":

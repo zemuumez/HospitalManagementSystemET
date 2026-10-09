@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"hms.local/api/internal/domain"
@@ -105,7 +106,13 @@ func (s AttachmentsService) UploadPublic(ctx context.Context, a domain.Actor, na
 		return domain.SecureAttachment{}, err
 	}
 	input.StoragePath = key
-	att, err := s.CreateAttachment(ctx, a, input)
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		_ = s.Files.Remove(ctx, key)
+		return domain.SecureAttachment{}, err
+	}
+	token := hex.EncodeToString(raw)
+	att, err := s.Store.SaveAttachment(ctx, a, token, input)
 	if err != nil {
 		_ = s.Files.Remove(ctx, key)
 	}

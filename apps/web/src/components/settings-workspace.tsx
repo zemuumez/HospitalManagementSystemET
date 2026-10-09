@@ -187,12 +187,16 @@ function GeneralSettingsTab() {
 
   useEffect(() => {
     let active = true;
-    api<Record<string, string>>("general-settings")
-      .then((data) => {
+    api<any>("general-settings")
+      .then((res) => {
         if (!active) return;
+        const data = res?.general_settings || res || {};
         setForm((prev) => ({
           ...prev,
-          app_name: data.app_name || prev.app_name || "ULSHMS",
+          app_name:
+            data.app_name !== undefined && data.app_name !== ""
+              ? data.app_name
+              : prev.app_name || "ULSHMS",
           company_name:
             data.company_name ||
             data.hospital_name ||
@@ -265,11 +269,18 @@ function GeneralSettingsTab() {
     if (!file) return;
     setErrorNotice("");
     setSuccessNotice("");
-    if (
-      !["image/png", "image/jpeg", "image/webp", "image/x-icon"].includes(
-        file.type,
-      )
-    ) {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const isValidType =
+      (file.type &&
+        [
+          "image/png",
+          "image/jpeg",
+          "image/webp",
+          "image/x-icon",
+          "image/vnd.microsoft.icon",
+        ].includes(file.type)) ||
+      ["png", "jpg", "jpeg", "webp", "ico"].includes(ext || "");
+    if (!isValidType) {
       setErrorNotice(
         "Please choose a PNG, JPEG, WEBP, or ICO image smaller than 25 MB.",
       );
@@ -285,6 +296,7 @@ function GeneralSettingsTab() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        console.error("Attachment upload error:", res.status, data);
         throw new Error(data.error || "Attachment upload failed");
       }
       const data = await res.json();
@@ -294,6 +306,7 @@ function GeneralSettingsTab() {
         `${field === "app_logo" ? "Application logo" : "Favicon"} uploaded successfully.`,
       );
     } catch (err: any) {
+      console.error("handleFileUpload exception:", err);
       setErrorNotice(err.message || "Failed to upload image.");
     }
   }
@@ -423,7 +436,7 @@ function GeneralSettingsTab() {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="legacy-form">
+      <form onSubmit={handleSave} className="legacy-form" noValidate>
         <label>
           <span className="label">
             {t("App Name")}: <b className="text-red-500">*</b>
@@ -705,9 +718,7 @@ function GeneralSettingsTab() {
             className="field"
             type="url"
             value={form.facebook_url}
-            onChange={(e) =>
-              setForm({ ...form, facebook_url: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, facebook_url: e.target.value })}
           />
         </label>
 
@@ -772,9 +783,7 @@ function GeneralSettingsTab() {
               className="field pr-10"
               type={showSecret ? "text" : "password"}
               placeholder={
-                form.open_ai_key === "[CONFIGURED]"
-                  ? "[CONFIGURED]"
-                  : "sk-..."
+                form.open_ai_key === "[CONFIGURED]" ? "[CONFIGURED]" : "sk-..."
               }
               value={form.open_ai_key}
               onChange={(e) =>
@@ -873,12 +882,13 @@ function HospitalScheduleTab() {
 
   useEffect(() => {
     let active = true;
-    api<Array<any>>("hospital-schedules")
-      .then((data) => {
+    api<any>("hospital-schedules")
+      .then((res) => {
         if (!active) return;
-        if (Array.isArray(data) && data.length > 0) {
+        const list = Array.isArray(res) ? res : res?.hospital_schedules || [];
+        if (Array.isArray(list) && list.length > 0) {
           const map = new Map<number, any>();
-          data.forEach((d) => map.set(d.day_of_week, d));
+          list.forEach((d: any) => map.set(d.day_of_week, d));
           setDays(
             DAY_NAMES.map((name, i) => {
               const dow = i + 1;
@@ -888,7 +898,7 @@ function HospitalScheduleTab() {
                 day_name: name,
                 start_time: item?.start_time || "08:00",
                 end_time: item?.end_time || "17:00",
-                is_closed: item?.is_closed ?? (dow === 7),
+                is_closed: item?.is_closed ?? dow === 7,
               };
             }),
           );
@@ -996,7 +1006,7 @@ function HospitalScheduleTab() {
         </div>
       )}
 
-      <form onSubmit={handleSave}>
+      <form onSubmit={handleSave} noValidate>
         <div className="flex flex-col gap-4">
           {days.map((d, i) => (
             <div
@@ -1052,11 +1062,7 @@ function HospitalScheduleTab() {
         </div>
 
         <div className="flex justify-end mt-6">
-          <button
-            type="submit"
-            className="btn-action-blue"
-            disabled={saving}
-          >
+          <button type="submit" className="btn-action-blue" disabled={saving}>
             {saving ? t("Saving...") : t("Save Schedule")}
           </button>
         </div>
@@ -1202,6 +1208,7 @@ function ModulesSettingTab() {
         {Object.entries(moduleMap).map(([key, ms]) => (
           <div
             key={key}
+            data-module-key={key}
             className="flex items-center justify-between p-3.5 rounded border border-gray-800 bg-[#161c28]"
           >
             <div>
@@ -1247,8 +1254,9 @@ function CurrencySettingsTab() {
   const [errorNotice, setErrorNotice] = useState("");
 
   useEffect(() => {
-    api<Record<string, string>>("general-settings")
-      .then((data) => {
+    api<any>("general-settings")
+      .then((res) => {
+        const data = res?.general_settings || res || {};
         setActiveCurrency(data.current_currency || data.currency || "ETB");
       })
       .catch(() => {});
@@ -1400,9 +1408,10 @@ function PaymentGatewayTab() {
 
   useEffect(() => {
     let active = true;
-    api<Record<string, string>>("general-settings")
-      .then((data) => {
+    api<any>("general-settings")
+      .then((res) => {
         if (!active) return;
+        const data = res?.general_settings || res || {};
         setForm((prev) => ({
           ...prev,
           stripe_key: data.stripe_key || "",
@@ -1507,7 +1516,7 @@ function PaymentGatewayTab() {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="flex flex-col gap-8">
+      <form onSubmit={handleSave} className="flex flex-col gap-8" noValidate>
         {/* Stripe Section */}
         <div className="border border-gray-800 rounded-lg p-5 bg-[#141a24]">
           <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
@@ -1596,9 +1605,7 @@ function PaymentGatewayTab() {
                 className="field"
                 type="password"
                 placeholder={
-                  form.paypal_secret === "[CONFIGURED]"
-                    ? "[CONFIGURED]"
-                    : ""
+                  form.paypal_secret === "[CONFIGURED]" ? "[CONFIGURED]" : ""
                 }
                 value={form.paypal_secret}
                 onChange={(e) =>
@@ -1659,9 +1666,7 @@ function PaymentGatewayTab() {
                 className="field"
                 type="password"
                 placeholder={
-                  form.razorpay_secret === "[CONFIGURED]"
-                    ? "[CONFIGURED]"
-                    : ""
+                  form.razorpay_secret === "[CONFIGURED]" ? "[CONFIGURED]" : ""
                 }
                 value={form.razorpay_secret}
                 onChange={(e) =>
@@ -1772,9 +1777,7 @@ function PaymentGatewayTab() {
                 className="field"
                 type="password"
                 placeholder={
-                  form.phonepe_salt_key === "[CONFIGURED]"
-                    ? "[CONFIGURED]"
-                    : ""
+                  form.phonepe_salt_key === "[CONFIGURED]" ? "[CONFIGURED]" : ""
                 }
                 value={form.phonepe_salt_key}
                 onChange={(e) =>
@@ -1838,11 +1841,7 @@ function PaymentGatewayTab() {
         </div>
 
         <div className="flex justify-end mt-4">
-          <button
-            type="submit"
-            className="btn-action-blue"
-            disabled={saving}
-          >
+          <button type="submit" className="btn-action-blue" disabled={saving}>
             {saving ? t("Saving...") : t("Save Payment Gateways")}
           </button>
         </div>
@@ -1868,9 +1867,10 @@ function PatientQueueThemeTab() {
 
   useEffect(() => {
     let active = true;
-    api<Record<string, string>>("general-settings")
-      .then((data) => {
+    api<any>("general-settings")
+      .then((res) => {
         if (!active) return;
+        const data = res?.general_settings || res || {};
         setColor(data.queue_theme_color || "#6571ff");
         setMessage(data.queue_theme_message || "Please wait for your number");
         setTheme(data.queue_theme || "modern-blue");
@@ -1932,7 +1932,9 @@ function PatientQueueThemeTab() {
             {t("Patient Queue Theme")}
           </h2>
           <p className="text-muted text-sm mt-1">
-            {t("Customize the display header and colors for OPD patient queues.")}
+            {t(
+              "Customize the display header and colors for OPD patient queues.",
+            )}
           </p>
         </div>
       </div>
@@ -1967,7 +1969,7 @@ function PatientQueueThemeTab() {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="legacy-form">
+      <form onSubmit={handleSave} className="legacy-form" noValidate>
         <label>
           <span className="label">{t("Theme Preset")}</span>
           <select
@@ -2023,11 +2025,7 @@ function PatientQueueThemeTab() {
         </div>
 
         <div className="form-span flex justify-end mt-6">
-          <button
-            type="submit"
-            className="btn-action-blue"
-            disabled={saving}
-          >
+          <button type="submit" className="btn-action-blue" disabled={saving}>
             {saving ? t("Saving...") : t("Save Queue Theme")}
           </button>
         </div>
@@ -2068,14 +2066,13 @@ function FrontCmsSettingsTab() {
 
   useEffect(() => {
     let active = true;
-    api<Array<{ key: string; value: string; type: string }>>(
-      "front-cms-settings",
-    )
-      .then((data) => {
+    api<any>("front-cms-settings")
+      .then((res) => {
         if (!active) return;
-        if (Array.isArray(data)) {
+        const list = Array.isArray(res) ? res : res?.front_cms_settings || [];
+        if (Array.isArray(list)) {
           const map: Record<string, string> = {};
-          data.forEach((item) => {
+          list.forEach((item: any) => {
             map[item.key] = item.value;
           });
           setCmsValues((prev) => ({ ...prev, ...map }));
@@ -2224,7 +2221,7 @@ function FrontCmsSettingsTab() {
           </div>
         )}
 
-        <form onSubmit={handleSave} className="legacy-form">
+        <form onSubmit={handleSave} className="legacy-form" noValidate>
           {tab === "Home" && (
             <>
               <label className="form-span">
@@ -2270,9 +2267,7 @@ function FrontCmsSettingsTab() {
                 <span className="label">{t("Home Page Hero Image")}</span>
                 <div className="flex items-center gap-4 mt-2">
                   <img
-                    src={
-                      cmsValues.home_page_image || "/legacy/front/home.png"
-                    }
+                    src={cmsValues.home_page_image || "/legacy/front/home.png"}
                     alt="Hero Preview"
                     style={{
                       width: 100,
@@ -2285,10 +2280,7 @@ function FrontCmsSettingsTab() {
                     type="file"
                     accept="image/*"
                     onChange={(e) =>
-                      handleImageUpload(
-                        "home_page_image",
-                        e.target.files?.[0],
-                      )
+                      handleImageUpload("home_page_image", e.target.files?.[0])
                     }
                   />
                 </div>
@@ -2401,11 +2393,7 @@ function FrontCmsSettingsTab() {
           )}
 
           <div className="form-span flex justify-end mt-6">
-            <button
-              type="submit"
-              className="btn-action-blue"
-              disabled={saving}
-            >
+            <button type="submit" className="btn-action-blue" disabled={saving}>
               {saving ? t("Saving...") : t("Save Front CMS Settings")}
             </button>
           </div>

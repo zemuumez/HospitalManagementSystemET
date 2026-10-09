@@ -28,6 +28,7 @@ const invitationsMode = process.argv.includes("--invitations");
 const integrationMode = process.argv.includes("--integration");
 const recoveryMode = process.argv.includes("--recovery");
 const doctorWorkspaceMode = process.argv.includes("--doctor-workspace");
+const settingsWorkspaceMode = process.argv.includes("--settings-workspace");
 const dsn = new URL(process.env.DATABASE_URL);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
   throw Error("Browser QA requires a loopback PostgreSQL database");
@@ -117,6 +118,8 @@ try {
   }
   const webPort = await port(),
     apiPort = await port();
+  const attachmentDir = resolve(root, `.local/qa-${token}/attachments`);
+  mkdirSync(attachmentDir, { recursive: true });
   const env = {
     ...process.env,
     DATABASE_URL: dsn.href,
@@ -124,6 +127,7 @@ try {
     BETTER_AUTH_SECRET: randomBytes(48).toString("hex"),
     GO_API_URL: `http://127.0.0.1:${apiPort}`,
     API_ADDR: `127.0.0.1:${apiPort}`,
+    HMS_ATTACHMENT_DIR: attachmentDir,
     APP_ENV: "development",
     NODE_ENV: "development",
     HMS_TEST_ISOLATED_SCHEMA: schema,
@@ -278,7 +282,7 @@ try {
     });
     process.stdin.pause();
   } else {
-    if (doctorWorkspaceMode) {
+    if (doctorWorkspaceMode || settingsWorkspaceMode) {
       const { hashPassword } = await import("better-auth/crypto");
       const email = `qa-admin-${token}@example.test`;
       const password = randomBytes(24).toString("hex") + "Aa1!";
@@ -319,7 +323,9 @@ try {
                           ? "scripts/verify-recovery.mjs"
                           : doctorWorkspaceMode
                             ? "scripts/verify-doctor-workspace.mjs"
-                            : "scripts/verify-connected.mjs",
+                            : settingsWorkspaceMode
+                              ? "scripts/verify-settings-workspace.mjs"
+                              : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,
