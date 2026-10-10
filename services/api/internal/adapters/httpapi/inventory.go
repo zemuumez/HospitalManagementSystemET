@@ -16,14 +16,21 @@ func (s Server) inventory(w http.ResponseWriter, r *http.Request, a domain.Actor
 	if raw := r.URL.Query().Get("page"); raw != "" {
 		page, _ = strconv.Atoi(raw)
 	}
+	limit := 25
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if val, err := strconv.Atoi(raw); err == nil && val > 0 && val <= 500 {
+			limit = val
+		}
+	}
 	var out any
 	var e error
 	status := 200
 	switch {
 	case len(parts) == 1 && parts[0] == "categories" && r.Method == "GET":
 		var data []domain.InventoryCategory
-		data, e = s.Inventory.Categories(r.Context(), a, page)
-		out = map[string]any{"categories": data}
+		var total int
+		data, total, e = s.Inventory.Categories(r.Context(), a, page, limit, r.URL.Query().Get("search"))
+		out = map[string]any{"categories": data, "total": total, "page": page, "limit": limit}
 	case parts[0] == "categories" && ((len(parts) == 1 && r.Method == "POST") || (len(parts) == 2 && r.Method == "PATCH")):
 		var i domain.InventoryCategoryInput
 		if !decode(w, r, &i) {
@@ -42,8 +49,9 @@ func (s Server) inventory(w http.ResponseWriter, r *http.Request, a domain.Actor
 		out = map[string]bool{"deleted": true}
 	case len(parts) == 1 && parts[0] == "items" && r.Method == "GET":
 		var data []domain.InventoryItem
-		data, e = s.Inventory.Items(r.Context(), a, r.URL.Query().Get("search"), r.URL.Query().Get("lowStock") == "true", page)
-		out = map[string]any{"items": data}
+		var total int
+		data, total, e = s.Inventory.Items(r.Context(), a, r.URL.Query().Get("search"), r.URL.Query().Get("categoryId"), r.URL.Query().Get("lowStock") == "true", page, limit)
+		out = map[string]any{"items": data, "total": total, "page": page, "limit": limit}
 	case parts[0] == "items" && ((len(parts) == 1 && r.Method == "POST") || (len(parts) == 2 && r.Method == "PATCH")):
 		var i domain.InventoryItemInput
 		if !decode(w, r, &i) {
@@ -69,8 +77,9 @@ func (s Server) inventory(w http.ResponseWriter, r *http.Request, a domain.Actor
 		status = 201
 	case len(parts) == 1 && parts[0] == "movements" && r.Method == "GET":
 		var data []domain.InventoryMovement
-		data, e = s.Inventory.Movements(r.Context(), a, r.URL.Query().Get("itemId"), page)
-		out = map[string]any{"movements": data}
+		var total int
+		data, total, e = s.Inventory.Movements(r.Context(), a, r.URL.Query().Get("itemId"), r.URL.Query().Get("kind"), page, limit, r.URL.Query().Get("search"))
+		out = map[string]any{"movements": data, "total": total, "page": page, "limit": limit}
 	default:
 		return false
 	}

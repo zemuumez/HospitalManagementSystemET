@@ -96,6 +96,10 @@ export async function GET(request: Request) {
     if (!actor) return json({ error: "Administrator access required" }, 403);
     const url = new URL(request.url),
       page = Number(url.searchParams.get("page") || 1),
+      limit = Math.min(
+        500,
+        Math.max(1, Number(url.searchParams.get("limit") || 25)),
+      ),
       search = url.searchParams.get("search") || "";
     if (
       !Number.isInteger(page) ||
@@ -105,10 +109,10 @@ export async function GET(request: Request) {
     )
       return json({ error: "Invalid search" }, 422);
     const result = await pool.query(
-      `SELECT u.id,u.name,u.email,a.role,a.active FROM "user" u JOIN staff_access a ON a.user_id=u.id WHERE ($1='' OR strpos(lower(u.name||' '||u.email),lower($1))>0) ORDER BY u.name,u.id LIMIT 25 OFFSET $2`,
-      [search, (page - 1) * 25],
+      `SELECT u.id,u.name,u.email,a.role,a.active FROM "user" u JOIN staff_access a ON a.user_id=u.id WHERE ($1='' OR strpos(lower(u.name||' '||u.email),lower($1))>0) ORDER BY u.name,u.id LIMIT $3 OFFSET $2`,
+      [search, (page - 1) * limit, limit],
     );
-    return json({ users: result.rows, page, pageSize: 25 });
+    return json({ users: result.rows, page, pageSize: limit });
   } catch {
     return json({ error: "Unable to load hospital users" }, 503);
   }

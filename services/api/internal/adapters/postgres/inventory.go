@@ -12,21 +12,33 @@ func scanInventoryCategory(row pgx.Row) (domain.InventoryCategory, error) {
 	e := row.Scan(&c.ID, &c.Name, &c.Description, &c.Active, &c.Version)
 	return c, clinicalError(e)
 }
-func (s Store) InventoryCategories(ctx context.Context, page int) ([]domain.InventoryCategory, error) {
-	rows, e := s.DB.Query(ctx, `SELECT id,name,description,active,version FROM inventory_category ORDER BY name,id LIMIT 25 OFFSET $1`, (page-1)*25)
+func (s Store) InventoryCategories(ctx context.Context, page int, limit int, search string) ([]domain.InventoryCategory, int, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+	var total int
+	e := s.DB.QueryRow(ctx, `SELECT count(*) FROM inventory_category WHERE ($1='' OR strpos(lower(name),lower($1))>0)`, search).Scan(&total)
 	if e != nil {
-		return nil, e
+		return nil, 0, e
+	}
+	offset := (page - 1) * limit
+	rows, e := s.DB.Query(ctx, `SELECT id,name,description,active,version FROM inventory_category WHERE ($1='' OR strpos(lower(name),lower($1))>0) ORDER BY name,id LIMIT $2 OFFSET $3`, search, limit, offset)
+	if e != nil {
+		return nil, 0, e
 	}
 	defer rows.Close()
 	out := []domain.InventoryCategory{}
 	for rows.Next() {
 		c, e := scanInventoryCategory(rows)
 		if e != nil {
-			return nil, e
+			return nil, 0, e
 		}
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 func (s Store) SaveInventoryCategory(ctx context.Context, a domain.Actor, id string, i domain.InventoryCategoryInput) (domain.InventoryCategory, error) {
 	tx, e := s.DB.Begin(ctx)
@@ -90,21 +102,33 @@ func scanInventoryItem(row pgx.Row) (domain.InventoryItem, error) {
 	e := row.Scan(&i.ID, &i.CategoryID, &i.Name, &i.Unit, &i.Description, &i.ReorderMilli, &i.Active, &i.Version, &i.BalanceMilli)
 	return i, clinicalError(e)
 }
-func (s Store) InventoryItems(ctx context.Context, search string, low bool, page int) ([]domain.InventoryItem, error) {
-	rows, e := s.DB.Query(ctx, `SELECT `+inventoryItemFields+` FROM inventory_item WHERE ($1='' OR strpos(lower(name),lower($1))>0) AND (NOT $2 OR (active AND balance_milli<=reorder_milli)) ORDER BY name,id LIMIT 25 OFFSET $3`, search, low, (page-1)*25)
+func (s Store) InventoryItems(ctx context.Context, search string, categoryID string, low bool, page int, limit int) ([]domain.InventoryItem, int, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 25
+	}
+	if page <= 0 {
+		page = 1
+	}
+	var total int
+	e := s.DB.QueryRow(ctx, `SELECT count(*) FROM inventory_item WHERE ($1='' OR strpos(lower(name),lower($1))>0) AND ($2='' OR category_id=NULLIF($2,'')::uuid) AND (NOT $3 OR (active AND balance_milli<=reorder_milli))`, search, categoryID, low).Scan(&total)
 	if e != nil {
-		return nil, e
+		return nil, 0, e
+	}
+	offset := (page - 1) * limit
+	rows, e := s.DB.Query(ctx, `SELECT `+inventoryItemFields+` FROM inventory_item WHERE ($1='' OR strpos(lower(name),lower($1))>0) AND ($2='' OR category_id=NULLIF($2,'')::uuid) AND (NOT $3 OR (active AND balance_milli<=reorder_milli)) ORDER BY name,id LIMIT $4 OFFSET $5`, search, categoryID, low, limit, offset)
+	if e != nil {
+		return nil, 0, e
 	}
 	defer rows.Close()
 	out := []domain.InventoryItem{}
 	for rows.Next() {
 		i, e := scanInventoryItem(rows)
 		if e != nil {
-			return nil, e
+			return nil, 0, e
 		}
 		out = append(out, i)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 func (s Store) SaveInventoryItem(ctx context.Context, a domain.Actor, id string, i domain.InventoryItemInput) (domain.InventoryItem, error) {
 	tx, e := s.DB.Begin(ctx)
@@ -181,12 +205,11 @@ func (s Store) DeleteInventoryItem(ctx context.Context, a domain.Actor, id strin
 	return tx.Commit(ctx)
 }
 
-const inventoryMovementFields = `id,item_id,kind,quantity_milli,COALESCE(recipient_id,''),COALESCE(original_id::text,''),supplier,store_name,reference,cost_minor,restock,reason,delta_milli,COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=inventory_movement.id AND r.kind='return'), 0)::bigint,created_at`
-const inventoryMovementInsertFields = `id,item_id,kind,quantity_milli,COALESCE(recipient_id,''),COALESCE(original_id::text,''),supplier,store_name,reference,cost_minor,restock,reason,delta_milli,0::bigint,created_at`
+const inventoryMovementFields = `m.id,m.item_id,m.kind,m.quantity_milli,COALESCE(m.recipient_id,''),COALESCE(m.original_id::text,''),m.supplier,m.store_name,m.reference,m.cost_minor,m.restock,m.reason,m.delta_milli,COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=m.id AND r.kind='return'), 0)::bigint,m.attachment_url,m.issued_date,m.return_due_date,m.issued_by,m.department,COALESCE(it.name,''),m.created_at`
 
 func scanInventoryMovement(row pgx.Row) (domain.InventoryMovement, error) {
 	var m domain.InventoryMovement
-	e := row.Scan(&m.ID, &m.ItemID, &m.Kind, &m.QuantityMilli, &m.RecipientID, &m.OriginalID, &m.Supplier, &m.StoreName, &m.Reference, &m.CostMinor, &m.Restock, &m.Reason, &m.DeltaMilli, &m.ReturnedMilli, &m.CreatedAt)
+	e := row.Scan(&m.ID, &m.ItemID, &m.Kind, &m.QuantityMilli, &m.RecipientID, &m.OriginalID, &m.Supplier, &m.StoreName, &m.Reference, &m.CostMinor, &m.Restock, &m.Reason, &m.DeltaMilli, &m.ReturnedMilli, &m.AttachmentURL, &m.IssuedDate, &m.ReturnDueDate, &m.IssuedBy, &m.Department, &m.ItemName, &m.CreatedAt)
 	return m, clinicalError(e)
 }
 func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.InventoryMovementInput, key string) (domain.InventoryMovement, error) {
@@ -206,7 +229,7 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 		if hash != wanted {
 			return out, domain.ErrConflict
 		}
-		return scanInventoryMovement(tx.QueryRow(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement WHERE id=$1`, old))
+		return scanInventoryMovement(tx.QueryRow(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE m.id=$1`, old))
 	}
 	if !errors.Is(e, pgx.ErrNoRows) {
 		return out, e
@@ -255,7 +278,12 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	if item.BalanceMilli+delta < 0 || item.BalanceMilli+delta > 1000000000000 {
 		return out, domain.ErrStale
 	}
-	out, e = scanInventoryMovement(tx.QueryRow(ctx, `INSERT INTO inventory_movement(item_id,kind,quantity_milli,delta_milli,recipient_id,original_id,supplier,store_name,reference,cost_minor,restock,reason,actor_id,request_key,request_hash) VALUES($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,'')::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING `+inventoryMovementInsertFields, i.ItemID, i.Kind, i.QuantityMilli, delta, i.RecipientID, i.OriginalID, i.Supplier, i.StoreName, i.Reference, i.CostMinor, i.Restock, i.Reason, a.ID, key, wanted))
+	var outID string
+	e = tx.QueryRow(ctx, `INSERT INTO inventory_movement(item_id,kind,quantity_milli,delta_milli,recipient_id,original_id,supplier,store_name,reference,cost_minor,restock,reason,actor_id,request_key,request_hash,attachment_url,issued_date,return_due_date,issued_by,department) VALUES($1,$2,$3,$4,NULLIF($5,''),NULLIF($6,'')::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`, i.ItemID, i.Kind, i.QuantityMilli, delta, i.RecipientID, i.OriginalID, i.Supplier, i.StoreName, i.Reference, i.CostMinor, i.Restock, i.Reason, a.ID, key, wanted, i.AttachmentURL, i.IssuedDate, i.ReturnDueDate, i.IssuedBy, i.Department).Scan(&outID)
+	if e != nil {
+		return out, clinicalError(e)
+	}
+	out, e = scanInventoryMovement(tx.QueryRow(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE m.id=$1`, outID))
 	if e != nil {
 		return out, clinicalError(e)
 	}
@@ -267,35 +295,48 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	}
 	return out, tx.Commit(ctx)
 }
-func (s Store) InventoryMovements(ctx context.Context, a domain.Actor, id string, page int) ([]domain.InventoryMovement, error) {
+func (s Store) InventoryMovements(ctx context.Context, a domain.Actor, id string, kind string, page int, limit int, search string) ([]domain.InventoryMovement, int, error) {
 	if a.Role != "admin" {
-		return nil, domain.ErrForbidden
+		return nil, 0, domain.ErrForbidden
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 25
+	}
+	if page <= 0 {
+		page = 1
 	}
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
-		return nil, e
+		return nil, 0, e
 	}
 	defer tx.Rollback(ctx)
-	rows, e := tx.Query(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement WHERE ($1='' OR item_id=NULLIF($1,'')::uuid) ORDER BY created_at DESC,id LIMIT 25 OFFSET $2`, id, (page-1)*25)
+
+	var total int
+	e = tx.QueryRow(ctx, `SELECT count(*) FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE ($1='' OR m.item_id=NULLIF($1,'')::uuid) AND ($2='' OR m.kind=$2) AND ($3='' OR m.reason ILIKE '%'||$3||'%' OR m.reference ILIKE '%'||$3||'%' OR m.supplier ILIKE '%'||$3||'%' OR it.name ILIKE '%'||$3||'%' OR m.department ILIKE '%'||$3||'%' OR m.issued_by ILIKE '%'||$3||'%')`, id, kind, search).Scan(&total)
 	if e != nil {
-		return nil, e
+		return nil, 0, e
 	}
+
+	offset := (page - 1) * limit
+	rows, e := tx.Query(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE ($1='' OR m.item_id=NULLIF($1,'')::uuid) AND ($2='' OR m.kind=$2) AND ($3='' OR m.reason ILIKE '%'||$3||'%' OR m.reference ILIKE '%'||$3||'%' OR m.supplier ILIKE '%'||$3||'%' OR it.name ILIKE '%'||$3||'%' OR m.department ILIKE '%'||$3||'%' OR m.issued_by ILIKE '%'||$3||'%') ORDER BY m.created_at DESC, m.id LIMIT $4 OFFSET $5`, id, kind, search, limit, offset)
+	if e != nil {
+		return nil, 0, e
+	}
+	defer rows.Close()
+
 	out := []domain.InventoryMovement{}
 	for rows.Next() {
 		m, e := scanInventoryMovement(rows)
 		if e != nil {
-			rows.Close()
-			return nil, e
+			return nil, 0, e
 		}
 		out = append(out, m)
 	}
-	e = rows.Err()
-	rows.Close()
-	if e != nil {
-		return nil, e
+	if e = rows.Err(); e != nil {
+		return nil, 0, e
 	}
 	if e = pharmacyAudit(ctx, tx, a, "inventory.movements_viewed", id); e != nil {
-		return nil, e
+		return nil, 0, e
 	}
-	return out, tx.Commit(ctx)
+	return out, total, tx.Commit(ctx)
 }

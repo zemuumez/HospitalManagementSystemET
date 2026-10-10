@@ -54,17 +54,29 @@ type InventoryMovementInput struct {
 	CostMinor     int64  `json:"costMinor"`
 	Restock       bool   `json:"restock"`
 	Reason        string `json:"reason"`
+	AttachmentURL string `json:"attachmentUrl"`
+	IssuedDate    string `json:"issuedDate"`
+	ReturnDueDate string `json:"returnDueDate"`
+	IssuedBy      string `json:"issuedBy"`
+	Department    string `json:"department"`
 }
 type InventoryMovement struct {
 	InventoryMovementInput
 	ID            string    `json:"id"`
+	ItemName      string    `json:"itemName,omitempty"`
 	DeltaMilli    int64     `json:"deltaMilli"`
 	ReturnedMilli int64     `json:"returnedMilli"`
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
 func (i *InventoryMovementInput) Validate() error {
-	if !UUIDPattern.MatchString(i.ItemID) || i.QuantityMilli < 1 || i.QuantityMilli > 1000000000000 || !validText(&i.RecipientID, 0, 128) || !validText(&i.Supplier, 0, 200) || !validText(&i.StoreName, 0, 100) || !validText(&i.Reference, 0, 100) || !validText(&i.Reason, 1, 1000) || i.CostMinor < 0 || i.CostMinor > 1000000000000 {
+	if !UUIDPattern.MatchString(i.ItemID) || i.QuantityMilli < 1 || i.QuantityMilli > 1000000000000 ||
+		!validText(&i.RecipientID, 0, 128) || !validText(&i.Supplier, 0, 200) ||
+		!validText(&i.StoreName, 0, 100) || !validText(&i.Reference, 0, 100) ||
+		!validText(&i.Reason, 1, 1000) || i.CostMinor < 0 || i.CostMinor > 1000000000000 ||
+		!validText(&i.AttachmentURL, 0, 255) || !validText(&i.IssuedDate, 0, 30) ||
+		!validText(&i.ReturnDueDate, 0, 30) || !validText(&i.IssuedBy, 0, 128) ||
+		!validText(&i.Department, 0, 100) {
 		return ErrValidation
 	}
 	switch i.Kind {
@@ -87,7 +99,10 @@ func (i *InventoryMovementInput) Validate() error {
 	default:
 		return ErrValidation
 	}
-	if i.Kind != "receive" && (i.Supplier != "" || i.Reference != "" || i.CostMinor != 0) {
+	if i.Kind != "receive" && (i.Supplier != "" || i.Reference != "" || i.CostMinor != 0 || i.AttachmentURL != "") {
+		return ErrValidation
+	}
+	if i.Kind != "issue" && (i.IssuedDate != "" || i.ReturnDueDate != "" || i.IssuedBy != "" || i.Department != "") {
 		return ErrValidation
 	}
 	return nil

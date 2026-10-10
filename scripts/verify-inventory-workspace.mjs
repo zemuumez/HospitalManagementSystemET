@@ -48,11 +48,12 @@ async function main() {
   let adminEmail = process.env.ADMIN_EMAIL;
   let adminPassword = process.env.ADMIN_PASSWORD;
 
+  let adminId = "";
   const { hashPassword } = await import("better-auth/crypto");
 
   if (!adminEmail || !adminPassword) {
     const token = randomBytes(8).toString("hex");
-    const adminId = `adm-${token}`;
+    adminId = `adm-${token}`;
     adminEmail = `admin-${token}@ulshms.local`;
     adminPassword = `AdmPass!${randomBytes(12).toString("hex")}`;
     await db.query('INSERT INTO "user"(id, name, email) VALUES($1, $2, $3)', [
@@ -68,7 +69,77 @@ async function main() {
       "INSERT INTO staff_access(user_id, role, active) VALUES($1, 'admin', true)",
       [adminId],
     );
+  } else {
+    const existingAdmin = await db.query(
+      'SELECT id FROM "user" WHERE email = $1',
+      [adminEmail],
+    );
+    adminId = existingAdmin.rows[0]?.id || "";
   }
+
+  const insertMovementFixture = async ({
+    itemId,
+    kind,
+    quantityMilli,
+    deltaMilli,
+    recipientId = null,
+    originalId = null,
+    supplier = "",
+    storeName = "Main Hospital Store",
+    reference = "",
+    costMinor = 0,
+    restock = false,
+    reason = "Verification fixture",
+    issuedDate = "",
+    department = "",
+    issuedBy = "",
+    returnDueDate = "",
+    attachmentUrl = "",
+    createdAtClause = "NOW()",
+  }) => {
+    const reqKey = randomBytes(16).toString("hex");
+    const reqHash = randomBytes(16).toString("hex");
+    const ref =
+      reference ||
+      (kind === "receive" ? `REF-${randomBytes(6).toString("hex")}` : "");
+    const supp = supplier || (kind === "receive" ? "Standard Supplier" : "");
+
+    return db.query(
+      `INSERT INTO inventory_movement(
+        item_id, kind, quantity_milli, delta_milli, recipient_id, original_id,
+        supplier, store_name, reference, cost_minor, restock, reason,
+        actor_id, request_key, request_hash, issued_date, department, issued_by,
+        return_due_date, attachment_url, created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, $17, $18,
+        $19, $20, ${createdAtClause}
+      ) RETURNING id`,
+      [
+        itemId,
+        kind,
+        quantityMilli,
+        deltaMilli,
+        recipientId,
+        originalId,
+        supp,
+        storeName,
+        ref,
+        costMinor,
+        restock,
+        reason,
+        adminId,
+        reqKey,
+        reqHash,
+        issuedDate || "",
+        department || "",
+        issuedBy || "",
+        returnDueDate || "",
+        attachmentUrl || "",
+      ],
+    );
+  };
 
   // Provision doctor for unauthorized rejection testing
   const docToken = randomBytes(8).toString("hex");
@@ -428,7 +499,11 @@ async function main() {
       .click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
 
-    // Select the newly created item
+    // Select the category and newly created item
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(categoryId);
     await page
       .getByRole("dialog")
       .getByLabel("Item", { exact: true })
@@ -552,7 +627,11 @@ async function main() {
     await page.getByRole("button", { name: "Issue Item", exact: true }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
 
-    // Select Item and verify available badge
+    // Select Category and Item, verify available badge
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(categoryId);
     await page
       .getByRole("dialog")
       .getByLabel("Item", { exact: true })
@@ -640,6 +719,10 @@ async function main() {
     await page.getByRole("button", { name: "Issue Item", exact: true }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
 
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(categoryId);
     await page
       .getByRole("dialog")
       .getByLabel("Item", { exact: true })
@@ -921,6 +1004,10 @@ async function main() {
     // Issue 20 units (balance drops to 80 units)
     await page.getByRole("button", { name: "Issue Item", exact: true }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(categoryId);
     await page
       .getByRole("dialog")
       .getByLabel("Item", { exact: true })
@@ -1335,51 +1422,1031 @@ async function main() {
     }
 
     // -----------------------------------------------------------------------
-    // Journey 19: Theme & Amharic Localization Parity
+    // Journey 19: Theme & Amharic Localization Parity (Finding I5 Regression)
     // -----------------------------------------------------------------------
-    console.log("\n[Journey 19] Theme & Amharic Localization Parity...");
-    // Dark Theme verification
+    console.log(
+      "\n[Journey 19] Theme & Amharic Localization Parity (Finding I5)...",
+    );
     await page.goto(`${base}/modules/items`);
     await page.waitForSelector(".legacy-workspace[data-ready='true']");
-    await page.evaluate(() => document.documentElement.classList.add("dark"));
+
+    // Real Shell Dark Theme Toggle verification:
+    const themeBtn = page.locator(
+      'button[aria-label="Use dark theme"], button[aria-label="Use light theme"]',
+    );
+    await themeBtn.waitFor({ state: "visible" });
+    const currentAria = await themeBtn.getAttribute("aria-label");
+    if (currentAria === "Use dark theme") {
+      await themeBtn.click();
+    }
+    // Assert .legacy-shell enters .legacy-dark
+    await page.waitForSelector(".legacy-shell.legacy-dark", { timeout: 10000 });
+    const storedTheme = await page.evaluate(() =>
+      localStorage.getItem("hms-theme"),
+    );
+    assert.equal(
+      storedTheme,
+      "dark",
+      "localStorage hms-theme must be set to 'dark'",
+    );
+
+    // Verify computed contrast/styling on workspace and cards
+    const cardBg = await page.$eval(
+      ".inventory-card-bg",
+      (el) => window.getComputedStyle(el).backgroundColor,
+    );
+    console.log("Verified Dark mode computed card background:", cardBg);
+    assert(
+      cardBg.includes("18, 21, 31") ||
+        cardBg.includes("26, 29, 45") ||
+        cardBg.includes("17, 24, 39"),
+      `Expected dark card background (#12151f), got ${cardBg}`,
+    );
 
     await page.screenshot({
       path: resolve(screenshotsDir, "12_inventory_dark_mode.png"),
     });
+    console.log(
+      "✔ Captured authentic dark mode screenshot: 12_inventory_dark_mode.png",
+    );
 
-    // Amharic Localization verification
-    await page.evaluate(() => {
-      localStorage.setItem("hms-language", "am");
-      document.documentElement.classList.remove("dark");
+    // Toggle back to light mode for Amharic check
+    await themeBtn.click();
+    await page.waitForSelector(".legacy-shell:not(.legacy-dark)", {
+      timeout: 10000,
     });
+
+    // Amharic Localization verification:
+    await page.evaluate(() => localStorage.setItem("hms-language", "am"));
     await page.reload();
     await page.waitForSelector(".legacy-workspace[data-ready='true']");
 
-    // Verify Amharic translation in tab navigation and live indicator
-    await page.getByText("ክምችት ተጭኗል", { exact: false }).waitFor({
-      timeout: 10000,
-    });
+    // Verify live indicator and tab labels
+    await page
+      .getByText("ክምችት ተጭኗል", { exact: false })
+      .waitFor({ timeout: 10000 });
     assert(
       (await page.getByText("ዕቃዎች").count()) >= 1,
-      "Amharic 'ዕቃዎች' (Items) tab label must appear",
+      "Amharic 'ዕቃዎች' (Items) must appear",
     );
     assert(
       (await page.getByText("የዕቃ ምድቦች").count()) >= 1,
-      "Amharic 'የዕቃ ምድቦች' (Item Categories) tab label must appear",
+      "Amharic 'የዕቃ ምድቦች' (Item Categories) must appear",
+    );
+    assert(
+      (await page.getByText("የዕቃ ክምችት").count()) >= 1,
+      "Amharic 'የዕቃ ክምችት' (Item Stocks) must appear",
+    );
+    assert(
+      (await page.getByText("የተሰጡ ዕቃዎች").count()) >= 1,
+      "Amharic 'የተሰጡ ዕቃዎች' (Issued Items) must appear",
     );
 
+    // Verify action buttons
+    assert(
+      (await page.getByRole("button", { name: "አዲስ ዕቃ" }).count()) >= 1,
+      "Amharic 'አዲስ ዕቃ' button must appear",
+    );
+    assert(
+      (await page.getByRole("button", { name: "ክምችት አስምር" }).count()) >= 1,
+      "Amharic 'ክምችት አስምር' button must appear",
+    );
+
+    // Verify table headers
+    assert(
+      (await page.getByText("የዕቃ ስም").count()) >= 1,
+      "Header 'የዕቃ ስም' must appear",
+    );
+    assert(
+      (await page.getByText("ምድብ").count()) >= 1,
+      "Header 'ምድብ' must appear",
+    );
+    assert(
+      (await page.getByText("የድጋሚ ማዘዣ መጠን").count()) >= 1,
+      "Header 'የድጋሚ ማዘዣ መጠን' must appear",
+    );
+    assert(
+      (await page.getByText("በክምችት ላይ").count()) >= 1,
+      "Header 'በክምችት ላይ' must appear",
+    );
+
+    // Verify category filter option & search placeholder
+    assert(
+      (await page.getByText("ሁሉንም ምድቦች").count()) >= 1,
+      "'ሁሉንም ምድቦች' must appear",
+    );
+    const searchPlaceholder = await page
+      .locator('input[aria-label="የዕቃ ፍለጋ"]')
+      .getAttribute("placeholder");
+    assert(
+      searchPlaceholder?.includes("ዕቃዎችን ይፈልጉ"),
+      "Search placeholder must be in Amharic",
+    );
+
+    // Open "New Item" modal in Amharic and verify form fields
+    await page.getByRole("button", { name: "አዲስ ዕቃ" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    assert(
+      (await page.getByRole("dialog").getByText("አዲስ የዕቃ ምዝገባ").count()) >= 1,
+      "Modal title 'አዲስ የዕቃ ምዝገባ' must appear",
+    );
+    assert(
+      (await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "ዕቃ መዝግብ" })
+        .count()) >= 1,
+      "Modal button 'ዕቃ መዝግብ' must appear",
+    );
+    await page.getByRole("dialog").getByRole("button", { name: "ሰርዝ" }).click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // Check "Item Stocks" tab
+    await page.getByRole("button", { name: "የዕቃ ክምችት" }).click();
+    await page.waitForTimeout(500);
+    assert(
+      (await page.getByRole("button", { name: "አዲስ ክምችት ተቀበል" }).count()) >= 1,
+      "'አዲስ ክምችት ተቀበል' must appear",
+    );
+
+    // Check "Issued Items" tab
+    await page.getByRole("button", { name: "የተሰጡ ዕቃዎች" }).click();
+    await page.waitForTimeout(500);
+    assert(
+      (await page.getByRole("button", { name: "ዕቃ ስጥ" }).count()) >= 1,
+      "'ዕቃ ስጥ' must appear",
+    );
+
+    // Return to Items tab for complete Amharic screenshot
+    await page.locator('button[data-tab="items"]').click();
+    await page.waitForTimeout(500);
     await page.screenshot({
       path: resolve(screenshotsDir, "13_inventory_amharic_localization.png"),
     });
+    console.log(
+      "✔ Captured authentic Amharic screenshot: 13_inventory_amharic_localization.png",
+    );
 
     // Restore English
     await page.evaluate(() => localStorage.setItem("hms-language", "en"));
+    await page.reload();
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
     console.log(
-      "✔ Journey 19 Passed: Dark mode and Amharic localization verified with clean contrast.",
+      "✔ Journey 19 Passed: Dark mode and Amharic localization verified with real controls.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 20: Finding I1 Regression — Pagination & Silent Cutoff Prevention (>25 Records)
+    // -----------------------------------------------------------------------
+    console.log(
+      "\n[Journey 20] Finding I1: Pagination & Silent Cutoff Prevention (>25 Records)...",
+    );
+    const bulkSuffix = randomBytes(4).toString("hex");
+
+    // 1. Seed 28 categories directly in PostgreSQL
+    const bulkCategoryIds = [];
+    for (let i = 1; i <= 28; i++) {
+      const cName = `Bulk Cat ${bulkSuffix} ${i.toString().padStart(2, "0")}`;
+      const cRes = await db.query(
+        "INSERT INTO inventory_category(name, description) VALUES($1, $2) RETURNING id",
+        [cName, `Bulk category ${i}`],
+      );
+      bulkCategoryIds.push(cRes.rows[0].id);
+    }
+
+    // 2. Seed 28 items in PostgreSQL (Item 27 is a special overflow item)
+    const bulkItemIds = [];
+    let overflowItemId = "";
+    const overflowItemName = `Special Overflow Forceps ${bulkSuffix}`;
+    for (let i = 1; i <= 28; i++) {
+      const iName =
+        i === 27
+          ? overflowItemName
+          : `Bulk Item ${bulkSuffix} ${i.toString().padStart(2, "0")}`;
+      const catId = bulkCategoryIds[(i - 1) % bulkCategoryIds.length];
+      const initialBal = i === 1 ? 20000 : 0;
+      await db.query("BEGIN");
+      const iRes = await db.query(
+        "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli) VALUES($1, $2, 'Piece', 5000, $3) RETURNING id",
+        [catId, iName, initialBal],
+      );
+      const newId = iRes.rows[0].id;
+      bulkItemIds.push(newId);
+      if (i === 27) overflowItemId = newId;
+
+      if (initialBal > 0) {
+        await insertMovementFixture({
+          itemId: newId,
+          kind: "receive",
+          quantityMilli: initialBal,
+          deltaMilli: initialBal,
+          reference: `INIT-${bulkSuffix}-${i}`,
+          supplier: "Bulk Initial Supplier",
+          reason: "Initial bulk stock",
+          createdAtClause: "NOW() - interval '70 days'",
+        });
+      }
+      await db.query("COMMIT");
+    }
+
+    // 3. Seed an Old Outstanding Issue on Item 1 from 60 days ago
+    await db.query("BEGIN");
+    const oldIssueRes = await insertMovementFixture({
+      itemId: bulkItemIds[0],
+      kind: "issue",
+      quantityMilli: 5000,
+      deltaMilli: -5000,
+      recipientId: staffId,
+      reason: "Old Outstanding Issue 60 Days Ago",
+      issuedDate: "2026-08-10",
+      createdAtClause: "NOW() - interval '60 days'",
+    });
+    const oldIssueId = oldIssueRes.rows[0].id;
+    await db.query(
+      "UPDATE inventory_item SET balance_milli = 15000 WHERE id = $1",
+      [bulkItemIds[0]],
+    );
+    await db.query("COMMIT");
+
+    // 4. Seed 27 newer movements (receive) so movements total > 28
+    for (let i = 1; i <= 27; i++) {
+      const targetItemId = bulkItemIds[i % bulkItemIds.length];
+      await db.query("BEGIN");
+      await insertMovementFixture({
+        itemId: targetItemId,
+        kind: "receive",
+        quantityMilli: 10000,
+        deltaMilli: 10000,
+        reference: `BULK-REC-${bulkSuffix}-${i}`,
+        supplier: "Bulk Supplier",
+        reason: "Routine Restock",
+        createdAtClause: `NOW() - interval '${28 - i} hours'`,
+      });
+      await db.query(
+        "UPDATE inventory_item SET balance_milli = balance_milli + 10000 WHERE id = $1",
+        [targetItemId],
+      );
+      await db.query("COMMIT");
+    }
+    console.log(
+      `Seeded 28 categories, 28 items, and movements including older issue ${oldIssueId}`,
+    );
+
+    // 5. Test Categories Pagination
+    await page.goto(`${base}/modules/item-categories`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page
+      .getByText("Page 1 of 2", { exact: false })
+      .waitFor({ timeout: 10000 });
+    await page.getByRole("button", { name: "Next" }).click();
+    await page
+      .getByText("Page 2 of 2", { exact: false })
+      .waitFor({ timeout: 10000 });
+    await page.getByRole("button", { name: "Previous" }).click();
+    await page
+      .getByText("Page 1 of 2", { exact: false })
+      .waitFor({ timeout: 10000 });
+
+    // 6. Test Items Pagination & Server-Backed Search for Overflow Item
+    await page.goto(`${base}/modules/items`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page
+      .getByText("Page 1 of 2", { exact: false })
+      .waitFor({ timeout: 10000 });
+
+    const searchInput = page.locator('input[aria-label="Search Items"]');
+    await searchInput.fill(overflowItemName);
+    await page
+      .getByRole("cell", { name: overflowItemName, exact: true })
+      .waitFor({ timeout: 10000 });
+    console.log("✔ Server-backed search found overflow item beyond page 1");
+    await searchInput.fill("");
+
+    // 7. Test Dialog Dropdowns (Large Catalog Retrieval with limit=500)
+    await page.goto(`${base}/modules/item-stocks`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page.getByRole("button", { name: "Receive New Stock" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    const overflowCatId = bulkCategoryIds[26 % bulkCategoryIds.length];
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(overflowCatId);
+    const receiveItemOptions = await page
+      .getByRole("dialog")
+      .getByLabel("Item", { exact: true })
+      .locator("option")
+      .allTextContents();
+    assert(
+      receiveItemOptions.some((opt) => opt.includes(overflowItemName)),
+      `Overflow item ${overflowItemName} must be available in Receive modal dropdown`,
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // 8. Test Discoverability of Old Outstanding Issue & Return Workflow
+    await page.goto(`${base}/modules/issued-items`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    const issueSearchInput = page.locator(
+      'input[aria-label="Search Movements"]',
+    );
+    await issueSearchInput.fill("Old Outstanding Issue");
+    await page.waitForSelector(`tr:has-text("Old Outstanding Issue")`, {
+      timeout: 10000,
+    });
+    const oldIssueRow = page.locator("tr", {
+      hasText: "Old Outstanding Issue",
+    });
+    await oldIssueRow.getByRole("button", { name: "Return Item" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page
+      .getByRole("dialog")
+      .getByLabel("Quantity to Return", { exact: true })
+      .fill("5");
+    const returnSubmitRes = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.request().method() === "POST",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm Return" })
+      .click();
+    const retSaved = await returnSubmitRes;
+    assert.equal(
+      retSaved.status(),
+      201,
+      `Return old issue failed: ${await retSaved.text()}`,
+    );
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    const balRestored = await db.query(
+      "SELECT balance_milli FROM inventory_item WHERE id=$1",
+      [bulkItemIds[0]],
+    );
+    assert.equal(
+      Number(balRestored.rows[0].balance_milli),
+      20000,
+      "Balance must be restored to 20 units",
+    );
+    console.log(
+      "✔ Journey 20 Passed: Pagination, server-backed search, large catalogs, and older issue return verified.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 21: Finding I2 Regression — Empty-Category & Stale Selection Protection
+    // -----------------------------------------------------------------------
+    console.log(
+      "\n[Journey 21] Finding I2: Empty-Category & Stale Selection Protection...",
+    );
+    const catSuffix = randomBytes(4).toString("hex");
+    const catARes = await db.query(
+      "INSERT INTO inventory_category(name, description) VALUES($1, 'Has items') RETURNING id",
+      [`Category Alpha ${catSuffix}`],
+    );
+    const catAId = catARes.rows[0].id;
+    await db.query("BEGIN");
+    const itemARes = await db.query(
+      "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli) VALUES($1, $2, 'Piece', 1000, 50000) RETURNING id",
+      [catAId, `Alpha Stethoscope ${catSuffix}`],
+    );
+    const itemAId = itemARes.rows[0].id;
+    await insertMovementFixture({
+      itemId: itemAId,
+      kind: "receive",
+      quantityMilli: 50000,
+      deltaMilli: 50000,
+      reference: `ALPHA-REC-${catSuffix}`,
+      supplier: "Alpha Supplier",
+      reason: "Initial alpha stock",
+    });
+    await db.query("COMMIT");
+
+    const catBRes = await db.query(
+      "INSERT INTO inventory_category(name, description) VALUES($1, 'Empty category') RETURNING id",
+      [`Category Beta Empty ${catSuffix}`],
+    );
+    const catBId = catBRes.rows[0].id;
+
+    // 1. Receive Stock Modal
+    await page.goto(`${base}/modules/item-stocks`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page.getByRole("button", { name: "Receive New Stock" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catBId);
+    assert(
+      await page
+        .getByRole("dialog")
+        .getByLabel("Item", { exact: true })
+        .isDisabled(),
+      "Item selector must be disabled for empty category",
+    );
+    assert(
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Confirm Receive" })
+        .isDisabled(),
+      "Confirm Receive must be disabled for empty category",
+    );
+
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catAId);
+    assert(
+      !(await page
+        .getByRole("dialog")
+        .getByLabel("Item", { exact: true })
+        .isDisabled()),
+      "Item selector must be enabled for Category Alpha",
+    );
+    await page
+      .getByRole("dialog")
+      .getByLabel("Item", { exact: true })
+      .selectOption(itemAId);
+
+    // Switch Category back to empty Category Beta: must CLEAR selection and disable
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catBId);
+    const itemBVal = await page
+      .getByRole("dialog")
+      .getByLabel("Item", { exact: true })
+      .inputValue();
+    assert.equal(
+      itemBVal,
+      "",
+      "Selected item must be cleared when switching to empty category",
+    );
+    assert(
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Confirm Receive" })
+        .isDisabled(),
+      "Submit button must be disabled",
+    );
+
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // 2. Issue Item Modal
+    await page.goto(`${base}/modules/issued-items`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page.getByRole("button", { name: "Issue Item" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catBId);
+    assert(
+      await page
+        .getByRole("dialog")
+        .getByLabel("Item", { exact: true })
+        .isDisabled(),
+      "Item selector must be disabled in Issue modal for empty category",
+    );
+    assert(
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Confirm Issue" })
+        .isDisabled(),
+      "Confirm Issue must be disabled for empty category",
+    );
+
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catAId);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Item", { exact: true })
+      .selectOption(itemAId);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catBId);
+    const issueItemBVal = await page
+      .getByRole("dialog")
+      .getByLabel("Item", { exact: true })
+      .inputValue();
+    assert.equal(
+      issueItemBVal,
+      "",
+      "Selected item must be cleared in Issue modal when switching to empty category",
+    );
+    assert(
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Confirm Issue" })
+        .isDisabled(),
+      "Confirm Issue must be disabled",
+    );
+
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // Assert Database Integrity: Item A balance remains strictly unchanged (50,000 milli)
+    const checkItemA = await db.query(
+      "SELECT balance_milli FROM inventory_item WHERE id=$1",
+      [itemAId],
+    );
+    assert.equal(
+      Number(checkItemA.rows[0].balance_milli),
+      50000,
+      "Item A balance must remain 50,000 milli; no unintended movements",
+    );
+    console.log(
+      "✔ Journey 21 Passed: Empty category disables submission and clears child selection; no unintended stock mutations.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 22: Finding I3 Regression — Source Fields, Attachments & Void Workflows
+    // -----------------------------------------------------------------------
+    console.log(
+      "\n[Journey 22] Finding I3: Source Fields, Attachments & Void Workflows...",
+    );
+    const i3Suffix = randomBytes(4).toString("hex");
+    const testAttachUrl =
+      "https://files.ulshms.local/receipts/batch-invoice-001.pdf";
+
+    // 1. Stock Receipt with Attachment & Extended Metadata
+    await page.goto(`${base}/modules/item-stocks`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page.getByRole("button", { name: "Receive New Stock" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catAId);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Item", { exact: true })
+      .selectOption(itemAId);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Quantity", { exact: true })
+      .fill("20");
+    await page
+      .getByRole("dialog")
+      .getByLabel("Unit Cost", { exact: true })
+      .fill("45.00");
+    await page
+      .getByRole("dialog")
+      .getByLabel("Supplier", { exact: true })
+      .fill("Apex Med Supplies");
+    await page
+      .getByRole("dialog")
+      .getByLabel("Store Name", { exact: true })
+      .fill("Emergency Sub-Store");
+    const recRef = `REC-ATTACH-${i3Suffix}`;
+    await page
+      .getByRole("dialog")
+      .getByLabel("Reference", { exact: true })
+      .fill(recRef);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Attachment URL", { exact: true })
+      .fill(testAttachUrl);
+    await page
+      .getByRole("dialog")
+      .locator('textarea[aria-label="Reason"]')
+      .fill("Urgent pediatric batch");
+
+    const receiveI3Res = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.request().method() === "POST",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm Receive" })
+      .click();
+    assert.equal((await receiveI3Res).status(), 201);
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // Verify DB persisted extended fields
+    const recDb = await db.query(
+      "SELECT attachment_url, supplier, store_name, reference FROM inventory_movement WHERE reference=$1",
+      [recRef],
+    );
+    assert.equal(
+      recDb.rows[0].attachment_url,
+      testAttachUrl,
+      "Attachment URL must be stored in database",
+    );
+    assert.equal(recDb.rows[0].supplier, "Apex Med Supplies");
+    assert.equal(recDb.rows[0].store_name, "Emergency Sub-Store");
+
+    // Verify UI displays details modal with attachment link
+    const recRow = page.locator("tr", { hasText: recRef });
+    await recRow.locator('button[aria-label="Stock Details"]').click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    const viewAttachLink = page
+      .getByRole("dialog")
+      .getByRole("link", { name: "View Receipt" });
+    assert.equal(
+      await viewAttachLink.getAttribute("href"),
+      testAttachUrl,
+      "View Receipt link must match attachment URL",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Close" })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // 2. Issue Item with Department, Business Dates, Issued By, and Staff Name Resolution
+    await page.goto(`${base}/modules/issued-items`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    await page.getByRole("button", { name: "Issue Item" }).click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    await page
+      .getByRole("dialog")
+      .getByLabel("Category", { exact: true })
+      .selectOption(catAId);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Item", { exact: true })
+      .selectOption(itemAId);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Department", { exact: true })
+      .selectOption("Pediatrics Ward");
+    await page
+      .getByRole("dialog")
+      .getByLabel("Quantity to Issue", { exact: true })
+      .fill("10");
+    await page
+      .getByRole("dialog")
+      .getByLabel("Recipient", { exact: true })
+      .selectOption(staffId);
+    await page
+      .getByRole("dialog")
+      .getByLabel("Issued Date", { exact: true })
+      .fill("2026-10-09");
+    await page
+      .getByRole("dialog")
+      .getByLabel("Return Due Date", { exact: true })
+      .fill("2026-10-25");
+    const issueReason = `Clinical ward loan ${i3Suffix}`;
+    await page
+      .getByRole("dialog")
+      .locator('textarea[aria-label="Reason"]')
+      .fill(issueReason);
+
+    const issueI3Res = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.request().method() === "POST",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm Issue" })
+      .click();
+    assert.equal((await issueI3Res).status(), 201);
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // Verify DB stored department, issued_date, return_due_date, issued_by
+    const issueDb = await db.query(
+      "SELECT department, issued_date, return_due_date, issued_by, recipient_id FROM inventory_movement WHERE reason=$1",
+      [issueReason],
+    );
+    assert.equal(issueDb.rows[0].department, "Pediatrics Ward");
+    assert.equal(issueDb.rows[0].issued_date, "2026-10-09");
+    assert.equal(issueDb.rows[0].return_due_date, "2026-10-25");
+    assert.equal(issueDb.rows[0].recipient_id, staffId);
+
+    // Verify UI displays resolved staff display name ("Nurse Genet Lemma"), not raw staff ID
+    const issueRow = page.locator("tr", { hasText: issueReason });
+    await issueRow.waitFor({ timeout: 10000 });
+    assert(
+      (await issueRow.getByText("Nurse Genet Lemma").count()) >= 1,
+      "Issued item row must display resolved staff name 'Nurse Genet Lemma'",
+    );
+
+    // Open Details Modal and verify extended business dates & department
+    await issueRow.locator('button[aria-label="View issue record"]').click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    assert(
+      (await page.getByRole("dialog").getByText("Nurse Genet Lemma").count()) >=
+        1,
+      "Details modal must show recipient display name",
+    );
+    assert(
+      (await page.getByRole("dialog").getByText("Pediatrics Ward").count()) >=
+        1,
+      "Details modal must show department",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Close" })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // 3. Void Workflows:
+    // 3a. Void Receipt Rejection when Stock Consumed:
+    await db.query("BEGIN");
+    const voidConsumeItemRes = await db.query(
+      "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli) VALUES($1, $2, 'Piece', 1000, 2000) RETURNING id",
+      [catAId, `Void Consume Test ${i3Suffix}`],
+    );
+    const voidConsumeItemId = voidConsumeItemRes.rows[0].id;
+    await insertMovementFixture({
+      itemId: voidConsumeItemId,
+      kind: "receive",
+      quantityMilli: 10000,
+      deltaMilli: 10000,
+      reference: `VOID-FAIL-${i3Suffix}`,
+      supplier: "Supplier",
+      reason: "Initial fixture receipt",
+    });
+    await insertMovementFixture({
+      itemId: voidConsumeItemId,
+      kind: "issue",
+      quantityMilli: 8000,
+      deltaMilli: -8000,
+      recipientId: staffId,
+      reason: "Issued 8 units",
+    });
+    await db.query("COMMIT");
+
+    await page.goto(`${base}/modules/item-stocks`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    const voidFailRow = page.locator("tr", {
+      hasText: `VOID-FAIL-${i3Suffix}`,
+    });
+    await voidFailRow.locator('button[aria-label="Void Receipt"]').click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page
+      .getByRole("dialog")
+      .locator('textarea[aria-label="Void Reason"]')
+      .fill("Erroneous receipt");
+    const voidFailRes = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.request().method() === "POST",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm Void" })
+      .click();
+    assert.equal(
+      (await voidFailRes).status(),
+      409,
+      "Void receipt must be rejected with 409 when remaining balance < receipt quantity",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("alert")
+      .waitFor({ state: "visible" });
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Cancel" })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // 3b. Successful Void Receipt on Unconsumed Batch:
+    await db.query("BEGIN");
+    const freshVoidItemRes = await db.query(
+      "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli) VALUES($1, $2, 'Piece', 1000, 15000) RETURNING id",
+      [catAId, `Fresh Void Test ${i3Suffix}`],
+    );
+    const freshVoidItemId = freshVoidItemRes.rows[0].id;
+    await insertMovementFixture({
+      itemId: freshVoidItemId,
+      kind: "receive",
+      quantityMilli: 15000,
+      deltaMilli: 15000,
+      reference: `VOID-SUCCEED-${i3Suffix}`,
+      supplier: "Supplier",
+      reason: "Initial fixture receipt",
+    });
+    await db.query("COMMIT");
+
+    await page.reload();
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    const voidSucceedRow = page.locator("tr", {
+      hasText: `VOID-SUCCEED-${i3Suffix}`,
+    });
+    await voidSucceedRow.locator('button[aria-label="Void Receipt"]').click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page
+      .getByRole("dialog")
+      .locator('textarea[aria-label="Void Reason"]')
+      .fill("Vendor shipment cancelled");
+    const voidSucceedRes = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.request().method() === "POST",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm Void" })
+      .click();
+    assert.equal(
+      (await voidSucceedRes).status(),
+      201,
+      "Void receipt succeeds for unconsumed stock",
+    );
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    const balAfterVoid = await db.query(
+      "SELECT balance_milli FROM inventory_item WHERE id=$1",
+      [freshVoidItemId],
+    );
+    assert.equal(
+      Number(balAfterVoid.rows[0].balance_milli),
+      0,
+      "Balance must be reduced to 0 by void writeoff",
+    );
+    const writeoffQuery = await db.query(
+      "SELECT id, kind, delta_milli FROM inventory_movement WHERE item_id=$1 AND kind='writeoff'",
+      [freshVoidItemId],
+    );
+    assert.equal(
+      writeoffQuery.rowCount,
+      1,
+      "Audited writeoff movement recorded",
+    );
+    assert.equal(
+      Number(writeoffQuery.rows[0].delta_milli),
+      -15000,
+      "Writeoff delta is -15,000 milli",
+    );
+
+    // 3c. Successful Void Issue:
+    await page.goto(`${base}/modules/issued-items`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    const activeIssueRow = page.locator("tr", { hasText: issueReason });
+    await activeIssueRow.locator('button[aria-label="Void Issue"]').click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await page
+      .getByRole("dialog")
+      .locator('textarea[aria-label="Void Reason"]')
+      .fill("Order cancelled by head nurse");
+    const voidIssueRes = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.request().method() === "POST",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm Void" })
+      .click();
+    assert.equal((await voidIssueRes).status(), 201, "Void issue succeeds");
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    const balItemAfterIssueVoid = await db.query(
+      "SELECT balance_milli FROM inventory_item WHERE id=$1",
+      [itemAId],
+    );
+    assert.equal(
+      Number(balItemAfterIssueVoid.rows[0].balance_milli),
+      70000,
+      "Balance must be 70,000 milli after void issue reversal",
+    );
+    console.log(
+      "✔ Journey 22 Passed: Source fields, receipt attachments, staff name resolution, and void/reversal workflows verified.",
+    );
+
+    // -----------------------------------------------------------------------
+    // Journey 23: Finding I4 Regression — Exact Fractional & Zero Reorder Thresholds
+    // -----------------------------------------------------------------------
+    console.log(
+      "\n[Journey 23] Finding I4: Fractional & Zero Reorder Thresholds...",
+    );
+    const i4Suffix = randomBytes(4).toString("hex");
+    const fracItemName = `Fractional Scalpel ${i4Suffix}`;
+    const zeroItemName = `Zero Threshold Syringe ${i4Suffix}`;
+
+    await db.query(
+      "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli, description) VALUES($1, $2, 'Piece', 1500, 0, 'Original fractional description')",
+      [catAId, fracItemName],
+    );
+    await db.query(
+      "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli, description) VALUES($1, $2, 'Piece', 0, 0, 'Original zero description')",
+      [catAId, zeroItemName],
+    );
+
+    await page.goto(`${base}/modules/items`);
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+
+    const thresholdSearchInput = page.locator(
+      'input[aria-label="Search Items"]',
+    );
+    await thresholdSearchInput.fill(fracItemName);
+
+    // 1. Edit Fractional Item: only change description
+    const fracRow = page.locator("tr", { hasText: fracItemName });
+    await fracRow.locator('button[aria-label="Edit Item"]').click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    const fracReorderVal = await page
+      .getByRole("dialog")
+      .getByLabel("Reorder Level", { exact: true })
+      .inputValue();
+    assert.equal(
+      fracReorderVal,
+      "1.5",
+      "Reorder level input must display exact 1.5 without integer rounding",
+    );
+
+    const updatedFracDesc =
+      "Updated description for fractional item without threshold rounding";
+    await page
+      .getByRole("dialog")
+      .locator('textarea[aria-label="Description"]')
+      .fill(updatedFracDesc);
+    const fracEditRes = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/items") &&
+        r.request().method() === "PATCH",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /Update Item|Save Item/ })
+      .click();
+    assert.equal((await fracEditRes).status(), 200);
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    const fracDb = await db.query(
+      "SELECT reorder_milli, description FROM inventory_item WHERE name=$1",
+      [fracItemName],
+    );
+    assert.equal(
+      Number(fracDb.rows[0].reorder_milli),
+      1500,
+      "Reorder level in DB must remain exactly 1500 milli (1.5 units)",
+    );
+    assert.equal(fracDb.rows[0].description, updatedFracDesc);
+
+    // 2. Edit Zero Threshold Item: only change description
+    await thresholdSearchInput.fill(zeroItemName);
+    const zeroRow = page.locator("tr", { hasText: zeroItemName });
+    await zeroRow.locator('button[aria-label="Edit Item"]').click();
+    await page.getByRole("dialog").waitFor({ state: "visible" });
+
+    const zeroReorderVal = await page
+      .getByRole("dialog")
+      .getByLabel("Reorder Level", { exact: true })
+      .inputValue();
+    assert.equal(
+      zeroReorderVal,
+      "0",
+      "Reorder level input must display exact 0",
+    );
+
+    const updatedZeroDesc =
+      "Updated description for zero threshold item without rejection";
+    await page
+      .getByRole("dialog")
+      .locator('textarea[aria-label="Description"]')
+      .fill(updatedZeroDesc);
+    const zeroEditRes = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/items") &&
+        r.request().method() === "PATCH",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /Update Item|Save Item/ })
+      .click();
+    assert.equal((await zeroEditRes).status(), 200);
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    const zeroDb = await db.query(
+      "SELECT reorder_milli, description FROM inventory_item WHERE name=$1",
+      [zeroItemName],
+    );
+    assert.equal(
+      Number(zeroDb.rows[0].reorder_milli),
+      0,
+      "Reorder level in DB must remain exactly 0 milli (0 units)",
+    );
+    assert.equal(zeroDb.rows[0].description, updatedZeroDesc);
+
+    console.log(
+      "✔ Journey 23 Passed: Fractional (1500 milli) and zero (0 milli) reorder thresholds preserved without rounding drift.",
     );
 
     console.log("\n=======================================================");
-    console.log("ALL 19 INVENTORY WORKSPACE JOURNEYS PASSED SUCCESSFULLY!");
+    console.log("ALL 23 INVENTORY WORKSPACE JOURNEYS PASSED SUCCESSFULLY!");
     console.log("=======================================================\n");
   } finally {
     try {

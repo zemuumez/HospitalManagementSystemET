@@ -6,25 +6,25 @@ import (
 )
 
 type InventoryRepository interface {
-	InventoryCategories(context.Context, int) ([]domain.InventoryCategory, error)
+	InventoryCategories(context.Context, int, int, string) ([]domain.InventoryCategory, int, error)
 	SaveInventoryCategory(context.Context, domain.Actor, string, domain.InventoryCategoryInput) (domain.InventoryCategory, error)
 	DeleteInventoryCategory(context.Context, domain.Actor, string) error
-	InventoryItems(context.Context, string, bool, int) ([]domain.InventoryItem, error)
+	InventoryItems(context.Context, string, string, bool, int, int) ([]domain.InventoryItem, int, error)
 	SaveInventoryItem(context.Context, domain.Actor, string, domain.InventoryItemInput) (domain.InventoryItem, error)
 	DeleteInventoryItem(context.Context, domain.Actor, string) error
 	MoveInventory(context.Context, domain.Actor, domain.InventoryMovementInput, string) (domain.InventoryMovement, error)
-	InventoryMovements(context.Context, domain.Actor, string, int) ([]domain.InventoryMovement, error)
+	InventoryMovements(context.Context, domain.Actor, string, string, int, int, string) ([]domain.InventoryMovement, int, error)
 }
 type Inventory struct{ Store InventoryRepository }
 
-func (i Inventory) Categories(ctx context.Context, a domain.Actor, page int) ([]domain.InventoryCategory, error) {
+func (i Inventory) Categories(ctx context.Context, a domain.Actor, page int, limit int, search string) ([]domain.InventoryCategory, int, error) {
 	if a.Role != "admin" {
-		return nil, domain.ErrForbidden
+		return nil, 0, domain.ErrForbidden
 	}
-	if !pageOK(page) {
-		return nil, domain.ErrValidation
+	if !pageOK(page) || len(search) > 100 || (limit != 0 && (limit < 1 || limit > 500)) {
+		return nil, 0, domain.ErrValidation
 	}
-	return i.Store.InventoryCategories(ctx, page)
+	return i.Store.InventoryCategories(ctx, page, limit, search)
 }
 func (i Inventory) SaveCategory(ctx context.Context, a domain.Actor, id string, in domain.InventoryCategoryInput) (domain.InventoryCategory, error) {
 	if a.Role != "admin" {
@@ -47,14 +47,14 @@ func (i Inventory) DeleteCategory(ctx context.Context, a domain.Actor, id string
 	}
 	return i.Store.DeleteInventoryCategory(ctx, a, id)
 }
-func (i Inventory) Items(ctx context.Context, a domain.Actor, search string, low bool, page int) ([]domain.InventoryItem, error) {
+func (i Inventory) Items(ctx context.Context, a domain.Actor, search string, categoryID string, low bool, page int, limit int) ([]domain.InventoryItem, int, error) {
 	if a.Role != "admin" {
-		return nil, domain.ErrForbidden
+		return nil, 0, domain.ErrForbidden
 	}
-	if len(search) > 100 || !pageOK(page) {
-		return nil, domain.ErrValidation
+	if len(search) > 100 || !pageOK(page) || (categoryID != "" && !domain.UUIDPattern.MatchString(categoryID)) || (limit != 0 && (limit < 1 || limit > 500)) {
+		return nil, 0, domain.ErrValidation
 	}
-	return i.Store.InventoryItems(ctx, search, low, page)
+	return i.Store.InventoryItems(ctx, search, categoryID, low, page, limit)
 }
 func (i Inventory) SaveItem(ctx context.Context, a domain.Actor, id string, in domain.InventoryItemInput) (domain.InventoryItem, error) {
 	if a.Role != "admin" {
@@ -89,12 +89,12 @@ func (i Inventory) Move(ctx context.Context, a domain.Actor, in domain.Inventory
 	}
 	return i.Store.MoveInventory(ctx, a, in, key)
 }
-func (i Inventory) Movements(ctx context.Context, a domain.Actor, id string, page int) ([]domain.InventoryMovement, error) {
+func (i Inventory) Movements(ctx context.Context, a domain.Actor, id string, kind string, page int, limit int, search string) ([]domain.InventoryMovement, int, error) {
 	if a.Role != "admin" {
-		return nil, domain.ErrForbidden
+		return nil, 0, domain.ErrForbidden
 	}
-	if (id != "" && !domain.UUIDPattern.MatchString(id)) || !pageOK(page) {
-		return nil, domain.ErrValidation
+	if (id != "" && !domain.UUIDPattern.MatchString(id)) || !pageOK(page) || (kind != "" && kind != "receive" && kind != "issue" && kind != "return" && kind != "writeoff") || (limit != 0 && (limit < 1 || limit > 500)) || len(search) > 100 {
+		return nil, 0, domain.ErrValidation
 	}
-	return i.Store.InventoryMovements(ctx, a, id, page)
+	return i.Store.InventoryMovements(ctx, a, id, kind, page, limit, search)
 }

@@ -2028,6 +2028,38 @@ html[lang="am"] .label {
 .legacy-dark .legacy-table td {
   border-color: transparent;
 }
+.legacy-dark .legacy-workspace,
+.legacy-dark .inventory-table-card,
+.legacy-dark .inventory-panel {
+  color: #e4e7eb;
+}
+.legacy-dark .inventory-card-bg {
+  background: #12151f !important;
+  border-color: #2b3344 !important;
+  color: #e4e7eb !important;
+}
+.legacy-dark .inventory-table-header {
+  background: #1e202a !important;
+  color: #c4cbd7 !important;
+}
+.legacy-dark .inventory-table-row {
+  background: #12151f !important;
+  color: #e4e7eb !important;
+  border-color: #2b3344 !important;
+}
+.legacy-dark .inventory-table-row:hover {
+  background: #1a1e2b !important;
+}
+.legacy-dark .inventory-input {
+  background: #161a25 !important;
+  border-color: #384257 !important;
+  color: #e4e7eb !important;
+}
+.legacy-dark .inventory-modal-bg {
+  background: #12151f !important;
+  border-color: #2b3344 !important;
+  color: #e4e7eb !important;
+}
 .dashboard-widgets {
   gap: 20px;
 }

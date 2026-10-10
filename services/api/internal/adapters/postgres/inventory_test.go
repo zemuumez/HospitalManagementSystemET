@@ -63,7 +63,7 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		t.Fatal("inventory issue race", errs)
 	}
 	issued := movements[winner]
-	low, e := inv.Items(ctx, a, "", true, 1)
+	low, _, e := inv.Items(ctx, a, "", "", true, 1, 25)
 	if e != nil || len(low) != 1 || low[0].BalanceMilli != 500 {
 		t.Fatal("low stock", e, low)
 	}
@@ -86,8 +86,8 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 	if _, e = inv.Move(ctx, a, returned, "inventory-return-0003"); e != nil {
 		t.Fatal(e)
 	}
-	all, e := inv.Items(ctx, a, "Synthetic", false, 1)
-	if e != nil || len(all) != 1 || all[0].BalanceMilli != 1500 {
+	all, totalItems, e := inv.Items(ctx, a, "Synthetic", "", false, 1, 25)
+	if e != nil || len(all) != 1 || totalItems != 1 || all[0].BalanceMilli != 1500 {
 		t.Fatal("non-restocked return changed availability", e, all)
 	}
 	edit := all[0].InventoryItemInput
@@ -125,7 +125,7 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 	if _, e = inv.Move(ctx, a, domain.InventoryMovementInput{ItemID: item.ID, Kind: "writeoff", QuantityMilli: 1500, Reason: "Synthetic disposal"}, "inventory-writeoff-01"); e != nil {
 		t.Fatal(e)
 	}
-	all, e = inv.Items(ctx, a, "Synthetic", false, 1)
+	all, _, e = inv.Items(ctx, a, "Synthetic", "", false, 1, 25)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -137,40 +137,57 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 	if _, e = inv.Move(ctx, a, receive, "archived-inventory-01"); !errors.Is(e, domain.ErrStale) {
 		t.Fatal("archived stock received", e)
 	}
-	history, e := inv.Movements(ctx, a, item.ID, 1)
-	if e != nil || len(history) != 5 {
-		t.Fatal("history count", e, len(history))
+	history, totalMovs, e := inv.Movements(ctx, a, item.ID, "", 1, 25, "")
+	if e != nil || len(history) != 5 || totalMovs != 5 {
+		t.Fatal("history count", e, len(history), totalMovs)
 	}
 	t.Run("admin movement register and parent filter", func(t *testing.T) {
 		second, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: category.ID, Name: "Second supply", Unit: "box", Active: true})
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{ItemID: second.ID, Kind: "receive", QuantityMilli: 1000, Reference: "REGISTER-1", Reason: "Register fixture"}, "inventory-register-01")
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID:        second.ID,
+			Kind:          "receive",
+			QuantityMilli: 1000,
+			Reference:     "REGISTER-1",
+			Reason:        "Register fixture",
+			AttachmentURL: "/v1/attachments/test-token-12345/content",
+		}, "inventory-register-01")
 		if err != nil {
 			t.Fatal(err)
 		}
-		all, err := inv.Movements(ctx, a, "", 1)
-		if err != nil || len(all) != 6 {
-			t.Fatal("aggregate register", len(all), err)
+		all, totalAll, err := inv.Movements(ctx, a, "", "", 1, 25, "")
+		if err != nil || len(all) != 6 || totalAll != 6 {
+			t.Fatal("aggregate register", len(all), totalAll, err)
 		}
-		filtered, err := inv.Movements(ctx, a, second.ID, 1)
-		if err != nil || len(filtered) != 1 || filtered[0].ItemID != second.ID {
+		filtered, totalFiltered, err := inv.Movements(ctx, a, second.ID, "", 1, 25, "")
+		if err != nil || len(filtered) != 1 || totalFiltered != 1 || filtered[0].ItemID != second.ID {
 			t.Fatal("parent scope", filtered, err)
 		}
-		page, err := inv.Movements(ctx, a, "", 2)
+		if filtered[0].AttachmentURL != "/v1/attachments/test-token-12345/content" {
+			t.Fatalf("expected attachment URL preserved, got %q", filtered[0].AttachmentURL)
+		}
+		if filtered[0].ItemName != "Second supply" {
+			t.Fatalf("expected ItemName populated, got %q", filtered[0].ItemName)
+		}
+		searched, totalSearched, err := inv.Movements(ctx, a, "", "", 1, 25, "Register fixture")
+		if err != nil || len(searched) != 1 || totalSearched != 1 || searched[0].Reference != "REGISTER-1" {
+			t.Fatal("search movement filter", len(searched), totalSearched, err)
+		}
+		page, _, err := inv.Movements(ctx, a, "", "", 2, 25, "")
 		if err != nil || len(page) != 0 {
 			t.Fatal("pagination", page, err)
 		}
-		if _, err = inv.Movements(ctx, a, "invalid", 1); !errors.Is(err, domain.ErrValidation) {
+		if _, _, err = inv.Movements(ctx, a, "invalid", "", 1, 25, ""); !errors.Is(err, domain.ErrValidation) {
 			t.Fatal("invalid parent", err)
 		}
 		for _, role := range []string{"doctor", "nurse", "patient", "receptionist", "pharmacist", "accountant", "case_manager", "lab_technician"} {
 			actor := domain.Actor{ID: actors[1].ID, Role: role}
-			if _, err = inv.Movements(ctx, actor, "", 1); !errors.Is(err, domain.ErrForbidden) {
+			if _, _, err = inv.Movements(ctx, actor, "", "", 1, 25, ""); !errors.Is(err, domain.ErrForbidden) {
 				t.Fatal("aggregate exposed", role, err)
 			}
-			if _, err = store.InventoryMovements(ctx, actor, second.ID, 1); !errors.Is(err, domain.ErrForbidden) {
+			if _, _, err = store.InventoryMovements(ctx, actor, second.ID, "", 1, 25, ""); !errors.Is(err, domain.ErrForbidden) {
 				t.Fatal("direct store exposed", role, err)
 			}
 		}

@@ -1,36 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
-  Boxes,
+  Package,
   Layers,
   ArrowDownToLine,
   ArrowUpFromLine,
   Plus,
   RefreshCw,
   Search,
-  Package,
+  Filter,
+  CheckCircle,
   AlertTriangle,
-  Building,
-  CheckCircle2,
-  X,
-  Tag,
-  DollarSign,
-  TrendingDown,
   RotateCcw,
-  Pencil,
+  Edit,
   Trash2,
   Eye,
-  Info,
-  Check,
-  Clock,
-  Filter,
+  FileText,
+  Upload,
+  Ban,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useLanguage } from "./language";
-import { Modal } from "./modal";
-import { api } from "@/lib/api";
 
-export type InventoryTab =
+type InventoryTab =
   "items" | "item-categories" | "item-stocks" | "issued-items";
 
 interface InventoryCategory {
@@ -56,6 +50,7 @@ interface InventoryItem {
 interface InventoryMovement {
   id: string;
   itemId: string;
+  itemName?: string;
   kind: string; // receive, issue, return, writeoff
   quantityMilli: number;
   deltaMilli: number;
@@ -68,6 +63,11 @@ interface InventoryMovement {
   costMinor?: number;
   restock?: boolean;
   reason?: string;
+  attachmentUrl?: string;
+  issuedDate?: string;
+  returnDueDate?: string;
+  issuedBy?: string;
+  department?: string;
   createdAt: string;
 }
 
@@ -77,6 +77,18 @@ interface StaffUser {
   role: string;
   active: boolean;
 }
+
+const DEPARTMENTS = [
+  "General OPD",
+  "Dental",
+  "Emergency",
+  "Inpatient Ward",
+  "Surgery",
+  "Laboratory",
+  "Pharmacy",
+  "Maternity",
+  "Pediatrics Ward",
+];
 
 export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   const { t } = useLanguage();
@@ -100,10 +112,23 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   const submitting = useRef(false);
   const pending = useRef<{ signature: string; key: string } | null>(null);
 
+  // Pagination & Totals
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalCategories, setTotalCategories] = useState(0);
+  const [totalMovements, setTotalMovements] = useState(0);
+
   // Data states
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+
+  // Complete catalogs for modal selectors (unbounded by current page)
+  const [allCategoriesCatalog, setAllCategoriesCatalog] = useState<
+    InventoryCategory[]
+  >([]);
+  const [allItemsCatalog, setAllItemsCatalog] = useState<InventoryItem[]>([]);
 
   // Modal open states
   const [showAddItem, setShowAddItem] = useState(false);
@@ -125,6 +150,14 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   const [returningIssue, setReturningIssue] =
     useState<InventoryMovement | null>(null);
 
+  // Void confirmation modals
+  const [voidingReceipt, setVoidingReceipt] =
+    useState<InventoryMovement | null>(null);
+  const [voidingIssue, setVoidingIssue] = useState<InventoryMovement | null>(
+    null,
+  );
+  const [voidReason, setVoidReason] = useState("");
+
   const [deleteConfirm, setDeleteConfirm] = useState<{
     type: "category" | "item";
     id: string;
@@ -134,7 +167,70 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   // Staff recipients
   const [recipientSearch, setRecipientSearch] = useState("");
   const [recipients, setRecipients] = useState<StaffUser[]>([]);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
 
+  // Form states
+  const [itemForm, setItemForm] = useState({
+    name: "",
+    categoryId: "",
+    unit: "Piece",
+    reorderLevel: "10",
+    description: "",
+  });
+
+  const [categoryForm, setCategoryForm] = useState({
+    name: "",
+    description: "",
+  });
+
+  const [stockForm, setStockForm] = useState({
+    categoryId: "",
+    itemId: "",
+    quantity: 50,
+    supplier: "",
+    storeName: "Central Hospital Store",
+    reference: "",
+    unitCost: 15.0,
+    reason: "Routine replenishment",
+    attachmentUrl: "",
+  });
+
+  const [issueForm, setIssueForm] = useState({
+    categoryId: "",
+    itemId: "",
+    quantity: 5,
+    recipientId: "",
+    reason: "Departmental clinical supply",
+    department: "General OPD",
+    issuedBy: "Pharmacy Admin",
+    issuedDate: new Date().toISOString().split("T")[0],
+    returnDueDate: "",
+  });
+
+  const [returnForm, setReturnForm] = useState({
+    quantity: 1,
+    restock: true,
+    reason: "Unused clinical item returned",
+  });
+
+  // Load staff on mount
+  useEffect(() => {
+    fetch("/api/staff")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.users) {
+          setRecipients(
+            data.users.filter(
+              (u: { active: boolean; role: string }) =>
+                u.active && u.role !== "patient",
+            ),
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch staff with search in issue modal
   useEffect(() => {
     if (!showIssueItem) return;
     const controller = new AbortController();
@@ -153,10 +249,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           ),
         );
       } catch (cause) {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
           setError(
             cause instanceof Error ? cause.message : "Unable to load staff",
           );
+        }
       }
     }, 250);
     return () => {
@@ -165,57 +262,86 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
     };
   }, [showIssueItem, recipientSearch]);
 
-  // Form states
-  const [itemForm, setItemForm] = useState({
-    name: "",
-    categoryId: "",
-    unit: "Piece",
-    reorderLevel: 10,
-    description: "",
-  });
-
-  const [categoryForm, setCategoryForm] = useState({
-    name: "",
-    description: "",
-  });
-
-  const [stockForm, setStockForm] = useState({
-    categoryId: "",
-    itemId: "",
-    quantity: 50,
-    supplier: "",
-    storeName: "Central Hospital Store",
-    reference: "",
-    unitCost: 15.0,
-    reason: "Routine replenishment",
-  });
-
-  const [issueForm, setIssueForm] = useState({
-    categoryId: "",
-    itemId: "",
-    quantity: 5,
-    recipientId: "",
-    reason: "Departmental clinical supply",
-  });
-
-  const [returnForm, setReturnForm] = useState({
-    quantity: 1,
-    restock: true,
-    reason: "Unused clinical item returned",
-  });
-
-  const fetchInventoryData = async () => {
+  const fetchInventoryData = async (targetPage?: number) => {
     setLoading(true);
     setError("");
+    const currentPage = targetPage ?? page;
     try {
-      const [cats, stock, history] = await Promise.all([
-        api<{ categories: InventoryCategory[] }>("inventory/categories"),
-        api<{ items: InventoryItem[] }>("inventory/items"),
-        api<{ movements: InventoryMovement[] }>("inventory/movements"),
-      ]);
-      setCategories(cats.categories);
-      setItems(stock.items);
-      setMovements(history.movements);
+      // 1. Fetch catalogs for selectors (limit=500) so dropdowns are never truncated
+      const [catsCatalogRes, itemsCatalogRes, staffCatalogRes] =
+        await Promise.all([
+          api<{ categories: InventoryCategory[]; total: number }>(
+            "inventory/categories?page=1&limit=500",
+          ),
+          api<{ items: InventoryItem[]; total: number }>(
+            "inventory/items?page=1&limit=500",
+          ),
+          fetch("/api/staff?page=1&limit=500")
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+      setAllCategoriesCatalog(catsCatalogRes.categories);
+      setAllItemsCatalog(itemsCatalogRes.items);
+      if (staffCatalogRes?.users) {
+        setRecipients(
+          staffCatalogRes.users.filter(
+            (u: { active: boolean; role: string }) =>
+              u.active && u.role !== "patient",
+          ),
+        );
+      }
+
+      // 2. Tab-specific paginated request
+      if (activeTab === "item-categories") {
+        const catsRes = await api<{
+          categories: InventoryCategory[];
+          total: number;
+        }>(
+          `inventory/categories?page=${currentPage}&limit=${pageSize}&search=${encodeURIComponent(searchTerm)}`,
+        );
+        setCategories(catsRes.categories);
+        setTotalCategories(catsRes.total ?? catsRes.categories.length);
+      } else {
+        setCategories(catsCatalogRes.categories);
+        setTotalCategories(
+          catsCatalogRes.total ?? catsCatalogRes.categories.length,
+        );
+      }
+
+      if (activeTab === "items") {
+        const queryParams = new URLSearchParams({
+          page: String(currentPage),
+          limit: String(pageSize),
+          search: searchTerm,
+        });
+        if (categoryFilter) queryParams.set("categoryId", categoryFilter);
+        if (lowStockOnly) queryParams.set("lowStock", "true");
+        const itemsRes = await api<{ items: InventoryItem[]; total: number }>(
+          `inventory/items?${queryParams.toString()}`,
+        );
+        setItems(itemsRes.items);
+        setTotalItems(itemsRes.total ?? itemsRes.items.length);
+      } else {
+        setItems(itemsCatalogRes.items);
+        setTotalItems(itemsCatalogRes.total ?? itemsCatalogRes.items.length);
+      }
+
+      let movEndpoint = `inventory/movements?page=${currentPage}&limit=${pageSize}`;
+      if (activeTab === "item-stocks") {
+        movEndpoint += "&kind=receive";
+      } else if (activeTab === "issued-items") {
+        movEndpoint += "&kind=issue";
+      }
+      if (searchTerm) {
+        movEndpoint += `&search=${encodeURIComponent(searchTerm)}`;
+      }
+      const movRes = await api<{
+        movements: InventoryMovement[];
+        total: number;
+      }>(movEndpoint);
+      setMovements(movRes.movements);
+      setTotalMovements(movRes.total ?? movRes.movements.length);
+
       setIsLive(true);
     } catch (cause) {
       setIsLive(false);
@@ -228,8 +354,13 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   };
 
   useEffect(() => {
-    void fetchInventoryData();
-  }, []);
+    setPage(1);
+    void fetchInventoryData(1);
+  }, [activeTab, searchTerm, categoryFilter, lowStockOnly]);
+
+  useEffect(() => {
+    void fetchInventoryData(page);
+  }, [page]);
 
   async function save(
     path: string,
@@ -259,6 +390,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       setError(
         cause instanceof Error ? cause.message : "Unable to save inventory",
       );
+      throw cause;
     } finally {
       submitting.current = false;
       setSaving(false);
@@ -320,6 +452,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   };
 
   const openEditCategory = (cat: InventoryCategory) => {
+    setError("");
     setEditingCategory(cat);
     setCategoryForm({ name: cat.name, description: cat.description || "" });
   };
@@ -327,6 +460,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   // --- Item Handlers ---
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
+    const reorderVal = Math.round(Number(itemForm.reorderLevel) * 1000);
     if (editingItem) {
       await save(
         `inventory/items/${editingItem.id}`,
@@ -335,7 +469,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           name: itemForm.name,
           unit: itemForm.unit,
           description: itemForm.description,
-          reorderMilli: Number(itemForm.reorderLevel) * 1000,
+          reorderMilli: reorderVal,
           active: editingItem.active,
           version: editingItem.version,
         },
@@ -346,7 +480,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             name: "",
             categoryId: "",
             unit: "Piece",
-            reorderLevel: 10,
+            reorderLevel: "10",
             description: "",
           });
         },
@@ -355,11 +489,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       await save(
         "inventory/items",
         {
-          categoryId: itemForm.categoryId || categories[0]?.id || "",
+          categoryId: itemForm.categoryId,
           name: itemForm.name,
           unit: itemForm.unit,
           description: itemForm.description,
-          reorderMilli: Number(itemForm.reorderLevel) * 1000,
+          reorderMilli: reorderVal,
           active: true,
           version: 1,
         },
@@ -370,7 +504,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             name: "",
             categoryId: "",
             unit: "Piece",
-            reorderLevel: 10,
+            reorderLevel: "10",
             description: "",
           });
         },
@@ -379,25 +513,61 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   };
 
   const openEditItem = (item: InventoryItem) => {
+    setError("");
     setEditingItem(item);
     setItemForm({
       name: item.name,
       categoryId: item.categoryId,
       unit: item.unit,
-      reorderLevel: Math.round(item.reorderMilli / 1000),
+      reorderLevel: (item.reorderMilli / 1000).toString(),
       description: item.description || "",
     });
+  };
+
+  // --- Receipt Attachment Upload ---
+  const handleReceiptUpload = async (file: File) => {
+    setUploadingReceipt(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("isPublic", "true");
+      const res = await fetch("/api/hms/attachments", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Receipt upload failed");
+      const data = await res.json();
+      const fileUrl = data.fileUrl || `/v1/attachments/${data.token}/content`;
+      setStockForm((prev) => ({ ...prev, attachmentUrl: fileUrl }));
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Receipt upload failed",
+      );
+    } finally {
+      setUploadingReceipt(false);
+    }
   };
 
   // --- Stock Handlers ---
   const handleSaveStockReceive = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetItemId =
-      stockForm.itemId || filteredStockItems[0]?.id || items[0]?.id || "";
+    if (!stockForm.itemId) {
+      setError(t("Please select an eligible item"));
+      return;
+    }
+    const eligible = (
+      allItemsCatalog.length > 0 ? allItemsCatalog : items
+    ).some(
+      (i) => i.id === stockForm.itemId && i.categoryId === stockForm.categoryId,
+    );
+    if (!eligible) {
+      setError(t("Please select an eligible item"));
+      return;
+    }
     await save(
       "inventory/movements",
       {
-        itemId: targetItemId,
+        itemId: stockForm.itemId,
         kind: "receive",
         quantityMilli: Number(stockForm.quantity) * 1000,
         costMinor: Math.round(
@@ -407,28 +577,70 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
         storeName: stockForm.storeName,
         reference: stockForm.reference,
         reason: stockForm.reason,
+        attachmentUrl: stockForm.attachmentUrl,
       },
       "POST",
-      () => setShowAddStock(false),
+      () => {
+        setShowAddStock(false);
+        setStockForm({
+          categoryId: "",
+          itemId: "",
+          quantity: 50,
+          supplier: "",
+          storeName: "Central Hospital Store",
+          reference: "",
+          unitCost: 15.0,
+          reason: "Routine replenishment",
+          attachmentUrl: "",
+        });
+      },
     );
   };
 
   // --- Issue Handlers ---
   const handleSaveIssue = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetItemId =
-      issueForm.itemId || filteredIssueItems[0]?.id || items[0]?.id || "";
+    if (!issueForm.itemId) {
+      setError(t("Please select an eligible item"));
+      return;
+    }
+    const eligible = (
+      allItemsCatalog.length > 0 ? allItemsCatalog : items
+    ).some(
+      (i) => i.id === issueForm.itemId && i.categoryId === issueForm.categoryId,
+    );
+    if (!eligible) {
+      setError(t("Please select an eligible item"));
+      return;
+    }
     await save(
       "inventory/movements",
       {
-        itemId: targetItemId,
+        itemId: issueForm.itemId,
         kind: "issue",
         quantityMilli: Number(issueForm.quantity) * 1000,
         recipientId: issueForm.recipientId,
         reason: issueForm.reason,
+        department: issueForm.department,
+        issuedBy: issueForm.issuedBy,
+        issuedDate: issueForm.issuedDate,
+        returnDueDate: issueForm.returnDueDate,
       },
       "POST",
-      () => setShowIssueItem(false),
+      () => {
+        setShowIssueItem(false);
+        setIssueForm({
+          categoryId: "",
+          itemId: "",
+          quantity: 5,
+          recipientId: "",
+          reason: "Departmental clinical supply",
+          department: "General OPD",
+          issuedBy: "Pharmacy Admin",
+          issuedDate: new Date().toISOString().split("T")[0],
+          returnDueDate: "",
+        });
+      },
     );
   };
 
@@ -452,6 +664,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   };
 
   const openReturnModal = (issue: InventoryMovement) => {
+    setError("");
     setReturningIssue(issue);
     const returned = issue.returnedMilli || 0;
     const remaining = Math.max(0, issue.quantityMilli - returned);
@@ -463,82 +676,169 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
     });
   };
 
-  // --- Helpers ---
-  const getCategoryName = (catId: string) => {
-    return categories.find((c) => c.id === catId)?.name || t("General");
+  // --- Void Handlers ---
+  const handleConfirmVoidReceipt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voidingReceipt) return;
+    try {
+      await save(
+        "inventory/movements",
+        {
+          itemId: voidingReceipt.itemId,
+          kind: "writeoff",
+          quantityMilli: voidingReceipt.quantityMilli,
+          storeName: voidingReceipt.storeName || "",
+          reason:
+            `Void receipt ${voidingReceipt.reference || ""}: ${voidReason}`.trim(),
+        },
+        "POST",
+        () => {
+          setVoidingReceipt(null);
+          setVoidReason("");
+          setSuccessMsg(t("Stock receipt voided successfully"));
+        },
+      );
+    } catch {
+      setError(t("Cannot void receipt: stock has already been consumed"));
+    }
   };
 
-  const getItemName = (itemId: string) => {
-    return items.find((i) => i.id === itemId)?.name || t("Medical Supply Item");
+  const handleConfirmVoidIssue = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voidingIssue) return;
+    const returned = voidingIssue.returnedMilli || 0;
+    const remaining = Math.max(0, voidingIssue.quantityMilli - returned);
+    if (remaining <= 0) {
+      setError("This issue has already been completely returned");
+      return;
+    }
+    await save(
+      "inventory/movements",
+      {
+        itemId: voidingIssue.itemId,
+        kind: "return",
+        originalId: voidingIssue.id,
+        quantityMilli: remaining,
+        restock: true,
+        reason: `Void issue: ${voidReason}`.trim(),
+      },
+      "POST",
+      () => {
+        setVoidingIssue(null);
+        setVoidReason("");
+        setSuccessMsg(t("Issued item voided successfully"));
+      },
+    );
+  };
+
+  // --- Helpers ---
+  const activeCategoriesList =
+    allCategoriesCatalog.length > 0 ? allCategoriesCatalog : categories;
+  const activeItemsList = allItemsCatalog.length > 0 ? allItemsCatalog : items;
+
+  const getCategoryName = (catId: string) => {
+    return (
+      activeCategoriesList.find((c) => c.id === catId)?.name || t("General")
+    );
+  };
+
+  const getItemName = (itemId: string, movementItemName?: string) => {
+    if (movementItemName) return movementItemName;
+    return (
+      activeItemsList.find((i) => i.id === itemId)?.name ||
+      t("Medical Supply Item")
+    );
   };
 
   const getItemUnit = (itemId: string) => {
-    return items.find((i) => i.id === itemId)?.unit || "Units";
+    return activeItemsList.find((i) => i.id === itemId)?.unit || "Units";
   };
 
   const getItemCategory = (itemId: string) => {
-    const item = items.find((i) => i.id === itemId);
+    const item = activeItemsList.find((i) => i.id === itemId);
     if (!item) return "-";
     return getCategoryName(item.categoryId);
   };
 
   const getItemBalance = (itemId: string) => {
-    const item = items.find((i) => i.id === itemId);
+    const item = activeItemsList.find((i) => i.id === itemId);
     return item ? item.balanceMilli / 1000 : 0;
   };
 
-  // Filtered item lists for forms
-  const filteredStockItems = useMemo(() => {
-    if (!stockForm.categoryId) return items;
-    return items.filter((i) => i.categoryId === stockForm.categoryId);
-  }, [items, stockForm.categoryId]);
+  const getRecipientDisplayName = (id?: string) => {
+    if (!id) return "-";
+    const found = recipients.find((r) => r.id === id);
+    return found ? `${found.name} (${id})` : id;
+  };
 
-  const filteredIssueItems = useMemo(() => {
-    if (!issueForm.categoryId) return items;
-    return items.filter((i) => i.categoryId === issueForm.categoryId);
-  }, [items, issueForm.categoryId]);
+  // Filtered items strictly by selected category in modals
+  const eligibleStockItems = useMemo(() => {
+    if (!stockForm.categoryId) return [];
+    return activeItemsList.filter((i) => i.categoryId === stockForm.categoryId);
+  }, [activeItemsList, stockForm.categoryId]);
+
+  const eligibleIssueItems = useMemo(() => {
+    if (!issueForm.categoryId) return [];
+    return activeItemsList.filter((i) => i.categoryId === issueForm.categoryId);
+  }, [activeItemsList, issueForm.categoryId]);
 
   const selectedIssueItem = useMemo(() => {
-    const targetId =
-      issueForm.itemId || filteredIssueItems[0]?.id || items[0]?.id;
-    return items.find((i) => i.id === targetId);
-  }, [items, issueForm.itemId, filteredIssueItems]);
+    if (!issueForm.itemId) return null;
+    return activeItemsList.find((i) => i.id === issueForm.itemId);
+  }, [activeItemsList, issueForm.itemId]);
 
   const tabs = [
-    { id: "items", label: t("Items"), icon: Package, count: items.length },
+    { id: "items", label: t("Items"), icon: Package, count: totalItems },
     {
       id: "item-categories",
       label: t("Item Categories"),
       icon: Layers,
-      count: categories.length,
+      count: totalCategories,
     },
     {
       id: "item-stocks",
       label: t("Item Stocks"),
       icon: ArrowDownToLine,
-      count: movements.filter((m) => m.kind === "receive").length,
+      count: totalMovements,
     },
     {
       id: "issued-items",
       label: t("Issued Items"),
       icon: ArrowUpFromLine,
-      count: movements.filter((m) => m.kind === "issue").length,
+      count: totalMovements,
     },
   ];
+
+  const currentTotal =
+    activeTab === "items"
+      ? totalItems
+      : activeTab === "item-categories"
+        ? totalCategories
+        : totalMovements;
+  const totalPages = Math.max(1, Math.ceil(currentTotal / pageSize));
 
   return (
     <div
       className="space-y-6 legacy-workspace"
+      data-workspace="inventory"
       data-ready={isLive ? "true" : "false"}
     >
       {error && (
-        <p role="alert" className="error">
+        <p role="alert" className="error p-3 rounded-lg text-xs font-medium">
           {t(error)}
+        </p>
+      )}
+      {successMsg && (
+        <p
+          role="status"
+          className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 rounded-lg text-xs font-medium"
+        >
+          {t(successMsg)}
         </p>
       )}
 
       {/* Subtabs Nav */}
-      <div className="border-b border-border/80 bg-card/50 backdrop-blur rounded-xl p-1.5 shadow-xs">
+      <div className="border-b border-border/80 bg-card/50 backdrop-blur rounded-xl p-1.5 shadow-xs inventory-card-bg">
         <nav className="flex space-x-1 overflow-x-auto">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -546,9 +846,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
             return (
               <button
                 key={tab.id}
+                data-tab={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id as InventoryTab);
                   setSearchTerm("");
+                  setPage(1);
                 }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                   isActive
@@ -574,7 +876,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       </div>
 
       {/* Live Status Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 rounded-xl p-3.5 text-sm shadow-xs">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 rounded-xl p-3.5 text-sm shadow-xs inventory-card-bg">
         <div className="flex items-center gap-2.5">
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -604,11 +906,12 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           {activeTab === "items" && (
             <button
               onClick={() => {
+                setError("");
                 setItemForm({
                   name: "",
-                  categoryId: categories[0]?.id || "",
+                  categoryId: activeCategoriesList[0]?.id || "",
                   unit: "Piece",
-                  reorderLevel: 10,
+                  reorderLevel: "10",
                   description: "",
                 });
                 setShowAddItem(true);
@@ -622,6 +925,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           {activeTab === "item-categories" && (
             <button
               onClick={() => {
+                setError("");
                 setCategoryForm({ name: "", description: "" });
                 setShowAddCategory(true);
               }}
@@ -634,19 +938,18 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           {activeTab === "item-stocks" && (
             <button
               onClick={() => {
-                const defaultCat = categories[0]?.id || "";
-                const itemsInCat = items.filter(
-                  (i) => i.categoryId === defaultCat,
-                );
+                setError("");
+                const defaultCat = activeCategoriesList[0]?.id || "";
                 setStockForm({
                   categoryId: defaultCat,
-                  itemId: itemsInCat[0]?.id || items[0]?.id || "",
+                  itemId: "",
                   quantity: 50,
                   supplier: "",
                   storeName: "Central Hospital Store",
                   reference: "",
                   unitCost: 15.0,
                   reason: "Routine replenishment",
+                  attachmentUrl: "",
                 });
                 setShowAddStock(true);
               }}
@@ -659,16 +962,18 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           {activeTab === "issued-items" && (
             <button
               onClick={() => {
-                const defaultCat = categories[0]?.id || "";
-                const itemsInCat = items.filter(
-                  (i) => i.categoryId === defaultCat,
-                );
+                setError("");
+                const defaultCat = activeCategoriesList[0]?.id || "";
                 setIssueForm({
                   categoryId: defaultCat,
-                  itemId: itemsInCat[0]?.id || items[0]?.id || "",
+                  itemId: "",
                   quantity: 5,
                   recipientId: "",
                   reason: "Departmental clinical supply",
+                  department: "General OPD",
+                  issuedBy: "Pharmacy Admin",
+                  issuedDate: new Date().toISOString().split("T")[0],
+                  returnDueDate: "",
                 });
                 setShowIssueItem(true);
               }}
@@ -681,132 +986,148 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
         </div>
       </div>
 
-      {/* 1. ITEMS VIEW */}
+      {/* TAB 1: ITEMS */}
       {activeTab === "items" && (
-        <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-border/80 flex flex-col md:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">
-              {t("Medical Inventory Items")}
-            </h3>
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              {/* Category Filter */}
+        <div className="bg-card border border-border/80 rounded-2xl shadow-xs overflow-hidden inventory-card-bg">
+          <div className="p-4 border-b border-border/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                {t("Medical Inventory Items")}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Track medical supply stock balances and reorder thresholds",
+                )}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
               <select
+                aria-label={t("Filter by category")}
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                aria-label={t("Filter by category")}
-                className="text-xs bg-background border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-hidden"
+                className="text-xs py-1.5 px-3 bg-background border border-border rounded-lg focus:outline-hidden inventory-input"
               >
                 <option value="">{t("All Categories")}</option>
-                {categories.map((c) => (
+                {activeCategoriesList.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
               </select>
 
-              {/* Low Stock Toggle */}
               <button
                 type="button"
                 onClick={() => setLowStockOnly(!lowStockOnly)}
-                className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors flex items-center gap-1 ${
+                className={`text-xs flex items-center gap-1.5 py-1.5 px-3 rounded-lg border transition-all ${
                   lowStockOnly
-                    ? "bg-red-500/15 border-red-500/30 text-red-600 dark:text-red-400 font-medium"
-                    : "bg-background border-border text-muted-foreground hover:text-foreground"
+                    ? "bg-amber-500/15 border-amber-500 text-amber-900 dark:text-amber-200 font-semibold"
+                    : "border-border text-muted-foreground hover:bg-muted"
                 }`}
               >
-                <AlertTriangle className="w-3 h-3" />
+                <AlertTriangle className="w-3.5 h-3.5" />
                 {t("Low Stock Only")}
               </button>
 
-              {/* Search */}
               <div className="relative flex-1 sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-2 text-muted-foreground" />
                 <input
                   type="text"
+                  aria-label={t("Search Items")}
                   placeholder={t("Search items...")}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-hidden inventory-input"
                 />
               </div>
             </div>
           </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs">
+              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs inventory-table-header">
                 <tr>
                   <th className="px-4 py-3">{t("Item Name")}</th>
                   <th className="px-4 py-3">{t("Category")}</th>
                   <th className="px-4 py-3">{t("Unit")}</th>
-                  <th className="px-4 py-3">{t("Available Quantity")}</th>
+                  <th className="px-4 py-3">{t("Available Stock")}</th>
                   <th className="px-4 py-3">{t("Reorder Level")}</th>
                   <th className="px-4 py-3">{t("Status")}</th>
                   <th className="px-4 py-3 text-right">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {items
-                  .filter(
-                    (i) => !categoryFilter || i.categoryId === categoryFilter,
-                  )
-                  .filter((i) => {
-                    if (!lowStockOnly) return true;
-                    return i.balanceMilli <= i.reorderMilli;
-                  })
-                  .filter(
-                    (i) =>
-                      i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      getCategoryName(i.categoryId)
-                        .toLowerCase()
-                        .includes(searchTerm.toLowerCase()),
-                  )
-                  .map((item) => {
+                {items.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-8 text-center text-muted-foreground text-xs"
+                    >
+                      {t("No items found")}
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item) => {
                     const balance = item.balanceMilli / 1000;
                     const reorder = item.reorderMilli / 1000;
-                    const isLow = balance <= reorder;
+                    const isLow = balance <= reorder && balance > 0;
+                    const isOut = balance <= 0;
+
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-muted/30 transition-colors"
+                        className="hover:bg-muted/30 transition-colors inventory-table-row"
                       >
                         <td className="px-4 py-3 font-semibold text-foreground">
                           {item.name}
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-                            {getCategoryName(item.categoryId)}
-                          </span>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {getCategoryName(item.categoryId)}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs">
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {item.unit}
                         </td>
-                        <td className="px-4 py-3 font-bold font-mono text-foreground">
-                          {balance.toLocaleString()} {item.unit}
+                        <td className="px-4 py-3 font-mono font-bold">
+                          <span
+                            className={
+                              isOut
+                                ? "text-rose-600 dark:text-rose-400"
+                                : isLow
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                            }
+                          >
+                            {balance.toLocaleString()} {item.unit}
+                          </span>
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {reorder.toLocaleString()} {item.unit}
                         </td>
                         <td className="px-4 py-3">
-                          {isLow ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-400">
-                              <AlertTriangle className="w-3.5 h-3.5" />{" "}
+                          {isOut ? (
+                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-800 dark:text-rose-300 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                              {t("Out of Stock")}
+                            </span>
+                          ) : isLow ? (
+                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                               {t("Low Stock")}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              <CheckCircle2 className="w-3.5 h-3.5" />{" "}
+                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                               {t("In Stock")}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
                               onClick={() => setViewingItem(item)}
                               aria-label={t("Item Details")}
                               title={t("Item Details")}
-                              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                              className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
@@ -815,9 +1136,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                               onClick={() => openEditItem(item)}
                               aria-label={t("Edit Item")}
                               title={t("Edit Item")}
-                              className="p-1 rounded-md text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                              className="p-1 text-muted-foreground hover:text-primary rounded-md hover:bg-muted"
                             >
-                              <Pencil className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </button>
                             <button
                               type="button"
@@ -830,7 +1151,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                               }
                               aria-label={t("Delete Item")}
                               title={t("Delete Item")}
-                              className="p-1 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
+                              className="p-1 text-muted-foreground hover:text-rose-600 rounded-md hover:bg-muted"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -838,91 +1159,117 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         </td>
                       </tr>
                     );
-                  })}
-                {items.length === 0 && !loading && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-8 text-center text-muted-foreground text-sm"
-                    >
-                      <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                      {t("No inventory items found")}
-                    </td>
-                  </tr>
+                  })
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          <div className="p-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {t("Page")} {page} {t("of")} {totalPages} ({totalItems}{" "}
+              {t("Items")})
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> {t("Previous")}
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                {t("Next")} <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* 2. ITEM CATEGORIES VIEW */}
+      {/* TAB 2: CATEGORIES */}
       {activeTab === "item-categories" && (
-        <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">
-              {t("Inventory Categories")}
-            </h3>
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+        <div className="bg-card border border-border/80 rounded-2xl shadow-xs overflow-hidden inventory-card-bg">
+          <div className="p-4 border-b border-border/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                {t("Inventory Categories")}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Classification taxonomy for hospital equipment and consumables",
+                )}
+              </p>
+            </div>
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-4 h-4 absolute left-3 top-2 text-muted-foreground" />
               <input
                 type="text"
+                aria-label={t("Search Categories")}
                 placeholder={t("Search categories...")}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-hidden inventory-input"
               />
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs">
+              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs inventory-table-header">
                 <tr>
                   <th className="px-4 py-3">{t("Category Name")}</th>
                   <th className="px-4 py-3">{t("Description")}</th>
-                  <th className="px-4 py-3">{t("Item Count")}</th>
-                  <th className="px-4 py-3">{t("Active")}</th>
+                  <th className="px-4 py-3">{t("Items Assigned")}</th>
                   <th className="px-4 py-3 text-right">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {categories
-                  .filter((c) =>
-                    c.name.toLowerCase().includes(searchTerm.toLowerCase()),
-                  )
-                  .map((cat) => {
-                    const itemCount = items.filter(
+                {categories.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-4 py-8 text-center text-muted-foreground text-xs"
+                    >
+                      {t("No categories found")}
+                    </td>
+                  </tr>
+                ) : (
+                  categories.map((cat) => {
+                    const assigned = allItemsCatalog.filter(
                       (i) => i.categoryId === cat.id,
                     ).length;
                     return (
                       <tr
                         key={cat.id}
-                        className="hover:bg-muted/30 transition-colors"
+                        className="hover:bg-muted/30 transition-colors inventory-table-row"
                       >
                         <td className="px-4 py-3 font-semibold text-foreground">
                           {cat.name}
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate">
                           {cat.description || "-"}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs">
-                          {itemCount} {t("items")}
-                        </td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                            {t("Active")}
+                          <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
+                            {assigned} {t("Items")}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
                               onClick={() => openEditCategory(cat)}
                               aria-label={t("Edit Category")}
                               title={t("Edit Category")}
-                              className="p-1 rounded-md text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                              className="p-1 text-muted-foreground hover:text-primary rounded-md hover:bg-muted"
                             >
-                              <Pencil className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </button>
                             <button
                               type="button"
@@ -935,7 +1282,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                               }
                               aria-label={t("Delete Category")}
                               title={t("Delete Category")}
-                              className="p-1 rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
+                              className="p-1 text-muted-foreground hover:text-rose-600 rounded-md hover:bg-muted"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -943,45 +1290,66 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         </td>
                       </tr>
                     );
-                  })}
-                {categories.length === 0 && !loading && (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-8 text-center text-muted-foreground text-sm"
-                    >
-                      <Layers className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                      {t("No categories found")}
-                    </td>
-                  </tr>
+                  })
                 )}
               </tbody>
             </table>
           </div>
+          {/* Pagination Controls */}
+          <div className="p-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {t("Page")} {page} {t("of")} {totalPages} ({totalCategories}{" "}
+              {t("Item Categories")})
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> {t("Previous")}
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                {t("Next")} <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* 3. ITEM STOCKS / RECEIVE MOVEMENTS */}
+      {/* TAB 3: ITEM STOCKS (RECEIPTS) */}
       {activeTab === "item-stocks" && (
-        <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-border/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">
-              {t("Item Stocks Received")}
-            </h3>
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+        <div className="bg-card border border-border/80 rounded-2xl shadow-xs overflow-hidden inventory-card-bg">
+          <div className="p-4 border-b border-border/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                {t("Item Stocks Received")}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {t("Stock intake logs, procurement receipts, and lot tracking")}
+              </p>
+            </div>
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-4 h-4 absolute left-3 top-2 text-muted-foreground" />
               <input
                 type="text"
-                placeholder={t("Search received stock...")}
+                aria-label={t("Search Movements")}
+                placeholder={t("Search stock receipts...")}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-hidden inventory-input"
               />
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs">
+              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs inventory-table-header">
                 <tr>
                   <th className="px-4 py-3">{t("Item")}</th>
                   <th className="px-4 py-3">{t("Category")}</th>
@@ -990,31 +1358,25 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   <th className="px-4 py-3">{t("Quantity Received")}</th>
                   <th className="px-4 py-3">{t("Total Cost (ETB)")}</th>
                   <th className="px-4 py-3">{t("Date")}</th>
+                  <th className="px-4 py-3">{t("Receipt Attachment")}</th>
                   <th className="px-4 py-3 text-right">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {movements
                   .filter((m) => m.kind === "receive")
-                  .filter(
-                    (m) =>
-                      getItemName(m.itemId)
-                        .toLowerCase()
-                        .includes(searchTerm.toLowerCase()) ||
-                      (m.reference || "")
-                        .toLowerCase()
-                        .includes(searchTerm.toLowerCase()) ||
-                      (m.supplier || "")
-                        .toLowerCase()
-                        .includes(searchTerm.toLowerCase()),
-                  )
                   .map((m) => (
                     <tr
                       key={m.id}
-                      className="hover:bg-muted/30 transition-colors"
+                      className="hover:bg-muted/30 transition-colors inventory-table-row"
                     >
                       <td className="px-4 py-3 font-semibold text-foreground">
-                        {getItemName(m.itemId)}
+                        {getItemName(m.itemId, m.itemName)}
+                        {m.reason && (
+                          <div className="text-[11px] font-normal text-muted-foreground line-clamp-1">
+                            {m.reason}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {getItemCategory(m.itemId)}
@@ -1044,85 +1406,134 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {new Date(m.createdAt).toLocaleDateString()}
                       </td>
+                      <td className="px-4 py-3 text-xs">
+                        {m.attachmentUrl ? (
+                          <a
+                            href={m.attachmentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            {t("View Receipt")}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setViewingMovement(m)}
-                          aria-label={t("Stock Details")}
-                          title={t("Stock Details")}
-                          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setViewingMovement(m)}
+                            aria-label={t("Stock Details")}
+                            title={t("Stock Details")}
+                            className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVoidingReceipt(m);
+                              setVoidReason("");
+                            }}
+                            aria-label={t("Void Receipt")}
+                            title={t("Void Receipt")}
+                            className="p-1 text-muted-foreground hover:text-rose-600 rounded-md hover:bg-muted"
+                          >
+                            <Ban className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
-                {movements.filter((m) => m.kind === "receive").length === 0 &&
-                  !loading && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-4 py-8 text-center text-muted-foreground text-sm"
-                      >
-                        <ArrowDownToLine className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                        {t("No stock receipts recorded")}
-                      </td>
-                    </tr>
-                  )}
               </tbody>
             </table>
+          </div>
+          {/* Pagination Controls */}
+          <div className="p-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {t("Page")} {page} {t("of")} {totalPages} ({totalMovements}{" "}
+              {t("Item Stocks")})
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> {t("Previous")}
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                {t("Next")} <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 4. ISSUED ITEMS */}
+      {/* TAB 4: ISSUED ITEMS */}
       {activeTab === "issued-items" && (
-        <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-border/80 flex flex-col md:flex-row items-center justify-between gap-3">
-            <h3 className="font-semibold text-base text-foreground">
-              {t("Issued Items & Consumables")}
-            </h3>
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              {/* Status Filter */}
+        <div className="bg-card border border-border/80 rounded-2xl shadow-xs overflow-hidden inventory-card-bg">
+          <div className="p-4 border-b border-border/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                {t("Issued Items & Consumables")}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Items issued to hospital departments, staff members, and return status",
+                )}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
               <select
+                aria-label={t("Filter by status")}
                 value={issueStatusFilter}
                 onChange={(e) =>
                   setIssueStatusFilter(
                     e.target.value as "all" | "returnable" | "returned",
                   )
                 }
-                aria-label={t("Filter by status")}
-                className="text-xs bg-background border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-hidden"
+                className="text-xs py-1.5 px-3 bg-background border border-border rounded-lg focus:outline-hidden inventory-input"
               >
                 <option value="all">{t("All Statuses")}</option>
                 <option value="returnable">{t("Pending Return")}</option>
                 <option value="returned">{t("Returned")}</option>
               </select>
 
-              {/* Search */}
               <div className="relative flex-1 sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-2 text-muted-foreground" />
                 <input
                   type="text"
+                  aria-label={t("Search Movements")}
                   placeholder={t("Search issued items...")}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary/20"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-hidden inventory-input"
                 />
               </div>
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs">
+              <thead className="bg-muted/50 text-muted-foreground uppercase text-xs inventory-table-header">
                 <tr>
                   <th className="px-4 py-3">{t("Item")}</th>
                   <th className="px-4 py-3">{t("Category")}</th>
-                  <th className="px-4 py-3">{t("Issued To / Recipient")}</th>
+                  <th className="px-4 py-3">{t("Issued To")}</th>
+                  <th className="px-4 py-3">{t("Department")}</th>
                   <th className="px-4 py-3">{t("Quantity Issued")}</th>
                   <th className="px-4 py-3">{t("Returned / Remaining")}</th>
                   <th className="px-4 py-3">{t("Status")}</th>
-                  <th className="px-4 py-3">{t("Issued Date")}</th>
+                  <th className="px-4 py-3">{t("Issue Date")}</th>
                   <th className="px-4 py-3 text-right">{t("Actions")}</th>
                 </tr>
               </thead>
@@ -1138,15 +1549,6 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                       return isFullyReturned;
                     return true;
                   })
-                  .filter(
-                    (m) =>
-                      getItemName(m.itemId)
-                        .toLowerCase()
-                        .includes(searchTerm.toLowerCase()) ||
-                      (m.recipientId || "")
-                        .toLowerCase()
-                        .includes(searchTerm.toLowerCase()),
-                  )
                   .map((m) => {
                     const issued = m.quantityMilli / 1000;
                     const returned = (m.returnedMilli || 0) / 1000;
@@ -1157,16 +1559,24 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                     return (
                       <tr
                         key={m.id}
-                        className="hover:bg-muted/30 transition-colors"
+                        className="hover:bg-muted/30 transition-colors inventory-table-row"
                       >
                         <td className="px-4 py-3 font-semibold text-foreground">
-                          {getItemName(m.itemId)}
+                          {getItemName(m.itemId, m.itemName)}
+                          {m.reason && (
+                            <div className="text-[11px] font-normal text-muted-foreground line-clamp-1">
+                              {m.reason}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
                           {getItemCategory(m.itemId)}
                         </td>
                         <td className="px-4 py-3 font-medium text-xs text-foreground">
-                          {m.recipientId || "-"}
+                          {getRecipientDisplayName(m.recipientId)}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {m.department || "-"}
                         </td>
                         <td className="px-4 py-3 font-bold font-mono text-amber-600 dark:text-amber-400">
                           -{issued.toLocaleString()} {getItemUnit(m.itemId)}
@@ -1182,8 +1592,11 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         </td>
                         <td className="px-4 py-3">
                           {isFullyReturned ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              <Check className="w-3.5 h-3.5" />
+                            <span
+                              data-status-badge="returned"
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-medium"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
                               {t("Returned")}
                             </span>
                           ) : isPartial ? (
@@ -1191,265 +1604,291 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                               type="button"
                               onClick={() => openReturnModal(m)}
                               aria-label={t("Partial Return")}
+                              data-status-badge="partial"
                               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 transition-colors cursor-pointer"
                             >
                               <RotateCcw className="w-3 h-3" />
                               {t("Partial Return")} ({returned}/{issued})
                             </button>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => openReturnModal(m)}
-                              aria-label={t("Return Item")}
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300 hover:bg-blue-500/25 transition-colors cursor-pointer"
+                            <span
+                              data-status-badge="issued"
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 font-medium"
                             >
-                              <RotateCcw className="w-3 h-3" />
-                              {t("Return Item")}
-                            </button>
+                              <ArrowUpFromLine className="w-3.5 h-3.5" />
+                              {t("Issued")}
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
-                          {new Date(m.createdAt).toLocaleDateString()}
+                          <div>
+                            {m.issuedDate ||
+                              new Date(m.createdAt).toLocaleDateString()}
+                          </div>
+                          {m.returnDueDate && (
+                            <div className="text-[10px] text-amber-600 dark:text-amber-400 font-mono">
+                              Due: {m.returnDueDate}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
                               onClick={() => setViewingIssue(m)}
-                              aria-label={t("Issue Details")}
-                              title={t("Issue Details")}
-                              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                              aria-label={t("View issue record")}
+                              className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-muted"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             {!isFullyReturned && (
-                              <button
-                                type="button"
-                                onClick={() => openReturnModal(m)}
-                                aria-label={t("Return Item")}
-                                title={t("Return Item")}
-                                className="p-1 rounded-md text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/50"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openReturnModal(m)}
+                                  className="text-xs px-2.5 py-1 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-colors shadow-2xs"
+                                >
+                                  {t("Return Item")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setVoidingIssue(m);
+                                    setVoidReason("");
+                                  }}
+                                  aria-label={t("Void Issue")}
+                                  title={t("Void Issue")}
+                                  className="p-1 text-muted-foreground hover:text-rose-600 rounded-md hover:bg-muted"
+                                >
+                                  <Ban className="w-4 h-4" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
                       </tr>
                     );
                   })}
-                {movements.filter((m) => m.kind === "issue").length === 0 &&
-                  !loading && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-4 py-8 text-center text-muted-foreground text-sm"
-                      >
-                        <ArrowUpFromLine className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                        {t("No issued items found")}
-                      </td>
-                    </tr>
-                  )}
               </tbody>
             </table>
+          </div>
+          {/* Pagination Controls */}
+          <div className="p-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              {t("Page")} {page} {t("of")} {totalPages} ({totalMovements}{" "}
+              {t("Issued Items")})
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> {t("Previous")}
+              </button>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-2.5 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-40 flex items-center gap-1"
+              >
+                {t("Next")} <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* --- MODALS --- */}
-
-      {/* 1. New / Edit Item Modal */}
+      {/* MODAL 1: ADD / EDIT ITEM */}
       {(showAddItem || editingItem) && (
-        <Modal
-          onClose={() => {
-            setShowAddItem(false);
-            setEditingItem(null);
-          }}
-          titleId="item-modal-title"
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="item-modal-title" className="font-semibold text-lg">
-                {editingItem ? t("Edit Item") : t("New Item")}
-              </h3>
-              <button
-                onClick={() => {
-                  setShowAddItem(false);
-                  setEditingItem(null);
-                }}
-                className="text-muted-foreground hover:text-foreground"
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {editingItem ? t("Edit Item") : t("New Item Registration")}
+            </h3>
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveItem} className="space-y-4">
-              {error && (
-                <p role="alert" className="error">
-                  {t(error)}
-                </p>
-              )}
+                {t(error)}
+              </p>
+            )}
+            <form onSubmit={handleSaveItem} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Item Name")} *
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Category")}
+                </label>
+                <select
+                  aria-label={t("Category")}
+                  value={
+                    itemForm.categoryId ||
+                    editingItem?.categoryId ||
+                    activeCategoriesList[0]?.id ||
+                    ""
+                  }
+                  onChange={(e) =>
+                    setItemForm({ ...itemForm, categoryId: e.target.value })
+                  }
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
+                >
+                  <option value="">{t("Select Category")}</option>
+                  {activeCategoriesList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Item Name")}
                 </label>
                 <input
                   type="text"
-                  required
                   aria-label={t("Item Name")}
+                  placeholder={t("e.g. Surgical Gloves (Latex)")}
                   value={itemForm.name}
                   onChange={(e) =>
                     setItemForm({ ...itemForm, name: e.target.value })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  placeholder="e.g. Sterile Syringes 5ml"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Category")} *
-                  </label>
-                  <select
-                    aria-label={t("Category")}
-                    value={itemForm.categoryId}
-                    onChange={(e) =>
-                      setItemForm({ ...itemForm, categoryId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Unit")} *
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Unit")}
                   </label>
                   <input
                     type="text"
-                    required
                     aria-label={t("Unit")}
+                    placeholder="Piece, Box, Pair"
                     value={itemForm.unit}
                     onChange={(e) =>
                       setItemForm({ ...itemForm, unit: e.target.value })
                     }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                    placeholder="Piece, Box, Vial, Kit"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Reorder Level")}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min={0}
+                    aria-label={t("Reorder Level")}
+                    value={itemForm.reorderLevel}
+                    onChange={(e) =>
+                      setItemForm({
+                        ...itemForm,
+                        reorderLevel: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                    required
                   />
                 </div>
               </div>
+
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Reorder Level")}
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  aria-label={t("Reorder Level")}
-                  value={itemForm.reorderLevel}
-                  onChange={(e) =>
-                    setItemForm({
-                      ...itemForm,
-                      reorderLevel: Number(e.target.value),
-                    })
-                  }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
                   {t("Description")}
                 </label>
                 <textarea
-                  rows={3}
-                  aria-label={t("Description")}
+                  rows={2}
+                  aria-label="Description"
                   value={itemForm.description}
                   onChange={(e) =>
                     setItemForm({ ...itemForm, description: e.target.value })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-border/80">
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddItem(false);
                     setEditingItem(null);
                   }}
-                  className="btn-secondary px-4 py-2 text-xs rounded-lg"
+                  className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
                 >
                   {t("Cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                  className="btn-primary text-xs px-4 py-2 rounded-lg font-semibold"
                 >
-                  {t("Save Item")}
+                  {saving
+                    ? t("Saving...")
+                    : editingItem
+                      ? t("Update Item")
+                      : t("Save Item")}
                 </button>
               </div>
             </form>
           </div>
-        </Modal>
+        </div>
       )}
 
-      {/* 2. New / Edit Category Modal */}
+      {/* MODAL 2: ADD / EDIT CATEGORY */}
       {(showAddCategory || editingCategory) && (
-        <Modal
-          onClose={() => {
-            setShowAddCategory(false);
-            setEditingCategory(null);
-          }}
-          titleId="category-modal-title"
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="category-modal-title" className="font-semibold text-lg">
-                {editingCategory ? t("Edit Category") : t("New Item Category")}
-              </h3>
-              <button
-                onClick={() => {
-                  setShowAddCategory(false);
-                  setEditingCategory(null);
-                }}
-                className="text-muted-foreground hover:text-foreground"
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {editingCategory ? t("Edit Category") : t("New Item Category")}
+            </h3>
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveCategory} className="space-y-4">
-              {error && (
-                <p role="alert" className="error">
-                  {t(error)}
-                </p>
-              )}
+                {t(error)}
+              </p>
+            )}
+            <form onSubmit={handleSaveCategory} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Category Name")} *
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Category Name")}
                 </label>
                 <input
                   type="text"
-                  required
                   aria-label={t("Category Name")}
+                  placeholder={t("e.g. Surgical Equipment")}
                   value={categoryForm.name}
                   onChange={(e) =>
                     setCategoryForm({ ...categoryForm, name: e.target.value })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  placeholder="e.g. Diagnostics Consumables"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
                   {t("Description")}
                 </label>
                 <textarea
                   rows={3}
-                  aria-label={t("Description")}
+                  aria-label="Description"
                   value={categoryForm.description}
                   onChange={(e) =>
                     setCategoryForm({
@@ -1457,115 +1896,123 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                       description: e.target.value,
                     })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-border/80">
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddCategory(false);
                     setEditingCategory(null);
                   }}
-                  className="btn-secondary px-4 py-2 text-xs rounded-lg"
+                  className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
                 >
                   {t("Cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                  className="btn-primary text-xs px-4 py-2 rounded-lg font-semibold"
                 >
-                  {t("Save Category")}
+                  {saving
+                    ? t("Saving...")
+                    : editingCategory
+                      ? t("Update Category")
+                      : t("Save Category")}
                 </button>
               </div>
             </form>
           </div>
-        </Modal>
+        </div>
       )}
 
-      {/* 3. Receive Stock Modal */}
+      {/* MODAL 3: RECEIVE NEW STOCK */}
       {showAddStock && (
-        <Modal
-          onClose={() => setShowAddStock(false)}
-          titleId="receive-stock-title"
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="receive-stock-title" className="font-semibold text-lg">
-                {t("Receive New Stock")}
-              </h3>
-              <button
-                onClick={() => setShowAddStock(false)}
-                className="text-muted-foreground hover:text-foreground"
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 max-h-[90vh] overflow-y-auto inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {t("Receive New Stock")}
+            </h3>
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveStockReceive} className="space-y-4">
-              {error && (
-                <p role="alert" className="error">
-                  {t(error)}
-                </p>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Category")}
-                  </label>
-                  <select
-                    value={stockForm.categoryId}
-                    onChange={(e) => {
-                      const newCatId = e.target.value;
-                      const catItems = items.filter(
-                        (i) => i.categoryId === newCatId,
-                      );
-                      setStockForm({
-                        ...stockForm,
-                        categoryId: newCatId,
-                        itemId: catItems[0]?.id || "",
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  >
-                    <option value="">{t("All Categories")}</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Item")} *
-                  </label>
-                  <select
-                    aria-label={t("Item")}
-                    value={stockForm.itemId || filteredStockItems[0]?.id || ""}
-                    onChange={(e) =>
-                      setStockForm({ ...stockForm, itemId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  >
-                    {filteredStockItems.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name} ({i.unit})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {t(error)}
+              </p>
+            )}
+            <form onSubmit={handleSaveStockReceive} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Category")}
+                </label>
+                <select
+                  aria-label={t("Category")}
+                  value={stockForm.categoryId}
+                  onChange={(e) => {
+                    const nextCat = e.target.value;
+                    setStockForm((prev) => ({
+                      ...prev,
+                      categoryId: nextCat,
+                      itemId: "",
+                    }));
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
+                >
+                  <option value="">{t("Select Category")}</option>
+                  {activeCategoriesList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Item")}
+                </label>
+                <select
+                  aria-label={t("Item")}
+                  value={stockForm.itemId}
+                  onChange={(e) =>
+                    setStockForm({ ...stockForm, itemId: e.target.value })
+                  }
+                  disabled={eligibleStockItems.length === 0}
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input disabled:opacity-50"
+                  required
+                >
+                  {eligibleStockItems.length === 0 ? (
+                    <option value="">{t("No items in this category")}</option>
+                  ) : (
+                    <>
+                      <option value="">{t("Select Item")}</option>
+                      {eligibleStockItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} ({t("Current:")}{" "}
+                          {item.balanceMilli / 1000} {item.unit})
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Quantity")} *
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Quantity Received")}
                   </label>
                   <input
                     type="number"
                     min={1}
-                    required
                     aria-label={t("Quantity")}
                     value={stockForm.quantity}
                     onChange={(e) =>
@@ -1574,12 +2021,13 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         quantity: Number(e.target.value),
                       })
                     }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Unit Cost (ETB)")}
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Unit Cost")} (ETB)
                   </label>
                   <input
                     type="number"
@@ -1593,210 +2041,262 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         unitCost: Number(e.target.value),
                       })
                     }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                    required
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
                     {t("Supplier")}
                   </label>
                   <input
                     type="text"
                     aria-label={t("Supplier")}
+                    placeholder="e.g. Ethiopian Pharma Supply"
                     value={stockForm.supplier}
                     onChange={(e) =>
                       setStockForm({ ...stockForm, supplier: e.target.value })
                     }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                    placeholder="e.g. Ethiopian Pharmaceuticals"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Store Name")}
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Store")}
                   </label>
                   <input
                     type="text"
                     aria-label={t("Store Name")}
                     value={stockForm.storeName}
                     onChange={(e) =>
-                      setStockForm({ ...stockForm, storeName: e.target.value })
+                      setStockForm({
+                        ...stockForm,
+                        storeName: e.target.value,
+                      })
                     }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Reference No")} *
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Reference No")}
                 </label>
                 <input
                   type="text"
-                  required
                   aria-label={t("Reference")}
+                  placeholder="PO-2026-001"
                   value={stockForm.reference}
                   onChange={(e) =>
                     setStockForm({ ...stockForm, reference: e.target.value })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg font-mono"
-                  placeholder="PO-2026-001"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
+                />
+              </div>
+
+              {/* Receipt File Attachment Upload */}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Receipt Attachment")}
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="btn-secondary text-xs px-3 py-1.5 rounded-lg border border-border cursor-pointer flex items-center gap-1.5 hover:bg-muted">
+                    <Upload className="w-3.5 h-3.5" />
+                    {uploadingReceipt ? t("Uploading...") : t("Upload Receipt")}
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handleReceiptUpload(file);
+                      }}
+                    />
+                  </label>
+                  {stockForm.attachmentUrl && (
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      {t("Attached")}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder="https://... (or upload above)"
+                  aria-label={t("Attachment URL")}
+                  value={stockForm.attachmentUrl}
+                  onChange={(e) =>
+                    setStockForm({
+                      ...stockForm,
+                      attachmentUrl: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-1.5 text-xs border border-border rounded-lg bg-background inventory-input mt-1.5 font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Reason")} *
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Reason / Notes")}
                 </label>
-                <input
-                  type="text"
-                  required
-                  aria-label={t("Reason")}
+                <textarea
+                  rows={2}
+                  aria-label="Reason"
                   value={stockForm.reason}
                   onChange={(e) =>
                     setStockForm({ ...stockForm, reason: e.target.value })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
                 />
               </div>
 
-              {/* Total Calculation Display */}
-              <div className="p-3 rounded-lg bg-muted/60 border border-border flex items-center justify-between text-xs font-mono">
-                <span className="text-muted-foreground">
-                  {t("Estimated Total")}:
-                </span>
-                <span className="font-bold text-foreground">
-                  {(
-                    Number(stockForm.quantity || 0) *
-                    Number(stockForm.unitCost || 0)
-                  ).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  ETB
-                </span>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-border/80">
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowAddStock(false)}
-                  className="btn-secondary px-4 py-2 text-xs rounded-lg"
+                  className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
                 >
                   {t("Cancel")}
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                  disabled={
+                    saving ||
+                    !stockForm.itemId ||
+                    eligibleStockItems.length === 0
+                  }
+                  className="btn-primary text-xs px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
                 >
-                  {t("Confirm Receive")}
+                  {saving ? t("Saving...") : t("Confirm Receive")}
                 </button>
               </div>
             </form>
           </div>
-        </Modal>
+        </div>
       )}
 
-      {/* 4. Issue Item Modal */}
+      {/* MODAL 4: ISSUE ITEM */}
       {showIssueItem && (
-        <Modal
-          onClose={() => setShowIssueItem(false)}
-          titleId="issue-item-title"
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="issue-item-title" className="font-semibold text-lg">
-                {t("Issue Item")}
-              </h3>
-              <button
-                onClick={() => setShowIssueItem(false)}
-                className="text-muted-foreground hover:text-foreground"
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 max-h-[90vh] overflow-y-auto inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {t("Issue Item to Staff")}
+            </h3>
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveIssue} className="space-y-4">
-              {error && (
-                <p role="alert" className="error">
-                  {t(error)}
-                </p>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Category")}
-                  </label>
-                  <select
-                    value={issueForm.categoryId}
-                    onChange={(e) => {
-                      const newCatId = e.target.value;
-                      const catItems = items.filter(
-                        (i) => i.categoryId === newCatId,
-                      );
-                      setIssueForm({
-                        ...issueForm,
-                        categoryId: newCatId,
-                        itemId: catItems[0]?.id || "",
-                      });
-                    }}
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  >
-                    <option value="">{t("All Categories")}</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Item")} *
-                  </label>
-                  <select
-                    aria-label={t("Item")}
-                    value={issueForm.itemId || filteredIssueItems[0]?.id || ""}
-                    onChange={(e) =>
-                      setIssueForm({ ...issueForm, itemId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  >
-                    {filteredIssueItems.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name} ({t("Available")}: {i.balanceMilli / 1000}{" "}
-                        {i.unit})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {t(error)}
+              </p>
+            )}
+            <form onSubmit={handleSaveIssue} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Category")}
+                </label>
+                <select
+                  aria-label={t("Category")}
+                  value={issueForm.categoryId}
+                  onChange={(e) => {
+                    const nextCat = e.target.value;
+                    setIssueForm((prev) => ({
+                      ...prev,
+                      categoryId: nextCat,
+                      itemId: "",
+                    }));
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
+                >
+                  <option value="">{t("Select Category")}</option>
+                  {activeCategoriesList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Live stock indicator */}
-              {selectedIssueItem && (
-                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs flex items-center justify-between">
-                  <span className="text-muted-foreground">
-                    {t("Available Quantity")}:
-                  </span>
-                  <span className="font-bold text-foreground">
-                    {(selectedIssueItem.balanceMilli / 1000).toLocaleString()}{" "}
-                    {selectedIssueItem.unit}
-                  </span>
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Item")}
+                </label>
+                <select
+                  aria-label={t("Item")}
+                  value={issueForm.itemId}
+                  onChange={(e) =>
+                    setIssueForm({ ...issueForm, itemId: e.target.value })
+                  }
+                  disabled={eligibleIssueItems.length === 0}
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input disabled:opacity-50"
+                  required
+                >
+                  {eligibleIssueItems.length === 0 ? (
+                    <option value="">{t("No items in this category")}</option>
+                  ) : (
+                    <>
+                      <option value="">{t("Select Item")}</option>
+                      {eligibleIssueItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} ({t("Available:")}{" "}
+                          {item.balanceMilli / 1000} {item.unit})
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+                {selectedIssueItem && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {t("Live balance:")}{" "}
+                    <strong className="text-foreground">
+                      {selectedIssueItem.balanceMilli / 1000}{" "}
+                      {selectedIssueItem.unit}
+                    </strong>
+                  </p>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Quantity to Issue")} *
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Department")}
+                  </label>
+                  <select
+                    aria-label={t("Department")}
+                    value={issueForm.department}
+                    onChange={(e) =>
+                      setIssueForm({
+                        ...issueForm,
+                        department: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  >
+                    {DEPARTMENTS.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {t(dept)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Quantity Issued")}
                   </label>
                   <input
                     type="number"
                     min={1}
-                    required
                     aria-label={t("Quantity to Issue")}
                     value={issueForm.quantity}
                     onChange={(e) =>
@@ -1805,23 +2305,27 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         quantity: Number(e.target.value),
                       })
                     }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                    required
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">
-                    {t("Recipient")} *
-                  </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Recipient Staff Member")}
+                </label>
+                <div className="space-y-1.5">
                   <input
-                    aria-label={t("Search staff")}
-                    placeholder={t("Filter staff...")}
+                    type="text"
                     value={recipientSearch}
                     onChange={(e) => setRecipientSearch(e.target.value)}
-                    className="w-full px-2 py-1 mb-1 text-xs bg-background border border-border rounded-md"
+                    aria-label={t("Search staff")}
+                    placeholder={t("Filter staff...")}
+                    className="w-full px-3 py-1.5 text-xs border border-border rounded-lg bg-background inventory-input"
                   />
                   <select
                     aria-label={t("Recipient")}
-                    required
                     value={issueForm.recipientId}
                     onChange={(e) =>
                       setIssueForm({
@@ -1829,149 +2333,170 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         recipientId: e.target.value,
                       })
                     }
-                    className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                    required
                   >
                     <option value="">{t("Select staff")}</option>
                     {recipients.map((user) => (
                       <option key={user.id} value={user.id}>
-                        {user.name} ({t(user.role)})
+                        {user.name} ({user.role}) - {user.id}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Issue Date")}
+                  </label>
+                  <input
+                    type="date"
+                    aria-label={t("Issued Date")}
+                    value={issueForm.issuedDate}
+                    onChange={(e) =>
+                      setIssueForm({
+                        ...issueForm,
+                        issuedDate: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                    {t("Return Due Date")}
+                  </label>
+                  <input
+                    type="date"
+                    aria-label={t("Return Due Date")}
+                    value={issueForm.returnDueDate}
+                    onChange={(e) =>
+                      setIssueForm({
+                        ...issueForm,
+                        returnDueDate: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Reason / Purpose")} *
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Reason / Clinical Notes")}
                 </label>
                 <textarea
                   rows={2}
-                  required
-                  aria-label={t("Reason")}
+                  aria-label="Reason"
                   value={issueForm.reason}
                   onChange={(e) =>
                     setIssueForm({ ...issueForm, reason: e.target.value })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-border/80">
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setShowIssueItem(false)}
-                  className="btn-secondary px-4 py-2 text-xs rounded-lg"
+                  className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
                 >
                   {t("Cancel")}
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                  disabled={
+                    saving ||
+                    !issueForm.itemId ||
+                    eligibleIssueItems.length === 0 ||
+                    !issueForm.recipientId
+                  }
+                  className="btn-primary text-xs px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
                 >
-                  {t("Confirm Issue")}
+                  {saving ? t("Saving...") : t("Confirm Issue")}
                 </button>
               </div>
             </form>
           </div>
-        </Modal>
+        </div>
       )}
 
-      {/* 5. Return Item Modal */}
+      {/* MODAL 5: RETURN ISSUED ITEM */}
       {returningIssue && (
-        <Modal
-          onClose={() => setReturningIssue(null)}
-          titleId="return-item-title"
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="return-item-title" className="font-semibold text-lg">
-                {t("Return Issued Item")}
-              </h3>
-              <button
-                onClick={() => setReturningIssue(null)}
-                className="text-muted-foreground hover:text-foreground"
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {t("Return Issued Item")}
+            </h3>
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
               >
-                <X className="w-5 h-5" />
-              </button>
+                {t(error)}
+              </p>
+            )}
+            <div className="p-3 bg-muted/40 rounded-xl space-y-1 text-xs">
+              <p>
+                {t("Item:")}{" "}
+                <strong className="text-foreground">
+                  {getItemName(returningIssue.itemId, returningIssue.itemName)}
+                </strong>
+              </p>
+              <p>
+                {t("Issued To:")}{" "}
+                <span className="text-foreground">
+                  {getRecipientDisplayName(returningIssue.recipientId)}
+                </span>
+              </p>
+              <p>
+                {t("Issued Quantity:")}{" "}
+                <span className="font-mono">
+                  {returningIssue.quantityMilli / 1000}{" "}
+                  {getItemUnit(returningIssue.itemId)}
+                </span>
+              </p>
+              <p>
+                {t("Already Returned:")}{" "}
+                <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                  {(returningIssue.returnedMilli || 0) / 1000}{" "}
+                  {getItemUnit(returningIssue.itemId)}
+                </span>
+              </p>
+              <p>
+                {t("Remaining Due:")}{" "}
+                <strong className="font-mono text-amber-600 dark:text-amber-400">
+                  {(returningIssue.quantityMilli -
+                    (returningIssue.returnedMilli || 0)) /
+                    1000}{" "}
+                  {getItemUnit(returningIssue.itemId)}
+                </strong>
+              </p>
             </div>
-            <form onSubmit={handleSaveReturn} className="space-y-4">
-              {error && (
-                <p role="alert" className="error">
-                  {t(error)}
-                </p>
-              )}
 
-              {/* Issue Summary Box */}
-              <div className="p-3 rounded-lg bg-muted/60 border border-border text-xs space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t("Item")}:</span>
-                  <span className="font-semibold text-foreground">
-                    {getItemName(returningIssue.itemId)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    {t("Issued To")}:
-                  </span>
-                  <span className="font-mono text-foreground">
-                    {returningIssue.recipientId || "-"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    {t("Quantity Issued")}:
-                  </span>
-                  <span className="font-mono font-medium text-foreground">
-                    {(returningIssue.quantityMilli / 1000).toLocaleString()}{" "}
-                    {getItemUnit(returningIssue.itemId)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    {t("Already Returned")}:
-                  </span>
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">
-                    {(
-                      (returningIssue.returnedMilli || 0) / 1000
-                    ).toLocaleString()}{" "}
-                    {getItemUnit(returningIssue.itemId)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-border/60 pt-1.5">
-                  <span className="text-muted-foreground font-medium">
-                    {t("Remaining Returnable")}:
-                  </span>
-                  <span className="font-mono font-bold text-foreground">
-                    {(
-                      Math.max(
-                        0,
-                        returningIssue.quantityMilli -
-                          (returningIssue.returnedMilli || 0),
-                      ) / 1000
-                    ).toLocaleString()}{" "}
-                    {getItemUnit(returningIssue.itemId)}
-                  </span>
-                </div>
-              </div>
-
+            <form onSubmit={handleSaveReturn} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Quantity to Return")} *
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Quantity to Return")}
                 </label>
                 <input
                   type="number"
                   min={1}
-                  max={
-                    Math.max(
-                      0,
-                      returningIssue.quantityMilli -
-                        (returningIssue.returnedMilli || 0),
-                    ) / 1000
-                  }
-                  required
                   aria-label={t("Quantity to Return")}
+                  max={
+                    (returningIssue.quantityMilli -
+                      (returningIssue.returnedMilli || 0)) /
+                    1000
+                  }
                   value={returnForm.quantity}
                   onChange={(e) =>
                     setReturnForm({
@@ -1979,7 +2504,8 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                       quantity: Number(e.target.value),
                     })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
                 />
               </div>
 
@@ -1987,375 +2513,462 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 <input
                   type="checkbox"
                   id="restock-checkbox"
-                  aria-label={t("Restock to Inventory")}
                   checked={returnForm.restock}
                   onChange={(e) =>
-                    setReturnForm({ ...returnForm, restock: e.target.checked })
+                    setReturnForm({
+                      ...returnForm,
+                      restock: e.target.checked,
+                    })
                   }
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  className="rounded-sm border-border text-primary"
                 />
                 <label
                   htmlFor="restock-checkbox"
                   className="text-xs font-medium text-foreground cursor-pointer"
                 >
-                  {t("Restock to Inventory")}{" "}
-                  <span className="text-muted-foreground font-normal">
-                    ({t("increases available balance")})
-                  </span>
+                  {t("Restock to Inventory")} (
+                  {t("Check if item is clean & reusable")})
                 </label>
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1">
-                  {t("Return Reason")} *
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Return Reason")}
                 </label>
                 <textarea
                   rows={2}
-                  required
-                  aria-label={t("Return Reason")}
+                  aria-label="Return Reason"
                   value={returnForm.reason}
                   onChange={(e) =>
                     setReturnForm({ ...returnForm, reason: e.target.value })
                   }
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg"
-                  placeholder="e.g. Unused clinical supply returned"
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-border/80">
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setReturningIssue(null)}
-                  className="btn-secondary px-4 py-2 text-xs rounded-lg"
+                  className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
                 >
                   {t("Cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="btn-primary px-4 py-2 text-xs rounded-lg"
+                  className="btn-primary text-xs px-4 py-2 rounded-lg font-semibold"
                 >
-                  {t("Confirm Return")}
+                  {saving ? t("Saving...") : t("Confirm Return")}
                 </button>
               </div>
             </form>
           </div>
-        </Modal>
+        </div>
       )}
 
-      {/* 6. Item Details Modal */}
-      {viewingItem && (
-        <Modal
-          onClose={() => setViewingItem(null)}
-          titleId="item-details-title"
+      {/* MODAL 6: VOID STOCK RECEIPT */}
+      {voidingReceipt && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="item-details-title" className="font-semibold text-lg">
-                {t("Item Details")}
-              </h3>
-              <button
-                onClick={() => setViewingItem(null)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Item Name")}:</span>
-                <span className="font-semibold text-foreground">
-                  {viewingItem.name}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Category")}:</span>
-                <span className="text-foreground">
-                  {getCategoryName(viewingItem.categoryId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Unit")}:</span>
-                <span className="font-mono text-foreground">
-                  {viewingItem.unit}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Available Quantity")}:
-                </span>
-                <span className="font-mono font-bold text-foreground">
-                  {(viewingItem.balanceMilli / 1000).toLocaleString()}{" "}
-                  {viewingItem.unit}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Reorder Level")}:
-                </span>
-                <span className="font-mono text-muted-foreground">
-                  {(viewingItem.reorderMilli / 1000).toLocaleString()}{" "}
-                  {viewingItem.unit}
-                </span>
-              </div>
-              <div className="border-b border-border/50 pb-2">
-                <span className="text-muted-foreground block mb-1">
-                  {t("Description")}:
-                </span>
-                <p className="text-xs text-foreground bg-muted/40 p-2 rounded-lg">
-                  {viewingItem.description || "-"}
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setViewingItem(null)}
-                className="btn-secondary px-4 py-2 text-xs rounded-lg"
-              >
-                {t("Close")}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* 7. Stock Receipt Details Modal */}
-      {viewingMovement && (
-        <Modal
-          onClose={() => setViewingMovement(null)}
-          titleId="stock-details-title"
-        >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="stock-details-title" className="font-semibold text-lg">
-                {t("Stock Details")}
-              </h3>
-              <button
-                onClick={() => setViewingMovement(null)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Item")}:</span>
-                <span className="font-semibold text-foreground">
-                  {getItemName(viewingMovement.itemId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Category")}:</span>
-                <span className="text-foreground">
-                  {getItemCategory(viewingMovement.itemId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Reference No")}:
-                </span>
-                <span className="font-mono font-semibold text-foreground">
-                  {viewingMovement.reference || "-"}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Supplier")}:</span>
-                <span className="text-foreground">
-                  {viewingMovement.supplier || "-"}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Store Name")}:
-                </span>
-                <span className="text-foreground">
-                  {viewingMovement.storeName || "-"}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Quantity Received")}:
-                </span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                  +{(viewingMovement.quantityMilli / 1000).toLocaleString()}{" "}
-                  {getItemUnit(viewingMovement.itemId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Total Cost")}:
-                </span>
-                <span className="font-mono text-foreground">
-                  {viewingMovement.costMinor
-                    ? `${(viewingMovement.costMinor / 100).toLocaleString(
-                        undefined,
-                        { minimumFractionDigits: 2 },
-                      )} ETB`
-                    : "-"}
-                </span>
-              </div>
-              <div className="border-b border-border/50 pb-2">
-                <span className="text-muted-foreground block mb-1">
-                  {t("Reason")}:
-                </span>
-                <p className="text-xs text-foreground bg-muted/40 p-2 rounded-lg">
-                  {viewingMovement.reason || "-"}
-                </p>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t("Date")}:</span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(viewingMovement.createdAt).toLocaleString()}
-                </span>
-              </div>
-            </div>
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setViewingMovement(null)}
-                className="btn-secondary px-4 py-2 text-xs rounded-lg"
-              >
-                {t("Close")}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* 8. Issue Details Modal */}
-      {viewingIssue && (
-        <Modal
-          onClose={() => setViewingIssue(null)}
-          titleId="issue-details-title"
-        >
-          <div className="p-6 space-y-4 max-w-lg w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center justify-between border-b border-border/80 pb-3">
-              <h3 id="issue-details-title" className="font-semibold text-lg">
-                {t("Issue Details")}
-              </h3>
-              <button
-                onClick={() => setViewingIssue(null)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Item")}:</span>
-                <span className="font-semibold text-foreground">
-                  {getItemName(viewingIssue.itemId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Category")}:</span>
-                <span className="text-foreground">
-                  {getItemCategory(viewingIssue.itemId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">{t("Issued To")}:</span>
-                <span className="font-mono text-foreground">
-                  {viewingIssue.recipientId || "-"}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Quantity Issued")}:
-                </span>
-                <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-                  -{(viewingIssue.quantityMilli / 1000).toLocaleString()}{" "}
-                  {getItemUnit(viewingIssue.itemId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Quantity Returned")}:
-                </span>
-                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-medium">
-                  {((viewingIssue.returnedMilli || 0) / 1000).toLocaleString()}{" "}
-                  {getItemUnit(viewingIssue.itemId)}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-border/50 pb-2">
-                <span className="text-muted-foreground">
-                  {t("Remaining Returnable")}:
-                </span>
-                <span className="font-mono font-bold text-foreground">
-                  {(
-                    Math.max(
-                      0,
-                      viewingIssue.quantityMilli -
-                        (viewingIssue.returnedMilli || 0),
-                    ) / 1000
-                  ).toLocaleString()}{" "}
-                  {getItemUnit(viewingIssue.itemId)}
-                </span>
-              </div>
-              <div className="border-b border-border/50 pb-2">
-                <span className="text-muted-foreground block mb-1">
-                  {t("Reason")}:
-                </span>
-                <p className="text-xs text-foreground bg-muted/40 p-2 rounded-lg">
-                  {viewingIssue.reason || "-"}
-                </p>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">
-                  {t("Issued Date")}:
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(viewingIssue.createdAt).toLocaleString()}
-                </span>
-              </div>
-            </div>
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setViewingIssue(null)}
-                className="btn-secondary px-4 py-2 text-xs rounded-lg"
-              >
-                {t("Close")}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* 9. Delete Confirmation Modal */}
-      {deleteConfirm && (
-        <Modal
-          onClose={() => setDeleteConfirm(null)}
-          titleId="delete-confirm-title"
-        >
-          <div className="p-6 space-y-4 max-w-md w-full bg-card rounded-2xl shadow-xl">
-            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
-              <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-              <h3 id="delete-confirm-title" className="font-semibold text-lg">
-                {deleteConfirm.type === "category"
-                  ? t("Delete Category")
-                  : t("Delete Item")}
-              </h3>
-            </div>
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {t("Void Stock Receipt")}
+            </h3>
             {error && (
-              <p role="alert" className="error">
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
+              >
                 {t(error)}
               </p>
             )}
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
+              {t("Are you sure you want to void this stock receipt?")}{" "}
+              {t(
+                "This will atomically deduct the received quantity from available stock and record an audited writeoff.",
+              )}
+            </p>
+            <div className="p-3 bg-muted/40 rounded-xl space-y-1 text-xs">
+              <p>
+                {t("Item:")}{" "}
+                <strong className="text-foreground">
+                  {getItemName(voidingReceipt.itemId, voidingReceipt.itemName)}
+                </strong>
+              </p>
+              <p>
+                {t("Reference No:")}{" "}
+                <span className="font-mono font-semibold">
+                  {voidingReceipt.reference || "-"}
+                </span>
+              </p>
+              <p>
+                {t("Quantity Received:")}{" "}
+                <span className="font-mono">
+                  {voidingReceipt.quantityMilli / 1000}{" "}
+                  {getItemUnit(voidingReceipt.itemId)}
+                </span>
+              </p>
+            </div>
+            <form onSubmit={handleConfirmVoidReceipt} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Reason for voiding")}
+                </label>
+                <textarea
+                  rows={2}
+                  aria-label="Void Reason"
+                  placeholder={t("e.g. Data entry error / returned to vendor")}
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setVoidingReceipt(null)}
+                  className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
+                >
+                  {t("Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !voidReason.trim()}
+                  className="btn-primary bg-rose-600 hover:bg-rose-700 text-xs px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                >
+                  {saving ? t("Saving...") : t("Confirm Void")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 7: VOID ISSUED ITEM */}
+      {voidingIssue && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+        >
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {t("Void Issued Item")}
+            </h3>
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
+              >
+                {t(error)}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {t("Are you sure you want to void this issued item?")}{" "}
+              {t(
+                "This will atomically restock the remaining issued quantity and record an audited void reversal.",
+              )}
+            </p>
+            <div className="p-3 bg-muted/40 rounded-xl space-y-1 text-xs">
+              <p>
+                {t("Item:")}{" "}
+                <strong className="text-foreground">
+                  {getItemName(voidingIssue.itemId, voidingIssue.itemName)}
+                </strong>
+              </p>
+              <p>
+                {t("Issued To:")}{" "}
+                <span className="text-foreground">
+                  {getRecipientDisplayName(voidingIssue.recipientId)}
+                </span>
+              </p>
+              <p>
+                {t("Quantity Issued:")}{" "}
+                <span className="font-mono">
+                  {voidingIssue.quantityMilli / 1000}{" "}
+                  {getItemUnit(voidingIssue.itemId)}
+                </span>
+              </p>
+            </div>
+            <form onSubmit={handleConfirmVoidIssue} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {t("Reason for voiding")}
+                </label>
+                <textarea
+                  rows={2}
+                  aria-label="Void Reason"
+                  placeholder={t("e.g. Issue cancelled by doctor")}
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-border rounded-lg bg-background inventory-input"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setVoidingIssue(null)}
+                  className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
+                >
+                  {t("Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !voidReason.trim()}
+                  className="btn-primary bg-rose-600 hover:bg-rose-700 text-xs px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                >
+                  {saving ? t("Saving...") : t("Confirm Void")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 8: VIEW ITEM DETAILS */}
+      {viewingItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+        >
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-lg w-full shadow-xl space-y-4 max-h-[90vh] overflow-y-auto inventory-modal-bg">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  {viewingItem.name}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {getCategoryName(viewingItem.categoryId)}
+                </p>
+              </div>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono font-medium">
+                {viewingItem.unit}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-3 bg-muted/40 rounded-xl text-xs">
+              <div>
+                <span className="text-muted-foreground block">
+                  {t("Available Stock:")}
+                </span>
+                <strong className="text-base text-foreground font-mono">
+                  {(viewingItem.balanceMilli / 1000).toLocaleString()}{" "}
+                  {viewingItem.unit}
+                </strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground block">
+                  {t("Reorder Level:")}
+                </span>
+                <strong className="text-base text-muted-foreground font-mono">
+                  {(viewingItem.reorderMilli / 1000).toLocaleString()}{" "}
+                  {viewingItem.unit}
+                </strong>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-semibold text-foreground mb-1">
+                {t("Description")}
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {viewingItem.description || t("No description provided.")}
+              </p>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setViewingItem(null)}
+                className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
+              >
+                {t("Close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 9: VIEW MOVEMENT DETAILS */}
+      {(viewingMovement || viewingIssue) && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+        >
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4 inventory-modal-bg">
+            {(() => {
+              const m = viewingMovement || viewingIssue!;
+              return (
+                <>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-foreground">
+                        {getItemName(m.itemId, m.itemName)}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {getItemCategory(m.itemId)}
+                      </p>
+                    </div>
+                    <span className="uppercase text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-muted text-foreground">
+                      {m.kind}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 p-3 bg-muted/40 rounded-xl text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("Quantity:")}
+                      </span>
+                      <strong className="font-mono">
+                        {(m.quantityMilli / 1000).toLocaleString()}{" "}
+                        {getItemUnit(m.itemId)}
+                      </strong>
+                    </div>
+                    {m.supplier && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("Supplier:")}
+                        </span>
+                        <span>{m.supplier}</span>
+                      </div>
+                    )}
+                    {m.storeName && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("Store:")}
+                        </span>
+                        <span>{m.storeName}</span>
+                      </div>
+                    )}
+                    {m.recipientId && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("Recipient:")}
+                        </span>
+                        <span>{getRecipientDisplayName(m.recipientId)}</span>
+                      </div>
+                    )}
+                    {m.department && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("Department:")}
+                        </span>
+                        <span>{t(m.department)}</span>
+                      </div>
+                    )}
+                    {m.reference && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("Reference No:")}
+                        </span>
+                        <span className="font-mono">{m.reference}</span>
+                      </div>
+                    )}
+                    {m.costMinor ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {t("Cost:")}
+                        </span>
+                        <span className="font-mono">
+                          {(m.costMinor / 100).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          ETB
+                        </span>
+                      </div>
+                    ) : null}
+                    {m.attachmentUrl && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">
+                          {t("Receipt Attachment:")}
+                        </span>
+                        <a
+                          href={m.attachmentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline font-medium inline-flex items-center gap-1"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          {t("View Receipt")}
+                        </a>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {t("Date:")}
+                      </span>
+                      <span>{new Date(m.createdAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-semibold text-foreground mb-1">
+                      {t("Reason / Notes")}
+                    </h4>
+                    <p className="text-xs text-muted-foreground">{m.reason}</p>
+                  </div>
+
+                  <div className="flex justify-end pt-2 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingMovement(null);
+                        setViewingIssue(null);
+                      }}
+                      className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
+                    >
+                      {t("Close")}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 10: DELETE CONFIRMATION */}
+      {deleteConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+        >
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 inventory-modal-bg">
+            <h3 className="text-base font-bold text-foreground">
+              {deleteConfirm.type === "category"
+                ? t("Delete Category")
+                : t("Delete Item")}
+            </h3>
+            {error && (
+              <p
+                role="alert"
+                className="text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg error"
+              >
+                {t(error)}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
               {deleteConfirm.type === "category"
                 ? t("Are you sure you want to delete this category?")
-                : t("Are you sure you want to delete this item?")}
+                : t("Are you sure you want to delete this item?")}{" "}
+              <strong className="text-foreground">{deleteConfirm.name}</strong>
             </p>
-            <p className="font-semibold text-sm text-foreground bg-muted/40 p-2.5 rounded-lg font-mono">
-              {deleteConfirm.name}
-            </p>
-            <div className="flex justify-end gap-2 pt-3 border-t border-border/80">
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
               <button
                 type="button"
                 onClick={() => setDeleteConfirm(null)}
-                className="btn-secondary px-4 py-2 text-xs rounded-lg"
+                className="btn-secondary text-xs px-4 py-2 rounded-lg border border-border"
               >
                 {t("Cancel")}
               </button>
@@ -2365,14 +2978,36 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 onClick={() =>
                   handleDelete(deleteConfirm.type, deleteConfirm.id)
                 }
-                className="btn-danger px-4 py-2 text-xs rounded-lg bg-red-600 text-white hover:bg-red-700"
+                className="btn-primary bg-rose-600 hover:bg-rose-700 text-xs px-4 py-2 rounded-lg font-semibold"
               >
-                {t("Confirm Delete")}
+                {saving ? t("Deleting...") : t("Confirm Delete")}
               </button>
             </div>
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   );
+}
+
+async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = path.startsWith("http")
+    ? path
+    : `/api/hms/${path.replace(/^\/+/, "")}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      msg = body.error || body.message || msg;
+    } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
 }
