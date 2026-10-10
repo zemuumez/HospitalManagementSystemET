@@ -98,7 +98,29 @@ Following the independent review (`INVENTORY-CORRECTIONS-REVIEW-2026-10-10.md` o
 
 ---
 
-## 5. UI & Localization Parity
+## 5. Final Review Remediation (F1–F3)
+
+Following the final review (`INVENTORY-FINAL-REVIEW-2026-10-11.md` on `origin/codex/inventory-final-review`), three remaining integrity blockers were remediated and verified:
+
+- **F1 (Database Upgrades & Dedicated Migration 055)**:
+  - Reverted `054_inventory_parity.sql` to its exact original state so that existing databases that already executed 054 are not skipped.
+  - Added dedicated migration `055_inventory_void_and_ledger_order.sql` to add `void_receipt` kind check constraints, the unique partial index `inventory_movement_void_receipt`, `ledger_seq`, and `balance_after_milli` columns.
+  - Existing database movements are backfilled deterministically during migration with trigger protection (`DISABLE TRIGGER ... ENABLE TRIGGER`), ensuring full forward and upgrade compatibility.
+
+- **F2 (Deterministic Per-Item Ledger Order & Consumption Protection)**:
+  - Replaced start-time `created_at` window calculations with deterministic monotonic per-item `ledger_seq` and serialized `balance_after_milli`, assigned under the item's `SELECT ... FOR UPDATE` lock.
+  - Historical consumption check calculates `MIN(balance_after_milli) WHERE item_id = $1 AND ledger_seq >= origSeq`.
+  - Verified against the witness sequence: Transaction B begins at t1, Issue C begins at t2 (t2 > t1) and consumes stock, and B replenishes stock. Stored start-time order would appear unconsumed (100), but actual serialized ledger minimum is 50. Voiding Receipt A is cleanly rejected with `409 Conflict`.
+  - Handled timestamp ties deterministically (receipts precede issues if timestamps tie).
+
+- **F3 (Aged Private Operational Upload Lifecycle & Boundaries)**:
+  - Updated `CleanupAbandonedAttachments` in `cms_settings.go` to include eligible non-clinical private operational attachments (`patient_id IS NULL AND encounter_id IS NULL`).
+  - Fixed sub-second duration truncation in `CleanupAbandonedAttachments` so non-zero test intervals do not fall back to 24 hours.
+  - Verified lifecycle boundaries: aged unreferenced private uploads (48h old) are deleted; recent pending uploads (<24h old) are retained; aged referenced private receipts (48h old) are retained; and clinical records (`patient_id != nil`) are strictly preserved.
+
+---
+
+## 6. UI & Localization Parity
 
 - **Unified 4-Tab Workspace (`inventory-workspace.tsx`)**:
   - `items`: Item register, live balance badges (`In Stock`, `Low Stock`, `Out of Stock`), category filtering, search, view modal with movement history, edit modal, delete protection.
@@ -114,19 +136,19 @@ Following the independent review (`INVENTORY-CORRECTIONS-REVIEW-2026-10-10.md` o
 
 ---
 
-## 6. Verification Results
+## 7. Verification Results
 
-### 6.1 Quality Gates
+### 7.1 Quality Gates
 
 | Suite / Gate | Command | Result |
 | :--- | :--- | :--- |
-| **Go Isolated Database Tests** | `go test ./...` in `services/api` | **PASSED** (100% passing across adapters/postgres, adapters/httpapi, delivery, domain, stripe, privatefiles) |
+| **Go Isolated Database Tests** | `go test ./...` in `services/api` | **PASSED** (100% passing across adapters/postgres, adapters/httpapi, delivery, domain, stripe, privatefiles, including F1, F2, F3 regressions) |
 | **Frontend Typecheck** | `npm run typecheck` | **PASSED** (0 errors) |
 | **Code Formatting** | `npm run format:check` | **PASSED** (100% clean Prettier) |
 | **Frontend Unit Tests** | `npm test` | **PASSED** (8/8 unit tests passed, including translation completeness) |
 | **Isolated Inventory Browser Suite** | `npm run test:inventory` | **PASSED** (23/23 journeys passed, 0 failures, exit code 0) |
 
-### 6.2 Browser Suite Journeys (23/23 Passed)
+### 7.2 Browser Suite Journeys (23/23 Passed)
 
 1. `Journey 1`: Admin lands on Inventory workspace with clean 4-tab interface.
 2. `Journey 2`: Empty database state verified without hardcoded mocks.
@@ -149,12 +171,12 @@ Following the independent review (`INVENTORY-CORRECTIONS-REVIEW-2026-10-10.md` o
 19. `Journey 19`: Theme & Amharic Localization parity (Finding I5 regression) verifying real `.legacy-dark` computed card styling, high-contrast tab navigation, and complete Amharic controls.
 20. `Journey 20`: Findings I1 and R3 regression — full catalog pagination across 505 items in modal selectors; server-backed returnStatus filtering before pagination with page reset; discoverability of older outstanding issues behind returned issues.
 21. `Journey 21`: Finding I2 regression — empty category disables submission and clears child selection; prevents unintended stock mutations.
-22. `Journey 22`: Findings I3, R1, and R2 regression — real file attachment upload/download bytes; direct attachment retirement conflict (409); aged cleanup preservation; shared settings asset displacement preservation; rejection of clinical/missing tokens; durable linked `void_receipt` reversal with `original_id`; UI voided badge and disabled buttons; repeated void rejection (409); independent voiding of multiple receipts on the same item; and intervening consumption protection across subsequent replenishment (409).
+22. `Journey 22`: Findings I3, R1, R2, and F3 regression — real file attachment upload/download bytes; direct attachment retirement conflict (409); aged cleanup preservation of bound receipts while deleting aged abandoned private uploads; shared settings asset displacement preservation; rejection of clinical/missing tokens; durable linked `void_receipt` reversal with `original_id`; UI voided badge and disabled buttons; repeated void rejection (409); independent voiding of multiple receipts on the same item; and intervening consumption protection across subsequent replenishment (409).
 23. `Journey 23`: Finding I4 regression — fractional (1500 milli = 1.5 units) and zero (0 milli = 0 units) reorder thresholds preserved without rounding drift.
 
 ---
 
-## 7. Visual Evidence
+## 8. Visual Evidence
 
 The following authentic screenshots were captured during isolated browser execution:
 
@@ -174,7 +196,7 @@ The following authentic screenshots were captured during isolated browser execut
 
 ---
 
-## 8. Remaining Limitations & Exclusions
+## 9. Remaining Limitations & Exclusions
 
 - **Standalone Purchase Orders Aggregate**: Basic inventory tracks stock receipts (`item-stocks`) and issues (`issued-items`). Multi-step procurement approval hierarchies and purchase order contracts belong to future procurement modules and are not part of the inventory workspace contract.
 - **Lot Number & Supplier-Contact Tracking**: The inspected movement contract does not include separate lot expiration registers or supplier contact books; supplier name and store name are captured as transaction metadata.

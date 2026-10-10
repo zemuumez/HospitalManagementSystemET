@@ -291,16 +291,91 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		if !errors.Is(err, domain.ErrInUse) {
 			t.Fatalf("expected ErrInUse for receipt-referenced attachment, got %v", err)
 		}
-		// 6. Cleanup preservation: CleanupAbandonedAttachments must NOT delete bound receipt attachment
-		cleaned, err := store.CleanupAbandonedAttachments(ctx, a, time.Nanosecond)
+		// 6. F3: Aged private upload lifecycle, reference preservation, and clinical protection
+		// Aged unreferenced private upload (created 48h ago)
+		attAgedUnref, err := store.SaveAttachment(ctx, a, "11112222333344445555666677778888", domain.CreateSecureAttachmentInput{
+			FileName: "abandoned-receipt.pdf", MimeType: "application/pdf", FileSizeBytes: 1024,
+			StoragePath: "/storage/abandoned-receipt.pdf", Sha256Hash: "1111222233334444555566667777888811112222333344445555666677778888",
+			IsPublic: false,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, err := db.Exec(ctx, `UPDATE secure_attachment SET created_at = clock_timestamp() - interval '48 hours' WHERE token = $1`, attAgedUnref.Token); err != nil {
+			t.Fatal(err)
+		}
+
+		// Recent pending private upload (created recently)
+		attRecent, err := store.SaveAttachment(ctx, a, "22223333444455556666777788889999", domain.CreateSecureAttachmentInput{
+			FileName: "recent-receipt.pdf", MimeType: "application/pdf", FileSizeBytes: 1024,
+			StoragePath: "/storage/recent-receipt.pdf", Sha256Hash: "2222333344445555666677778888999922223333444455556666777788889999",
+			IsPublic: false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Aged referenced private receipt (created 48h ago, referenced by receipt)
+		if _, err := db.Exec(ctx, `UPDATE secure_attachment SET created_at = clock_timestamp() - interval '48 hours' WHERE token = $1`, attReceipt.Token); err != nil {
+			t.Fatal(err)
+		}
+
+		// Aged clinical private attachment (created 48h ago, patient attached)
+		var testPatID string
+		err = db.QueryRow(ctx, `SELECT id FROM patient LIMIT 1`).Scan(&testPatID)
+		if err != nil {
+			_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, gender, birth_date) VALUES('Test', 'Patient', 'male', '1990-01-01') RETURNING id`).Scan(&testPatID)
+		}
+		attClinToken := "55556666777788889999000011112222"
+		_, err = db.Exec(ctx, `
+			INSERT INTO secure_attachment(token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, patient_id, created_at)
+			VALUES($1, 'clinical-record.pdf', 'application/pdf', 1024, '/storage/clinical-record.pdf', '5555666677778888999900001111222255556666777788889999000011112222', $2, false, $3::uuid, clock_timestamp() - interval '48 hours')
+		`, attClinToken, a.ID, testPatID)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Execute cleanup with 24 hours threshold
+		cleaned, err := store.CleanupAbandonedAttachments(ctx, a, 24*time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// 1. Aged unreferenced private upload MUST be removed
+		var agedUnrefExists, recentExists, agedRefExists, clinExists bool
+		_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token=$1)`, attAgedUnref.Token).Scan(&agedUnrefExists)
+		if agedUnrefExists {
+			t.Fatalf("expected aged unreferenced private upload %s to be deleted by cleanup", attAgedUnref.Token)
+		}
+		foundRemoved := false
 		for _, p := range cleaned {
-			if p == attReceipt.StoragePath {
-				t.Fatalf("cleanup removed referenced receipt attachment: %s", p)
+			if p == attAgedUnref.StoragePath {
+				foundRemoved = true
+				break
 			}
 		}
+		if !foundRemoved {
+			t.Fatalf("expected storage path %s in removed paths, got %v", attAgedUnref.StoragePath, cleaned)
+		}
+
+		// 2. Recent pending private upload MUST be preserved
+		_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token=$1)`, attRecent.Token).Scan(&recentExists)
+		if !recentExists {
+			t.Fatalf("expected recent pending private upload %s to be retained", attRecent.Token)
+		}
+
+		// 3. Aged referenced receipt attachment MUST be preserved
+		_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token=$1)`, attReceipt.Token).Scan(&agedRefExists)
+		if !agedRefExists {
+			t.Fatalf("expected aged referenced receipt attachment %s to be retained", attReceipt.Token)
+		}
+
+		// 4. Clinical attachment MUST be preserved
+		_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token=$1)`, attClinToken).Scan(&clinExists)
+		if !clinExists {
+			t.Fatalf("expected clinical attachment %s to be retained", attClinToken)
+		}
+
 		// 7. Shared settings reference: if displaced from general settings, still preserved by receipt
 		attShared, err := store.SaveAttachment(ctx, a, "44445555666677778888999900001111", domain.CreateSecureAttachmentInput{
 			FileName: "hospital-seal.png", MimeType: "image/png", FileSizeBytes: 2048, StoragePath: "/storage/hospital-seal.png",
@@ -433,6 +508,159 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 		if voidC.DeltaMilli != -100000 {
 			t.Fatalf("invalid delta for void C: %d", voidC.DeltaMilli)
+		}
+	})
+
+	t.Run("F2: transaction-start vs lock-acquisition ordering and timestamp ties", func(t *testing.T) {
+		orderItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{
+			CategoryID: category.ID, Name: "Order witness item", Unit: "vial", Active: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// 1. Receipt A adds 100 units (100000 milli).
+		recA, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: orderItem.ID, Kind: "receive", QuantityMilli: 100000, Reference: "REC-A-ORDER", Reason: "Batch A witness",
+		}, "key-order-rec-a")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// 2. Controlled concurrent witness:
+		// Transaction B begins at t1, but does NOT obtain item lock yet.
+		// Transaction C begins at t2 (t2 > t1), acquires item lock, and issues 50 units (reducing balance to 50 units).
+		// Then Transaction B acquires item lock, and replenishes 100 units (increasing balance to 150 units).
+		txB, err := db.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer txB.Rollback(ctx)
+
+		time.Sleep(10 * time.Millisecond)
+
+		// Execute Issue C in a separate transaction (which acquires item lock first and commits)
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: orderItem.ID, Kind: "issue", QuantityMilli: 50000, RecipientID: actors[1].ID, Reason: "Issue C intermediate consumption",
+		}, "key-order-issue-c")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Now txB completes replenishment of 100 units under its earlier started transaction
+		var curBalB, nextSeqB int64
+		_ = txB.QueryRow(ctx, `SELECT balance_milli FROM inventory_item WHERE id=$1 FOR UPDATE`, orderItem.ID).Scan(&curBalB)
+		_ = txB.QueryRow(ctx, `SELECT COALESCE(MAX(ledger_seq), 0) + 1 FROM inventory_movement WHERE item_id=$1`, orderItem.ID).Scan(&nextSeqB)
+		var bID string
+		err = txB.QueryRow(ctx, `
+			INSERT INTO inventory_movement(item_id, kind, quantity_milli, delta_milli, supplier, store_name, reference, cost_minor, restock, reason, actor_id, request_key, request_hash, attachment_url, issued_date, return_due_date, issued_by, department, ledger_seq, balance_after_milli)
+			VALUES($1, 'receive', 100000, 100000, '', '', 'REC-B-REPLENISH', 0, false, 'Replenishment B', $2, 'key-order-rec-b', 'hash-b', '', '', '', '', '', $3, $4)
+			RETURNING id
+		`, orderItem.ID, a.ID, nextSeqB, curBalB+100000).Scan(&bID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = txB.Exec(ctx, `UPDATE inventory_item SET balance_milli = balance_milli + 100000, version = version + 1 WHERE id = $1`, orderItem.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := txB.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Current item balance is now 150000 milli (150 units >= 100 units).
+		// However, because Issue C intervened, the running balance dropped to 50000 milli.
+		// Attempting to void Receipt A (100 units) MUST FAIL with ErrConflict!
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: orderItem.ID, Kind: "void_receipt", OriginalID: recA.ID, QuantityMilli: 100000, Reason: "Void A despite intervening consumption",
+		}, "key-order-void-a-attempt")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict voiding Receipt A after intervening consumption (witness test), got %v", err)
+		}
+
+		// 3. Timestamp ties regression:
+		tieItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{
+			CategoryID: category.ID, Name: "Timestamp ties item", Unit: "ampoule", Active: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		recTie, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: tieItem.ID, Kind: "receive", QuantityMilli: 100000, Reference: "REC-TIE-1", Reason: "Tie test receipt",
+		}, "key-tie-rec-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: tieItem.ID, Kind: "issue", QuantityMilli: 60000, RecipientID: actors[1].ID, Reason: "Tie test issue",
+		}, "key-tie-issue-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Force identical created_at on all movements of tieItem
+		_, _ = db.Exec(ctx, `ALTER TABLE inventory_movement DISABLE TRIGGER immutable_inventory_movement`)
+		_, err = db.Exec(ctx, `UPDATE inventory_movement SET created_at = '2026-10-10 12:00:00+00' WHERE item_id = $1`, tieItem.ID)
+		_, _ = db.Exec(ctx, `ALTER TABLE inventory_movement ENABLE TRIGGER immutable_inventory_movement`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Attempting to void recTie (100 units) must fail because 60 units were consumed (balance is 40).
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: tieItem.ID, Kind: "void_receipt", OriginalID: recTie.ID, QuantityMilli: 100000, Reason: "Void tie receipt",
+		}, "key-tie-void-attempt")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict voiding receipt with timestamp ties, got %v", err)
+		}
+	})
+
+	t.Run("F1: database upgrade schema validation and void operation", func(t *testing.T) {
+		var hasVoidKind, hasUniqueIndex bool
+		err := db.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM pg_constraint
+				WHERE conrelid = 'inventory_movement'::regclass
+				  AND conname = 'inventory_movement_kind_check'
+				  AND pg_get_constraintdef(oid) LIKE '%void_receipt%'
+			)
+		`).Scan(&hasVoidKind)
+		if err != nil || !hasVoidKind {
+			t.Fatalf("expected inventory_movement_kind_check to allow void_receipt, err=%v", err)
+		}
+
+		err = db.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM pg_indexes
+				WHERE tablename = 'inventory_movement'
+				  AND indexname = 'inventory_movement_void_receipt'
+			)
+		`).Scan(&hasUniqueIndex)
+		if err != nil || !hasUniqueIndex {
+			t.Fatalf("expected inventory_movement_void_receipt index to exist, err=%v", err)
+		}
+
+		upgItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{
+			CategoryID: category.ID, Name: "Upgrade test item", Unit: "pack", Active: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		upgRec, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: upgItem.ID, Kind: "receive", QuantityMilli: 25000, Reference: "REC-UPG-01", Reason: "Upgrade receipt test",
+		}, "key-upg-rec-001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if upgRec.LedgerSeq <= 0 {
+			t.Fatalf("expected positive ledger_seq on upgRec, got %d", upgRec.LedgerSeq)
+		}
+		upgVoid, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: upgItem.ID, Kind: "void_receipt", OriginalID: upgRec.ID, QuantityMilli: 25000, Reason: "Upgrade void test",
+		}, "key-upg-void-001")
+		if err != nil {
+			t.Fatalf("expected void on upgraded schema to succeed, got %v", err)
+		}
+		if upgVoid.DeltaMilli != -25000 || upgVoid.LedgerSeq <= upgRec.LedgerSeq {
+			t.Fatalf("unexpected upgVoid result: %+v", upgVoid)
 		}
 	})
 

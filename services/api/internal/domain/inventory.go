@@ -67,6 +67,7 @@ type InventoryMovement struct {
 	DeltaMilli    int64     `json:"deltaMilli"`
 	ReturnedMilli int64     `json:"returnedMilli"`
 	IsVoided      bool      `json:"isVoided,omitempty"`
+	LedgerSeq     int64     `json:"ledgerSeq,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 }
 

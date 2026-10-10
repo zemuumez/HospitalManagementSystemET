@@ -498,7 +498,11 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 	}
 	intervalSec := int(olderThan.Seconds())
 	if intervalSec <= 0 {
-		intervalSec = 86400 // default 24h
+		if olderThan > 0 {
+			intervalSec = 1
+		} else {
+			intervalSec = 86400 // default 24h
+		}
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -509,11 +513,11 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 	// Bounded work per run (LIMIT 100) and stable order (ORDER BY sa.token ASC).
 	// Pre-filter likely unreferenced candidates before applying LIMIT 100 so referenced assets
 	// do not permanently occupy the batch.
+	// Eligible candidates are all non-clinical operational attachments (both public CMS assets and private receipt uploads).
 	rows, err := tx.Query(ctx, `
 		SELECT sa.id, sa.token, sa.storage_path, sa.is_public, sa.patient_id::text, sa.encounter_id::text
 		FROM secure_attachment sa
-		WHERE sa.is_public = true
-		  AND sa.patient_id IS NULL
+		WHERE sa.patient_id IS NULL
 		  AND sa.encounter_id IS NULL
 		  AND sa.created_at < clock_timestamp() - make_interval(secs => $1)
 		  AND NOT EXISTS (
@@ -558,7 +562,7 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 	var removedPaths []string
 	for _, c := range candidates {
 		// Strictly protect clinical attachments
-		if !c.isPublic || c.patientID != nil || c.encounterID != nil {
+		if c.patientID != nil || c.encounterID != nil {
 			continue
 		}
 		// Under the token's held row lock, check if still referenced

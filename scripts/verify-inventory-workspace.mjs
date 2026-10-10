@@ -2295,14 +2295,27 @@ async function main() {
       "Direct retirement of attachment bound to inventory receipt must return 409 Conflict (RECORD_IN_USE)",
     );
 
-    // R1: Aged Cleanup Preservation — even if created 30 days ago, cleanup query must preserve bound receipt
+    // F3: Aged Cleanup of Abandoned Private Uploads vs Preservation of Bound Receipts
+    const abandonedPrivateToken = randomBytes(16).toString("hex");
+    const userRow = await db.query('SELECT id FROM "user" LIMIT 1');
+    const uploaderId = userRow.rows[0].id;
+    await db.query(
+      `
+      INSERT INTO secure_attachment(token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, created_at)
+      VALUES($1, 'abandoned.pdf', 'application/pdf', 100, '/storage/abandoned.pdf', '1111222233334444555566667777888811112222333344445555666677778888', $2, false, NOW() - interval '30 days')
+    `,
+      [abandonedPrivateToken, uploaderId],
+    );
+
     await db.query(
       "UPDATE secure_attachment SET created_at = NOW() - interval '30 days' WHERE token = $1",
       [uploadedToken],
     );
     await db.query(`
       DELETE FROM secure_attachment sa
-      WHERE sa.created_at < NOW() - interval '24 hours'
+      WHERE sa.patient_id IS NULL
+        AND sa.encounter_id IS NULL
+        AND sa.created_at < NOW() - interval '24 hours'
         AND NOT EXISTS (SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || sa.token || '%' OR value = sa.token))
         AND NOT EXISTS (SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || sa.token || '%' OR value = sa.token))
         AND NOT EXISTS (SELECT 1 FROM inventory_movement WHERE (attachment_url LIKE '%/attachments/' || sa.token || '%' OR attachment_url = sa.token))
@@ -2315,6 +2328,15 @@ async function main() {
       checkStillActive.rowCount,
       1,
       "Bound receipt attachment must NOT be deleted by aged cleanup",
+    );
+    const checkAbandonedDeleted = await db.query(
+      "SELECT id FROM secure_attachment WHERE token = $1",
+      [abandonedPrivateToken],
+    );
+    assert.equal(
+      checkAbandonedDeleted.rowCount,
+      0,
+      "Aged abandoned private upload must be deleted by cleanup",
     );
 
     // R1: Shared Settings & Inventory References:
