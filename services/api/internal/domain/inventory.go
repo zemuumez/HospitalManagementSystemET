@@ -66,6 +66,7 @@ type InventoryMovement struct {
 	ItemName      string    `json:"itemName,omitempty"`
 	DeltaMilli    int64     `json:"deltaMilli"`
 	ReturnedMilli int64     `json:"returnedMilli"`
+	IsVoided      bool      `json:"isVoided,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
@@ -96,10 +97,14 @@ func (i *InventoryMovementInput) Validate() error {
 		if i.RecipientID != "" || i.OriginalID != "" || i.Restock {
 			return ErrValidation
 		}
+	case "void_receipt":
+		if !UUIDPattern.MatchString(i.OriginalID) || i.RecipientID != "" || i.Restock {
+			return ErrValidation
+		}
 	default:
 		return ErrValidation
 	}
-	if i.Kind != "receive" && (i.Supplier != "" || i.Reference != "" || i.CostMinor != 0 || i.AttachmentURL != "") {
+	if i.Kind != "receive" && i.Kind != "void_receipt" && (i.Supplier != "" || i.Reference != "" || i.CostMinor != 0 || i.AttachmentURL != "") {
 		return ErrValidation
 	}
 	if i.Kind != "issue" && (i.IssuedDate != "" || i.ReturnDueDate != "" || i.IssuedBy != "" || i.Department != "") {

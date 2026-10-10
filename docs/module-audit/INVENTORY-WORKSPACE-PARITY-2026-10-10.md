@@ -20,12 +20,12 @@ The workspace is connected to PostgreSQL through Go backend services (`/v1/inven
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Item Categories** | `item-categories.index`<br>`item_categories/index.blade.php` | `inventory_category` | `GET/POST /v1/inventory/categories`<br>`DELETE /v1/inventory/categories/{id}` | **COMPLETE** | Real DB persistence, name/description fields, duplicate rejection, and referenced deletion protection (`RECORD_IN_USE` / `409 Conflict`). |
 | **Items** | `items.index`<br>`items/index.blade.php` | `inventory_item` | `GET/POST /v1/inventory/items`<br>`PATCH /v1/inventory/items/{id}`<br>`DELETE /v1/inventory/items/{id}` | **COMPLETE** | Category relation, unit of measure, live milligram/minor-unit stock balance, exact fractional reorder thresholds (1.5 units = 1500 milli) and zero threshold support without truncation, referenced deletion protection. |
-| **Item Stocks (Receipts)** | `item-stocks.index`<br>`item_stocks/index.blade.php` | `inventory_movement`<br>(`kind = 'receive'`) | `POST /v1/inventory/movements`<br>`GET /v1/inventory/movements` | **COMPLETE** | Supplier, store name (`store_name`), reference number, unit price, quantity, attachment URL (`attachment_url`), audit trail. Audited Void Receipt via stock write-off movement (`kind = 'writeoff'`), blocked with `409 Conflict` if stock has already been consumed. |
-| **Issued Items** | `issued-items.index`<br>`issued_items/index.blade.php` | `inventory_movement`<br>(`kind = 'issue'`) | `POST /v1/inventory/movements`<br>`GET /v1/inventory/movements` | **COMPLETE** | Staff recipient linkage (`recipient_id`), resolved recipient display name ("Nurse Genet Lemma"), department (`department`), issued date (`issued_date`), return due date (`return_due_date`), issued by (`issued_by`). Decreases `balance_milli` with strict check preventing negative balance. Audited Void Issue via restocked reversal movement (`kind = 'return'`). |
+| **Item Stocks (Receipts)** | `item-stocks.index`<br>`item_stocks/index.blade.php` | `inventory_movement`<br>(`kind = 'receive'`) | `POST /v1/inventory/movements`<br>`GET /v1/inventory/movements` | **COMPLETE** | Supplier, store name (`store_name`), reference number, unit price, quantity, attachment URL (`attachment_url`), audit trail. Audited Void Receipt via server-owned `void_receipt` movement linked to `original_id` (`delta_milli = -quantity_milli`), protected by partial unique index, minimum running balance check, and UI voided badge/disabled state. |
+| **Issued Items** | `issued-items.index`<br>`issued_items/index.blade.php` | `inventory_movement`<br>(`kind = 'issue'`) | `POST /v1/inventory/movements`<br>`GET /v1/inventory/movements` | **COMPLETE** | Staff recipient linkage (`recipient_id`), resolved recipient display name ("Nurse Genet Lemma"), department (`department`), issued date (`issued_date`), return due date (`return_due_date`), issued by (`issued_by`). Decreases `balance_milli` with strict check preventing negative balance. Audited Void Issue via restocked reversal movement (`kind = 'return'`). Server-side `returnStatus` filtering (`returnable` vs `returned`) before pagination. |
 | **Item Returns** | `issued-items.return`<br>`issued_items/return_modal.blade.php` | `inventory_movement`<br>(`kind = 'return'`) | `POST /v1/inventory/movements` | **COMPLETE** | Partial and full returns. Links `original_id`. Rejects over-return with `409 Conflict` (`STATE_CONFLICT`). Supports `restock: false` for damaged/expired items without balance inflation. Interactive partial return badge opens return modal directly. |
 | **Suppliers** | Supplier metadata in stock receipts | `inventory_movement.supplier` | `/v1/inventory/movements` | **COMPLETE** | Captured and persisted on receipt transactions; filterable and displayed in item stocks register. |
 | **Stores** | Store metadata in receipts | `inventory_movement.store_name` | `/v1/inventory/movements` | **COMPLETE** | Persisted across receipts for multi-store audit tracking. |
-| **Receipt Attachments** | Invoice / receipt document link | `inventory_movement.attachment_url` | `/v1/attachments`<br>`/v1/inventory/movements` | **COMPLETE** | Authorized upload lifecycle via `/api/hms/attachments` and direct link in table/details modal. |
+| **Receipt Attachments** | Invoice / receipt document link | `inventory_movement.attachment_url` | `/v1/attachments`<br>`/v1/inventory/movements` | **COMPLETE** | Private operational upload lifecycle (`is_public = false`, `patient_id = nil`) via `/api/hms/attachments`. Token validated and locked (`FOR UPDATE`) on receipt creation. Referenced tokens protected from direct retirement (`409 Conflict`), Settings displacement, and abandoned cleanup. |
 
 ---
 
@@ -50,32 +50,73 @@ The workspace is connected to PostgreSQL through Go backend services (`/v1/inven
    - If `already_returned + return_quantity > issued_quantity`, the operation returns `domain.ErrStale` (`409 Conflict`).
    - When returning damaged or expired goods with `restock: false`, the movement is recorded for audit tracking (`delta_milli = 0`), and `inventory_item.balance_milli` remains unchanged, preserving physical inventory accuracy.
 
-5. **Referenced Record Deletion Protection**:
+5. **Durable Void Receipts & Running Balance Protection**:
+   - Receipt reversals use server-owned `kind = 'void_receipt'` linked to the receipt's `original_id`.
+   - Migration `054_inventory_parity.sql` establishes a unique partial index:
+     `CREATE UNIQUE INDEX inventory_movement_void_receipt ON inventory_movement(original_id) WHERE kind='void_receipt';`
+   - Reversals acquire `SELECT ... FOR UPDATE` on both the original receipt and the item row.
+   - Verified running balance protection: Reversals compute the minimum running balance of the item from the time of the receipt to the present:
+     `SELECT COALESCE(MIN(running_bal), current_bal) FROM (SELECT SUM(delta_milli) OVER (ORDER BY created_at ASC, id ASC) AS running_bal ...)`
+     If `minRunningBal < originalQuantity`, the void is rejected with `domain.ErrConflict` (`409 Conflict`), preventing reversals of stock that was consumed prior to subsequent replenishments.
+   - Repeated void attempts across distinct request keys are rejected by the database unique partial index (`409 Conflict`).
+
+6. **Referenced Record Deletion & Attachment Protection**:
    - `DELETE /v1/inventory/categories/{id}` checks `SELECT EXISTS(SELECT 1 FROM inventory_item WHERE category_id = $1)`. If items exist, returns `domain.ErrInUse` (`409 Conflict`, `RECORD_IN_USE`).
    - `DELETE /v1/inventory/items/{id}` checks `SELECT EXISTS(SELECT 1 FROM inventory_movement WHERE item_id = $1)`. If movements exist, returns `domain.ErrInUse` (`409 Conflict`, `RECORD_IN_USE`).
-   - Unreferenced categories and items delete cleanly and record `inventory_category.deleted` / `inventory_item.deleted` audit events.
+   - Receipt attachments bind private tokens (`is_public = false`, no patient/encounter association). Binding locks the attachment row (`FOR UPDATE`) and validates operational ownership.
+   - Direct retirement (`DELETE /v1/attachments/{token}`) checks `SELECT EXISTS(SELECT 1 FROM inventory_movement WHERE attachment_url LIKE '%' || token || '%')` and returns `domain.ErrInUse` (`409 Conflict`).
+   - Displaced Settings token cleanup and aged abandoned attachment cleanup in `adapters/postgres/cms_settings.go` include candidate pre-filtering and locked rechecks protecting references in `inventory_movement.attachment_url`.
 
 ---
 
-## 4. UI & Localization Parity
+## 4. Independent Review Remediation (R1–R4)
+
+Following the independent review (`INVENTORY-CORRECTIONS-REVIEW-2026-10-10.md` on `origin/codex/inventory-corrections-review`), the following hardened behaviors were implemented and verified:
+
+- **R1 (Receipt Attachment Reference Protection)**:
+  - Frontend uploads receipts with private operational policy (`isPublic: false`).
+  - Binding endpoint locks `secure_attachment` via `FOR UPDATE`, rejects clinical files (`patient_id != nil || encounter_id != nil`), and validates token existence.
+  - Multi-tier deletion protection prevents direct deletion (`DELETE /v1/attachments/{token}` returns 409 Conflict if bound), preserves shared attachments when displaced in Settings, and excludes bound receipt attachments from background cleanup jobs.
+  - Validated via real byte upload/download, simulated cleanup, and conflict assertion on deletion attempts.
+
+- **R2 (Durable Linked Void Receipt & Intervening Consumption Protection)**:
+  - Replaced unlinked write-offs with server-owned `kind: 'void_receipt'` linked to `original_id`.
+  - Database schema enforces `original_id IS NOT NULL`, `delta_milli = -quantity_milli`, and unique reversal per receipt via partial unique index.
+  - Validates minimum historical running balance (`minRunningBal >= origReceipt.QuantityMilli`) to prevent voiding consumed stock even after subsequent replenishments.
+  - UI displays durable "Voided" badge and disables the "Void Receipt" button. Repeated attempts across fresh request keys return `409 Conflict`.
+  - Independent receipts for the same item remain individually voidable without cross-interference.
+
+- **R3 (Complete Catalog Pagination & Server-Side Issue Status Filtering)**:
+  - Dialog dropdown selectors implement automatic pagination loops (`fetchCompleteCategories` and `fetchCompleteItems`), retrieving all pages whenever catalog totals exceed 500 items (tested with 505 items).
+  - Server-side `returnStatus` query parameter (`returnable` vs `returned`) filters issued movements in PostgreSQL prior to pagination and calculates exact filtered totals.
+  - Changing the issue status filter resets table pagination to page 1.
+  - Movement counts separated into distinct per-kind counters (`totalReceipts` and `totalIssues`).
+
+- **R4 (Browser Gate & Scoped Contrast Assertion)**:
+  - Scoped Journey 19 selector to `.legacy-workspace nav button[data-tab="item-categories"]` so contrast evaluates actual high-contrast slate text within the workspace.
+  - Journeys 20–23 execute through to completion with exit code 0.
+
+---
+
+## 5. UI & Localization Parity
 
 - **Unified 4-Tab Workspace (`inventory-workspace.tsx`)**:
   - `items`: Item register, live balance badges (`In Stock`, `Low Stock`, `Out of Stock`), category filtering, search, view modal with movement history, edit modal, delete protection.
   - `item-categories`: Category register, item count, search, create modal, delete action with conflict error banner.
-  - `item-stocks`: Stock receipts register, item selector with live balance preview, supplier, store name, reference, unit price, quantity, receipt attachment upload/link, void receipt action.
-  - `issued-items`: Issued items register, recipient display name resolution, department, business dates, interactive status badges (`Issued`, `Partial Return (returned/issued)`, `Returned`), return modal, void issue action.
+  - `item-stocks`: Stock receipts register, item selector with live balance preview, supplier, store name, reference, unit price, quantity, receipt attachment upload/link, void receipt action, voided status badge.
+  - `issued-items`: Issued items register, recipient display name resolution, department, business dates, interactive status badges (`Issued`, `Partial Return (returned/issued)`, `Returned`), server-side return status filter, return modal, void issue action.
 - **Review Findings (I1–I5) Implemented**:
-  - **I1 (Cutoff Prevention)**: Server-backed pagination controls across all registers; movements search filtering (`search` query param); large catalog retrieval (`limit=500`) for dialog selectors so older items/categories/staff are never hidden.
+  - **I1 (Cutoff Prevention)**: Server-backed pagination controls across all registers; movements search filtering (`search` query param); full catalog retrieval loop for dialog selectors so catalog items (>500 records) are never hidden.
   - **I2 (Empty-Category Guard)**: Category selection change strictly clears child item selection; empty category disables child item selector and submission; no fallback to `items[0]`.
-  - **I3 (Source Workflows & Fields)**: Receipt attachments, store name, department, issued-by, business dates, resolved staff display names, audited void receipt (with 409 consumption check), and audited void issue. Accessible `role="alert"` on all dialog error banners.
+  - **I3 (Source Workflows & Fields)**: Receipt attachments, store name, department, issued-by, business dates, resolved staff display names, audited void receipt with running balance protection, and audited void issue. Accessible `role="alert"` on all dialog error banners.
   - **I4 (Exact Precision & Zero Threshold)**: Exact milli-unit fractional thresholds (1.5 units = 1500 milli) preserved through edit forms without integer rounding; zero threshold (`min={0}`) supported.
   - **I5 (Authentic Dark Mode & Complete Amharic Localization)**: Shell `.legacy-dark` theme toggle integration with computed card background (`#12151f`, `rgb(18, 21, 31)`); 100% Amharic translation for all tabs, action buttons, table headers, search placeholders, and dialog controls.
 
 ---
 
-## 5. Verification Results
+## 6. Verification Results
 
-### 5.1 Quality Gates
+### 6.1 Quality Gates
 
 | Suite / Gate | Command | Result |
 | :--- | :--- | :--- |
@@ -85,7 +126,7 @@ The workspace is connected to PostgreSQL through Go backend services (`/v1/inven
 | **Frontend Unit Tests** | `npm test` | **PASSED** (8/8 unit tests passed, including translation completeness) |
 | **Isolated Inventory Browser Suite** | `npm run test:inventory` | **PASSED** (23/23 journeys passed, 0 failures, exit code 0) |
 
-### 5.2 Browser Suite Journeys (23/23 Passed)
+### 6.2 Browser Suite Journeys (23/23 Passed)
 
 1. `Journey 1`: Admin lands on Inventory workspace with clean 4-tab interface.
 2. `Journey 2`: Empty database state verified without hardcoded mocks.
@@ -105,15 +146,15 @@ The workspace is connected to PostgreSQL through Go backend services (`/v1/inven
 16. `Journey 16`: Referenced deletion blocked with `409 Conflict`; unreferenced category and item deleted cleanly.
 17. `Journey 17`: Unauthorized doctor role blocked from mutations with `403 Forbidden`.
 18. `Journey 18`: Fresh browser session verifies 100% persisted state from PostgreSQL.
-19. `Journey 19`: Theme & Amharic Localization parity (Finding I5 regression) verifying real `.legacy-dark` computed card styling and complete Amharic controls.
-20. `Journey 20`: Finding I1 regression — pagination across categories, items, and movements; server-backed search; older outstanding issue discoverability and return workflow (>25 records).
+19. `Journey 19`: Theme & Amharic Localization parity (Finding I5 regression) verifying real `.legacy-dark` computed card styling, high-contrast tab navigation, and complete Amharic controls.
+20. `Journey 20`: Findings I1 and R3 regression — full catalog pagination across 505 items in modal selectors; server-backed returnStatus filtering before pagination with page reset; discoverability of older outstanding issues behind returned issues.
 21. `Journey 21`: Finding I2 regression — empty category disables submission and clears child selection; prevents unintended stock mutations.
-22. `Journey 22`: Finding I3 regression — source fields (`store_name`, `department`, `issued_date`, `return_due_date`, `issued_by`), receipt attachments, recipient name resolution, and void workflows (rejection after consumption with `409 Conflict`, unconsumed receipt void write-off, and issue void reversal).
+22. `Journey 22`: Findings I3, R1, and R2 regression — real file attachment upload/download bytes; direct attachment retirement conflict (409); aged cleanup preservation; shared settings asset displacement preservation; rejection of clinical/missing tokens; durable linked `void_receipt` reversal with `original_id`; UI voided badge and disabled buttons; repeated void rejection (409); independent voiding of multiple receipts on the same item; and intervening consumption protection across subsequent replenishment (409).
 23. `Journey 23`: Finding I4 regression — fractional (1500 milli = 1.5 units) and zero (0 milli = 0 units) reorder thresholds preserved without rounding drift.
 
 ---
 
-## 6. Visual Evidence
+## 7. Visual Evidence
 
 The following authentic screenshots were captured during isolated browser execution:
 
@@ -133,7 +174,7 @@ The following authentic screenshots were captured during isolated browser execut
 
 ---
 
-## 7. Remaining Limitations & Exclusions
+## 8. Remaining Limitations & Exclusions
 
 - **Standalone Purchase Orders Aggregate**: Basic inventory tracks stock receipts (`item-stocks`) and issues (`issued-items`). Multi-step procurement approval hierarchies and purchase order contracts belong to future procurement modules and are not part of the inventory workspace contract.
 - **Lot Number & Supplier-Contact Tracking**: The inspected movement contract does not include separate lot expiration registers or supplier contact books; supplier name and store name are captured as transaction metadata.

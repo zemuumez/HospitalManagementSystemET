@@ -1478,7 +1478,7 @@ async function main() {
     );
 
     const navBtnColor = await page.$eval(
-      'nav button:not([class*="bg-primary"])',
+      '.legacy-workspace nav button[data-tab="item-categories"]',
       (el) => window.getComputedStyle(el).color,
     );
     console.log(
@@ -1768,12 +1768,20 @@ async function main() {
     console.log("✔ Server-backed search found overflow item beyond page 1");
     await searchInput.fill("");
 
-    // 7. Test Dialog Dropdowns (Large Catalog Retrieval with limit=500)
+    // 7. Test Dialog Dropdowns (Complete Catalog Pagination beyond 500 items)
+    const overflowCatId = bulkCategoryIds[26 % bulkCategoryIds.length];
+    const bulk505Prefix = `Bulk505-${bulkSuffix}`;
+    await db.query(
+      `INSERT INTO inventory_item (category_id, name, unit, reorder_milli, balance_milli)
+       SELECT $1, $2 || ' ' || LPAD(g::text, 3, '0'), 'Piece', 1000, 0
+       FROM generate_series(1, 505) AS g`,
+      [overflowCatId, bulk505Prefix],
+    );
+
     await page.goto(`${base}/modules/item-stocks`);
     await page.waitForSelector(".legacy-workspace[data-ready='true']");
     await page.getByRole("button", { name: "Receive New Stock" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
-    const overflowCatId = bulkCategoryIds[26 % bulkCategoryIds.length];
     await page
       .getByRole("dialog")
       .getByLabel("Category", { exact: true })
@@ -1787,22 +1795,130 @@ async function main() {
       receiveItemOptions.some((opt) => opt.includes(overflowItemName)),
       `Overflow item ${overflowItemName} must be available in Receive modal dropdown`,
     );
+    const item505Target = `${bulk505Prefix} 505`;
+    assert(
+      receiveItemOptions.some((opt) => opt.includes(item505Target)),
+      `Catalog entry 505 beyond 500 items boundary (${item505Target}) must be available in Receive modal dropdown`,
+    );
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "Cancel" })
       .click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    // 8. Test Discoverability of Old Outstanding Issue & Return Workflow
+    // 8. Test Discoverability of Outstanding Issue behind Page of Returned Items & Return Status Filtering
+    // Seed 26 newer fully returned issues so Page 1 (25 rows) is entirely returned issues
+    for (let i = 1; i <= 26; i++) {
+      const issueItem = bulkItemIds[i % bulkItemIds.length];
+      await db.query("BEGIN");
+      const newerIssue = await insertMovementFixture({
+        itemId: issueItem,
+        kind: "issue",
+        quantityMilli: 2000,
+        deltaMilli: -2000,
+        recipientId: staffId,
+        reason: `Newer Returned Issue ${i} ${bulkSuffix}`,
+        createdAtClause: `NOW() - interval '${27 - i} minutes'`,
+      });
+      await insertMovementFixture({
+        itemId: issueItem,
+        kind: "return",
+        quantityMilli: 2000,
+        deltaMilli: 2000,
+        originalId: newerIssue.rows[0].id,
+        recipientId: staffId,
+        restock: true,
+        reason: `Full return for ${i}`,
+        createdAtClause: `NOW() - interval '${27 - i} minutes'`,
+      });
+      await db.query("COMMIT");
+    }
+
     await page.goto(`${base}/modules/issued-items`);
     await page.waitForSelector(".legacy-workspace[data-ready='true']");
-    const issueSearchInput = page.locator(
-      'input[aria-label="Search Movements"]',
+
+    // Page 1 displays 25 newer returned issues; "Old Outstanding Issue" is on Page 2
+    await page
+      .getByText("Page 1 of 2", { exact: false })
+      .waitFor({ timeout: 10000 });
+    assert.equal(
+      await page.locator('tr:has-text("Old Outstanding Issue")').count(),
+      0,
+      "Old Outstanding Issue must not appear on Page 1 when hidden behind newer returned rows",
     );
-    await issueSearchInput.fill("Old Outstanding Issue");
-    await page.waitForSelector(`tr:has-text("Old Outstanding Issue")`, {
-      timeout: 10000,
-    });
+
+    // Navigate to Page 2 where Old Outstanding Issue is visible
+    const nextResponsePromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.url().includes("page=2") &&
+        r.request().method() === "GET",
+    );
+    await page.getByRole("button", { name: "Next" }).click();
+    await nextResponsePromise;
+    await page
+      .locator('tr:has-text("Old Outstanding Issue")')
+      .waitFor({ timeout: 10000 });
+    assert(
+      (await page.locator('tr:has-text("Old Outstanding Issue")').count()) >= 1,
+      "Old Outstanding Issue must be visible on Page 2",
+    );
+
+    // While on Page 2, switch Filter by status to "Pending Return" (returnable):
+    // Must reset page to Page 1, filter at server before pagination, and show Page 1 of 1
+    const statusFilterSelect = page.locator(
+      'select[aria-label="Filter by status"]',
+    );
+    const returnableResponsePromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.url().includes("returnStatus=returnable") &&
+        r.request().method() === "GET",
+    );
+    await statusFilterSelect.selectOption("returnable");
+    await returnableResponsePromise;
+    await page
+      .getByText("Page 1 of 1", { exact: false })
+      .waitFor({ timeout: 10000 });
+    await page
+      .locator('tr:has-text("Old Outstanding Issue")')
+      .waitFor({ timeout: 10000 });
+    assert(
+      (await page.locator('tr:has-text("Old Outstanding Issue")').count()) >= 1,
+      "Old Outstanding Issue must now be visible on Page 1 under server-side returnable filter",
+    );
+
+    // Switch Filter by status to "Returned":
+    const returnedResponsePromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.url().includes("returnStatus=returned") &&
+        r.request().method() === "GET",
+    );
+    await statusFilterSelect.selectOption("returned");
+    await returnedResponsePromise;
+    await page
+      .getByText("Page 1 of 2", { exact: false })
+      .waitFor({ timeout: 10000 });
+    assert.equal(
+      await page.locator('tr:has-text("Old Outstanding Issue")').count(),
+      0,
+      "Old Outstanding Issue must NOT appear under Returned filter",
+    );
+
+    // Switch back to "Pending Return" to execute the return
+    const returnableAgainPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/inventory/movements") &&
+        r.url().includes("returnStatus=returnable") &&
+        r.request().method() === "GET",
+    );
+    await statusFilterSelect.selectOption("returnable");
+    await returnableAgainPromise;
+    await page
+      .getByText("Page 1 of 1", { exact: false })
+      .waitFor({ timeout: 10000 });
+
     const oldIssueRow = page.locator("tr", {
       hasText: "Old Outstanding Issue",
     });
@@ -1839,7 +1955,7 @@ async function main() {
       "Balance must be restored to 20 units",
     );
     console.log(
-      "✔ Journey 20 Passed: Pagination, server-backed search, large catalogs, and older issue return verified.",
+      "✔ Journey 20 Passed: Pagination (>500 catalog items), server-backed search, server-side return status filtering, and older issue return verified.",
     );
 
     // -----------------------------------------------------------------------
@@ -2027,10 +2143,17 @@ async function main() {
       "\n[Journey 22] Finding I3: Source Fields, Attachments & Void Workflows...",
     );
     const i3Suffix = randomBytes(4).toString("hex");
-    const testAttachUrl =
-      "https://files.ulshms.local/receipts/batch-invoice-001.pdf";
+    // 1. Stock Receipt with Real Attachment Upload & Extended Metadata
+    const sampleReceiptPath = resolve(
+      screenshotsDir,
+      `test_receipt_${i3Suffix}.png`,
+    );
+    const pngBuffer = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    writeFileSync(sampleReceiptPath, pngBuffer);
 
-    // 1. Stock Receipt with Attachment & Extended Metadata
     await page.goto(`${base}/modules/item-stocks`);
     await page.waitForSelector(".legacy-workspace[data-ready='true']");
     await page.getByRole("button", { name: "Receive New Stock" }).click();
@@ -2065,10 +2188,35 @@ async function main() {
       .getByRole("dialog")
       .getByLabel("Reference", { exact: true })
       .fill(recRef);
+
+    // Upload authentic file attachment via file input
+    const fileUploadPromise = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/hms/attachments") &&
+        r.request().method() === "POST",
+    );
+    const receiptFileInput = page
+      .getByRole("dialog")
+      .locator('input[type="file"][aria-label="Upload Receipt"]');
+    await receiptFileInput.setInputFiles(sampleReceiptPath);
+    const uploadRes = await fileUploadPromise;
+    assert.equal(
+      uploadRes.status(),
+      201,
+      "Receipt upload to attachments service must succeed with 201",
+    );
+    const uploadJson = await uploadRes.json();
+    const uploadedToken = uploadJson.token;
+    assert(
+      uploadedToken && uploadedToken.length >= 32,
+      "Attachment service must return valid >=32-char token",
+    );
+
     await page
       .getByRole("dialog")
-      .getByLabel("Attachment URL", { exact: true })
-      .fill(testAttachUrl);
+      .getByText("Attached")
+      .waitFor({ state: "visible" });
+
     await page
       .getByRole("dialog")
       .locator('textarea[aria-label="Reason"]')
@@ -2086,18 +2234,35 @@ async function main() {
     assert.equal((await receiveI3Res).status(), 201);
     await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    // Verify DB persisted extended fields
+    // Verify DB persisted extended fields & validated attachment URL
     const recDb = await db.query(
-      "SELECT attachment_url, supplier, store_name, reference FROM inventory_movement WHERE reference=$1",
+      "SELECT id, attachment_url, supplier, store_name, reference FROM inventory_movement WHERE reference=$1",
       [recRef],
     );
-    assert.equal(
-      recDb.rows[0].attachment_url,
-      testAttachUrl,
-      "Attachment URL must be stored in database",
+    const savedAttachmentUrl = recDb.rows[0].attachment_url;
+    assert(
+      savedAttachmentUrl.includes(uploadedToken),
+      `Attachment URL must contain token ${uploadedToken}`,
     );
     assert.equal(recDb.rows[0].supplier, "Apex Med Supplies");
     assert.equal(recDb.rows[0].store_name, "Emergency Sub-Store");
+
+    // Real download verification through the browser session
+    const downloadStatus = await page.evaluate(async (url) => {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      return { status: resp.status, size: blob.size };
+    }, savedAttachmentUrl);
+    assert.equal(
+      downloadStatus.status,
+      200,
+      "Receipt attachment download must succeed with 200",
+    );
+    assert.equal(
+      downloadStatus.size,
+      pngBuffer.length,
+      "Downloaded receipt bytes must match uploaded file size",
+    );
 
     // Verify UI displays details modal with attachment link
     const recRow = page.locator("tr", { hasText: recRef });
@@ -2108,7 +2273,7 @@ async function main() {
       .getByRole("link", { name: "View Receipt" });
     assert.equal(
       await viewAttachLink.getAttribute("href"),
-      testAttachUrl,
+      savedAttachmentUrl,
       "View Receipt link must match attachment URL",
     );
     await page
@@ -2116,6 +2281,147 @@ async function main() {
       .getByRole("button", { name: "Close" })
       .click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
+
+    // R1: Direct Retirement Conflict — deleting bound receipt attachment must return 409 Conflict
+    const directRetireStatus = await page.evaluate(async (tok) => {
+      const resp = await fetch(`/api/hms/attachments/${tok}`, {
+        method: "DELETE",
+      });
+      return resp.status;
+    }, uploadedToken);
+    assert.equal(
+      directRetireStatus,
+      409,
+      "Direct retirement of attachment bound to inventory receipt must return 409 Conflict (RECORD_IN_USE)",
+    );
+
+    // R1: Aged Cleanup Preservation — even if created 30 days ago, cleanup query must preserve bound receipt
+    await db.query(
+      "UPDATE secure_attachment SET created_at = NOW() - interval '30 days' WHERE token = $1",
+      [uploadedToken],
+    );
+    await db.query(`
+      DELETE FROM secure_attachment sa
+      WHERE sa.created_at < NOW() - interval '24 hours'
+        AND NOT EXISTS (SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || sa.token || '%' OR value = sa.token))
+        AND NOT EXISTS (SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || sa.token || '%' OR value = sa.token))
+        AND NOT EXISTS (SELECT 1 FROM inventory_movement WHERE (attachment_url LIKE '%/attachments/' || sa.token || '%' OR attachment_url = sa.token))
+    `);
+    const checkStillActive = await db.query(
+      "SELECT id FROM secure_attachment WHERE token = $1",
+      [uploadedToken],
+    );
+    assert.equal(
+      checkStillActive.rowCount,
+      1,
+      "Bound receipt attachment must NOT be deleted by aged cleanup",
+    );
+
+    // R1: Shared Settings & Inventory References:
+    // If a token is referenced by Settings and then displaced from Settings, inventory movement reference keeps it alive!
+    await db.query(
+      "INSERT INTO hospital_general_setting(key, value) VALUES('shared_test_logo', $1) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value",
+      [`/api/hms/attachments/${uploadedToken}/content`],
+    );
+    await db.query(
+      "UPDATE hospital_general_setting SET value = '/api/hms/attachments/another-token/content' WHERE key = 'shared_test_logo'",
+    );
+    await db.query(
+      `
+      DELETE FROM secure_attachment sa
+      WHERE sa.token = $1
+        AND NOT EXISTS (SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || sa.token || '%' OR value = sa.token))
+        AND NOT EXISTS (SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || sa.token || '%' OR value = sa.token))
+        AND NOT EXISTS (SELECT 1 FROM inventory_movement WHERE (attachment_url LIKE '%/attachments/' || sa.token || '%' OR attachment_url = sa.token))
+    `,
+      [uploadedToken],
+    );
+    const checkAfterDisplacement = await db.query(
+      "SELECT id FROM secure_attachment WHERE token = $1",
+      [uploadedToken],
+    );
+    assert.equal(
+      checkAfterDisplacement.rowCount,
+      1,
+      "Attachment shared between Settings and Inventory must stay active when displaced from Settings",
+    );
+
+    // R1: Inappropriate Clinical Attachment Binding Rejection
+    const patRow = await db.query("SELECT id FROM patient LIMIT 1");
+    let testPatientId = patRow.rows[0]?.id;
+    if (!testPatientId) {
+      const pRes = await db.query(
+        "INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES('Test', 'Clinical', '1990-01-01', '0911000000') RETURNING id",
+      );
+      testPatientId = pRes.rows[0].id;
+    }
+    const clinicalToken = randomBytes(16).toString("hex");
+    const clinicalStoragePath = `/data/clinical_${clinicalToken}.pdf`;
+    await db.query(
+      "INSERT INTO secure_attachment(token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, patient_id) VALUES($1, 'clinical_record.pdf', 'application/pdf', 1024, $2, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', $3, $4)",
+      [clinicalToken, clinicalStoragePath, adminId, testPatientId],
+    );
+    const clinicalBindRes = await page.evaluate(
+      async (args) => {
+        const resp = await fetch("/api/hms/inventory/movements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            itemId: args.itemId,
+            kind: "receive",
+            quantityMilli: 5000,
+            costMinor: 1000,
+            supplier: "Supplier",
+            storeName: "Main",
+            reference: `CLINICAL-REJECT-${args.suffix}`,
+            attachmentUrl: `/api/hms/attachments/${args.token}/content`,
+            reason: "Attempted clinical bind",
+          }),
+        });
+        return resp.status;
+      },
+      { itemId: itemAId, token: clinicalToken, suffix: i3Suffix },
+    );
+    assert(
+      clinicalBindRes === 400 ||
+        clinicalBindRes === 403 ||
+        clinicalBindRes === 422,
+      `Binding clinical attachment to inventory receipt must be rejected, got HTTP ${clinicalBindRes}`,
+    );
+
+    // R1: Missing / Nonexistent Token Binding Rejection
+    const fakeToken = randomBytes(16).toString("hex");
+    const fakeBindRes = await page.evaluate(
+      async (args) => {
+        const resp = await fetch("/api/hms/inventory/movements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            itemId: args.itemId,
+            kind: "receive",
+            quantityMilli: 5000,
+            costMinor: 1000,
+            supplier: "Supplier",
+            storeName: "Main",
+            reference: `FAKE-REJECT-${args.suffix}`,
+            attachmentUrl: `/api/hms/attachments/${args.token}/content`,
+            reason: "Attempted missing token bind",
+          }),
+        });
+        return resp.status;
+      },
+      { itemId: itemAId, token: fakeToken, suffix: i3Suffix },
+    );
+    assert(
+      fakeBindRes === 404 || fakeBindRes === 400 || fakeBindRes === 422,
+      `Binding nonexistent attachment token to receipt must be rejected, got HTTP ${fakeBindRes}`,
+    );
 
     // 2. Issue Item with Department, Business Dates, Issued By, and Staff Name Resolution
     await page.goto(`${base}/modules/issued-items`);
@@ -2323,18 +2629,262 @@ async function main() {
       "Balance must be reduced to 0 by void writeoff",
     );
     const writeoffQuery = await db.query(
-      "SELECT id, kind, delta_milli FROM inventory_movement WHERE item_id=$1 AND kind='writeoff'",
+      "SELECT id, kind, delta_milli, original_id FROM inventory_movement WHERE item_id=$1 AND kind IN ('void_receipt', 'writeoff')",
       [freshVoidItemId],
     );
     assert.equal(
       writeoffQuery.rowCount,
       1,
-      "Audited writeoff movement recorded",
+      "Audited writeoff/void_receipt movement recorded",
+    );
+    assert.equal(
+      writeoffQuery.rows[0].kind,
+      "void_receipt",
+      "Movement kind must be void_receipt",
+    );
+    assert.ok(
+      writeoffQuery.rows[0].original_id,
+      "void_receipt must be linked to original receipt id",
     );
     assert.equal(
       Number(writeoffQuery.rows[0].delta_milli),
       -15000,
-      "Writeoff delta is -15,000 milli",
+      "Void receipt delta is -15,000 milli",
+    );
+
+    // Verify UI reflects voided state and disables void button
+    await page.reload();
+    await page.waitForSelector(".legacy-workspace[data-ready='true']");
+    const reloadedVoidRow = page.locator("tr", {
+      hasText: `VOID-SUCCEED-${i3Suffix}`,
+    });
+    assert(
+      (await reloadedVoidRow.getByText("Voided").count()) >= 1,
+      "Voided receipt row must display 'Voided' badge in UI",
+    );
+    assert(
+      await reloadedVoidRow
+        .locator('button[aria-label="Void Receipt"]')
+        .isDisabled(),
+      "Void Receipt action button must be disabled for already-voided receipt",
+    );
+
+    // R2: Repeated void attempt on already-voided receipt must return 409 Conflict across fresh request keys
+    const origRecId = writeoffQuery.rows[0].original_id;
+    const repeatVoidRes = await page.evaluate(
+      async (args) => {
+        const resp = await fetch("/api/hms/inventory/movements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            itemId: args.itemId,
+            kind: "void_receipt",
+            originalId: args.origId,
+            quantityMilli: 15000,
+            reason: "Repeated void attempt with fresh key",
+          }),
+        });
+        return resp.status;
+      },
+      { itemId: freshVoidItemId, origId: origRecId },
+    );
+    assert.equal(
+      repeatVoidRes,
+      409,
+      "Repeated void of already-voided receipt must return 409 Conflict",
+    );
+
+    // R2: Two Receipts of One Item & Independent Reversal:
+    await db.query("BEGIN");
+    const twoRecItemRes = await db.query(
+      "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli) VALUES($1, $2, 'Piece', 1000, 20000) RETURNING id",
+      [catAId, `Two Receipts Item ${i3Suffix}`],
+    );
+    const twoRecItemId = twoRecItemRes.rows[0].id;
+    const rec1Res = await insertMovementFixture({
+      itemId: twoRecItemId,
+      kind: "receive",
+      quantityMilli: 10000,
+      deltaMilli: 10000,
+      reference: `TWO-REC-1-${i3Suffix}`,
+      supplier: "Supplier 1",
+      reason: "First receipt batch",
+    });
+    const rec1Id = rec1Res.rows[0].id;
+    const rec2Res = await insertMovementFixture({
+      itemId: twoRecItemId,
+      kind: "receive",
+      quantityMilli: 10000,
+      deltaMilli: 10000,
+      reference: `TWO-REC-2-${i3Suffix}`,
+      supplier: "Supplier 2",
+      reason: "Second receipt batch",
+    });
+    const rec2Id = rec2Res.rows[0].id;
+    await db.query("COMMIT");
+
+    // Void first receipt via API:
+    const voidRec1Status = await page.evaluate(
+      async (args) => {
+        const resp = await fetch("/api/hms/inventory/movements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            itemId: args.itemId,
+            kind: "void_receipt",
+            originalId: args.origId,
+            quantityMilli: 10000,
+            reason: "Void first receipt batch",
+          }),
+        });
+        return resp.status;
+      },
+      { itemId: twoRecItemId, origId: rec1Id },
+    );
+    assert.equal(voidRec1Status, 201, "Voiding first receipt must succeed");
+
+    const balAfterFirstVoid = await db.query(
+      "SELECT balance_milli FROM inventory_item WHERE id=$1",
+      [twoRecItemId],
+    );
+    assert.equal(
+      Number(balAfterFirstVoid.rows[0].balance_milli),
+      10000,
+      "Item balance must be 10,000 milli (second receipt stock preserved)",
+    );
+
+    // Second void on receipt 1 must fail with 409:
+    const repeatVoid1 = await page.evaluate(
+      async (args) => {
+        const resp = await fetch("/api/hms/inventory/movements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            itemId: args.itemId,
+            kind: "void_receipt",
+            originalId: args.origId,
+            quantityMilli: 10000,
+            reason: "Second void on receipt 1",
+          }),
+        });
+        return resp.status;
+      },
+      { itemId: twoRecItemId, origId: rec1Id },
+    );
+    assert.equal(
+      repeatVoid1,
+      409,
+      "Second void on receipt 1 must be rejected with 409",
+    );
+
+    // Receipt 2 can still be voided cleanly:
+    const voidRec2Status = await page.evaluate(
+      async (args) => {
+        const resp = await fetch("/api/hms/inventory/movements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            itemId: args.itemId,
+            kind: "void_receipt",
+            originalId: args.origId,
+            quantityMilli: 10000,
+            reason: "Void second receipt batch",
+          }),
+        });
+        return resp.status;
+      },
+      { itemId: twoRecItemId, origId: rec2Id },
+    );
+    assert.equal(voidRec2Status, 201, "Voiding second receipt must succeed");
+
+    // R2: Intervening Consumption & Replenishment Protection:
+    // Item receives 10 units, issues 8 units (balance drops to 2), then receives 10 units (balance is 12).
+    // Current balance (12) >= receipt quantity (10), BUT running balance dropped to 2 (< 10).
+    // Attempting to void the first receipt must be rejected with 409 Conflict!
+    await db.query("BEGIN");
+    const interveneItemRes = await db.query(
+      "INSERT INTO inventory_item(category_id, name, unit, reorder_milli, balance_milli) VALUES($1, $2, 'Piece', 1000, 12000) RETURNING id",
+      [catAId, `Intervene Item ${i3Suffix}`],
+    );
+    const interveneItemId = interveneItemRes.rows[0].id;
+    const intRec1Res = await insertMovementFixture({
+      itemId: interveneItemId,
+      kind: "receive",
+      quantityMilli: 10000,
+      deltaMilli: 10000,
+      reference: `INT-REC-1-${i3Suffix}`,
+      supplier: "Supplier Int 1",
+      reason: "Initial receipt batch",
+      createdAtClause: "NOW() - interval '3 hours'",
+    });
+    const intRec1Id = intRec1Res.rows[0].id;
+    await insertMovementFixture({
+      itemId: interveneItemId,
+      kind: "issue",
+      quantityMilli: 8000,
+      deltaMilli: -8000,
+      recipientId: staffId,
+      reason: "Intervening consumption of 8 units",
+      createdAtClause: "NOW() - interval '2 hours'",
+    });
+    await insertMovementFixture({
+      itemId: interveneItemId,
+      kind: "receive",
+      quantityMilli: 10000,
+      deltaMilli: 10000,
+      reference: `INT-REC-2-${i3Suffix}`,
+      supplier: "Supplier Int 2",
+      reason: "Subsequent replenishment batch",
+      createdAtClause: "NOW() - interval '1 hour'",
+    });
+    await db.query("COMMIT");
+
+    const intVoidStatus = await page.evaluate(
+      async (args) => {
+        const resp = await fetch("/api/hms/inventory/movements", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+          body: JSON.stringify({
+            itemId: args.itemId,
+            kind: "void_receipt",
+            originalId: args.origId,
+            quantityMilli: 10000,
+            reason: "Attempted void of consumed receipt despite replenishment",
+          }),
+        });
+        return resp.status;
+      },
+      { itemId: interveneItemId, origId: intRec1Id },
+    );
+    assert.equal(
+      intVoidStatus,
+      409,
+      "Void receipt must be rejected with 409 when stock was consumed between receipt and now (minimum running balance protection)",
+    );
+
+    const balAfterIntAttempt = await db.query(
+      "SELECT balance_milli FROM inventory_item WHERE id=$1",
+      [interveneItemId],
+    );
+    assert.equal(
+      Number(balAfterIntAttempt.rows[0].balance_milli),
+      12000,
+      "Item balance must remain 12,000 milli; consumed receipt was not voided",
     );
 
     // 3c. Successful Void Issue:

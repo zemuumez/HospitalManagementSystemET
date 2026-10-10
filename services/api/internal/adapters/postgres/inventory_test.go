@@ -137,12 +137,19 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 	if _, e = inv.Move(ctx, a, receive, "archived-inventory-01"); !errors.Is(e, domain.ErrStale) {
 		t.Fatal("archived stock received", e)
 	}
-	history, totalMovs, e := inv.Movements(ctx, a, item.ID, "", 1, 25, "")
+	history, totalMovs, e := inv.Movements(ctx, a, item.ID, "", 1, 25, "", "")
 	if e != nil || len(history) != 5 || totalMovs != 5 {
 		t.Fatal("history count", e, len(history), totalMovs)
 	}
 	t.Run("admin movement register and parent filter", func(t *testing.T) {
 		second, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: category.ID, Name: "Second supply", Unit: "box", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Create attachment for REGISTER-1
+		_, err = db.Exec(ctx, `INSERT INTO secure_attachment(token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public)
+			VALUES('11112222333344445555666677778888', 'reg-invoice.pdf', 'application/pdf', 1024, '/storage/attachments/reg-invoice.pdf', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', $1, false)
+			ON CONFLICT (token) DO NOTHING`, a.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,42 +159,42 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 			QuantityMilli: 1000,
 			Reference:     "REGISTER-1",
 			Reason:        "Register fixture",
-			AttachmentURL: "/v1/attachments/test-token-12345/content",
+			AttachmentURL: "/v1/attachments/11112222333344445555666677778888/content",
 		}, "inventory-register-01")
 		if err != nil {
 			t.Fatal(err)
 		}
-		all, totalAll, err := inv.Movements(ctx, a, "", "", 1, 25, "")
+		all, totalAll, err := inv.Movements(ctx, a, "", "", 1, 25, "", "")
 		if err != nil || len(all) != 6 || totalAll != 6 {
 			t.Fatal("aggregate register", len(all), totalAll, err)
 		}
-		filtered, totalFiltered, err := inv.Movements(ctx, a, second.ID, "", 1, 25, "")
+		filtered, totalFiltered, err := inv.Movements(ctx, a, second.ID, "", 1, 25, "", "")
 		if err != nil || len(filtered) != 1 || totalFiltered != 1 || filtered[0].ItemID != second.ID {
 			t.Fatal("parent scope", filtered, err)
 		}
-		if filtered[0].AttachmentURL != "/v1/attachments/test-token-12345/content" {
+		if filtered[0].AttachmentURL != "/v1/attachments/11112222333344445555666677778888/content" {
 			t.Fatalf("expected attachment URL preserved, got %q", filtered[0].AttachmentURL)
 		}
 		if filtered[0].ItemName != "Second supply" {
 			t.Fatalf("expected ItemName populated, got %q", filtered[0].ItemName)
 		}
-		searched, totalSearched, err := inv.Movements(ctx, a, "", "", 1, 25, "Register fixture")
+		searched, totalSearched, err := inv.Movements(ctx, a, "", "", 1, 25, "Register fixture", "")
 		if err != nil || len(searched) != 1 || totalSearched != 1 || searched[0].Reference != "REGISTER-1" {
 			t.Fatal("search movement filter", len(searched), totalSearched, err)
 		}
-		page, _, err := inv.Movements(ctx, a, "", "", 2, 25, "")
+		page, _, err := inv.Movements(ctx, a, "", "", 2, 25, "", "")
 		if err != nil || len(page) != 0 {
 			t.Fatal("pagination", page, err)
 		}
-		if _, _, err = inv.Movements(ctx, a, "invalid", "", 1, 25, ""); !errors.Is(err, domain.ErrValidation) {
+		if _, _, err = inv.Movements(ctx, a, "invalid", "", 1, 25, "", ""); !errors.Is(err, domain.ErrValidation) {
 			t.Fatal("invalid parent", err)
 		}
 		for _, role := range []string{"doctor", "nurse", "patient", "receptionist", "pharmacist", "accountant", "case_manager", "lab_technician"} {
 			actor := domain.Actor{ID: actors[1].ID, Role: role}
-			if _, _, err = inv.Movements(ctx, actor, "", "", 1, 25, ""); !errors.Is(err, domain.ErrForbidden) {
+			if _, _, err = inv.Movements(ctx, actor, "", "", 1, 25, "", ""); !errors.Is(err, domain.ErrForbidden) {
 				t.Fatal("aggregate exposed", role, err)
 			}
-			if _, _, err = store.InventoryMovements(ctx, actor, second.ID, "", 1, 25, ""); !errors.Is(err, domain.ErrForbidden) {
+			if _, _, err = store.InventoryMovements(ctx, actor, second.ID, "", 1, 25, "", ""); !errors.Is(err, domain.ErrForbidden) {
 				t.Fatal("direct store exposed", role, err)
 			}
 		}
@@ -229,6 +236,266 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 			t.Fatalf("expected clean deletion of unreferenced category, got %v", err)
 		}
 	})
+
+	t.Run("R1: receipt attachment lifecycle and reference protection", func(t *testing.T) {
+		attItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: category.ID, Name: "Attachment item", Unit: "vial", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 1. Create a genuine non-clinical receipt attachment
+		attReceipt, err := store.SaveAttachment(ctx, a, "22223333444455556666777788889999", domain.CreateSecureAttachmentInput{
+			FileName: "receipt-real.pdf", MimeType: "application/pdf", FileSizeBytes: 2048, StoragePath: "/storage/receipt-real.pdf",
+			Sha256Hash: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", IsPublic: false,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 2. Reject binding clinical attachment
+		var patientUUID string
+		err = db.QueryRow(ctx, `SELECT id FROM patient LIMIT 1`).Scan(&patientUUID)
+		if err != nil {
+			t.Fatalf("failed to query patient: %v", err)
+		}
+		attClinical, err := store.SaveAttachment(ctx, a, "33334444555566667777888899990000", domain.CreateSecureAttachmentInput{
+			FileName: "patient-xray.png", MimeType: "image/png", FileSizeBytes: 2048, StoragePath: "/storage/patient-xray.png",
+			Sha256Hash: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", IsPublic: false, PatientID: &patientUUID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: attItem.ID, Kind: "receive", QuantityMilli: 1000, Reference: "REC-CLIN-FAIL", Reason: "Clinical attach test",
+			AttachmentURL: "/v1/attachments/" + attClinical.Token + "/content",
+		}, "key-clinical-fail-001")
+		if !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("expected ErrValidation binding clinical attachment, got %v", err)
+		}
+		// 3. Reject binding nonexistent/retired attachment
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: attItem.ID, Kind: "receive", QuantityMilli: 1000, Reference: "REC-NONEXIST-FAIL", Reason: "Nonexist test",
+			AttachmentURL: "/v1/attachments/00000000000000000000000000000000/content",
+		}, "key-nonexist-fail")
+		if !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound binding nonexistent attachment, got %v", err)
+		}
+		// 4. Bind valid attachment to receipt
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: attItem.ID, Kind: "receive", QuantityMilli: 1000, Reference: "REC-BIND-OK", Reason: "Valid receipt attachment",
+			AttachmentURL: "/v1/attachments/" + attReceipt.Token + "/content",
+		}, "key-receipt-bind-ok-01")
+		if err != nil {
+			t.Fatalf("valid receipt bind failed: %v", err)
+		}
+		// 5. Direct retirement conflict: DeleteAttachment must return ErrInUse (409)
+		_, err = store.DeleteAttachment(ctx, a, attReceipt.Token)
+		if !errors.Is(err, domain.ErrInUse) {
+			t.Fatalf("expected ErrInUse for receipt-referenced attachment, got %v", err)
+		}
+		// 6. Cleanup preservation: CleanupAbandonedAttachments must NOT delete bound receipt attachment
+		cleaned, err := store.CleanupAbandonedAttachments(ctx, a, time.Nanosecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range cleaned {
+			if p == attReceipt.StoragePath {
+				t.Fatalf("cleanup removed referenced receipt attachment: %s", p)
+			}
+		}
+		// 7. Shared settings reference: if displaced from general settings, still preserved by receipt
+		attShared, err := store.SaveAttachment(ctx, a, "44445555666677778888999900001111", domain.CreateSecureAttachmentInput{
+			FileName: "hospital-seal.png", MimeType: "image/png", FileSizeBytes: 2048, StoragePath: "/storage/hospital-seal.png",
+			Sha256Hash: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", IsPublic: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: attItem.ID, Kind: "receive", QuantityMilli: 1000, Reference: "REC-SHARED-OK", Reason: "Shared seal receipt",
+			AttachmentURL: "/v1/attachments/" + attShared.Token + "/content",
+		}, "key-shared-receipt-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = store.UpdateGeneralSetting(ctx, a, domain.GeneralSettingInput{Key: "app_logo", Value: "/v1/attachments/" + attShared.Token + "/content"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Displace it from general settings
+		_, err = store.UpdateGeneralSetting(ctx, a, domain.GeneralSettingInput{Key: "app_logo", Value: "https://example.com/logo.png"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Must still exist in secure_attachment
+		var stillExists bool
+		_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token=$1)`, attShared.Token).Scan(&stillExists)
+		if !stillExists {
+			t.Fatal("shared attachment was deleted when displaced from settings despite receipt reference")
+		}
+	})
+
+	t.Run("R2: durable linked void receipt and consumption protection", func(t *testing.T) {
+		voidItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: category.ID, Name: "Void test item", Unit: "ampoule", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 1. Receive Receipt A (100 units = 100000 milli) and Receipt B (100 units)
+		recA, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "receive", QuantityMilli: 100000, Reference: "REC-A", Supplier: "Vendor A", Reason: "Batch A",
+		}, "key-receipt-a-00001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		recB, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "receive", QuantityMilli: 100000, Reference: "REC-B", Supplier: "Vendor B", Reason: "Batch B",
+		}, "key-receipt-b-00001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Balance is now 200 units (200000 milli)
+
+		// 2. Void Receipt A successfully
+		voidA, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "void_receipt", OriginalID: recA.ID, QuantityMilli: 100000, Reason: "Vendor A cancelled batch",
+		}, "key-void-receipt-a-1")
+		if err != nil {
+			t.Fatalf("expected void of Receipt A to succeed, got %v", err)
+		}
+		if voidA.DeltaMilli != -100000 || voidA.OriginalID != recA.ID {
+			t.Fatalf("invalid void movement: %+v", voidA)
+		}
+		// Verify balance dropped to 100 units
+		var curBal int64
+		_ = db.QueryRow(ctx, `SELECT balance_milli FROM inventory_item WHERE id=$1`, voidItem.ID).Scan(&curBal)
+		if curBal != 100000 {
+			t.Fatalf("expected balance 100000 after void A, got %d", curBal)
+		}
+
+		// Verify Receipt A is flagged as isVoided in register
+		movsA, _, err := inv.Movements(ctx, a, voidItem.ID, "receive", 1, 10, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range movsA {
+			if m.ID == recA.ID && !m.IsVoided {
+				t.Fatalf("expected Receipt A to have IsVoided=true in Movements query")
+			}
+			if m.ID == recB.ID && m.IsVoided {
+				t.Fatalf("expected Receipt B to have IsVoided=false in Movements query")
+			}
+		}
+
+		// 3. Repeated void of Receipt A with a DIFFERENT request key must fail with ErrConflict (409)
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "void_receipt", OriginalID: recA.ID, QuantityMilli: 100000, Reason: "Vendor A cancelled batch again",
+		}, "key-void-receipt-a-2")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict repeating void of Receipt A with fresh key, got %v", err)
+		}
+
+		// 4. Intervening consumption protection:
+		// Issue 80 units against Receipt B. Remaining balance = 20 units.
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "issue", QuantityMilli: 80000, RecipientID: actors[1].ID, Reason: "Ward consumption of batch B",
+		}, "key-issue-receipt-b-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Attempt to void Receipt B (100 units): must be rejected because balance (20) < 100 units
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "void_receipt", OriginalID: recB.ID, QuantityMilli: 100000, Reason: "Void B while consumed",
+		}, "key-void-b-fail-0001")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict voiding consumed receipt B with insufficient stock, got %v", err)
+		}
+
+		// 5. Subsequent replenishment does NOT un-consume B:
+		// Replenish 100 units via Receipt C. Balance is now 120 units (>= 100 units).
+		recC, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "receive", QuantityMilli: 100000, Reference: "REC-C", Supplier: "Vendor C", Reason: "Batch C replenishment",
+		}, "key-receipt-c-00001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Attempting to void Receipt B must STILL fail with ErrConflict because B was consumed (min running balance was 20 < 100)
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "void_receipt", OriginalID: recB.ID, QuantityMilli: 100000, Reason: "Void B after replenishment",
+		}, "key-void-b-fail-0002")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict voiding receipt B whose stock was consumed even after replenishment, got %v", err)
+		}
+
+		// But Receipt C (unconsumed) CAN be voided:
+		voidC, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: voidItem.ID, Kind: "void_receipt", OriginalID: recC.ID, QuantityMilli: 100000, Reason: "Void unconsumed receipt C",
+		}, "key-void-c-ok-000001")
+		if err != nil {
+			t.Fatalf("expected void of unconsumed Receipt C to succeed, got %v", err)
+		}
+		if voidC.DeltaMilli != -100000 {
+			t.Fatalf("invalid delta for void C: %d", voidC.DeltaMilli)
+		}
+	})
+
+	t.Run("R3: server-side issue return status filtering", func(t *testing.T) {
+		retItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: category.ID, Name: "Return filter item", Unit: "set", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: retItem.ID, Kind: "receive", QuantityMilli: 50000, Reference: "REC-RET-01", Reason: "Stock for return tests",
+		}, "key-return-filter-rec-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Create Issue 1 (10 units) and Issue 2 (10 units)
+		iss1, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: retItem.ID, Kind: "issue", QuantityMilli: 10000, RecipientID: actors[1].ID, Reason: "Issue 1 to be fully returned",
+		}, "key-return-filter-iss-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		iss2, err := inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: retItem.ID, Kind: "issue", QuantityMilli: 10000, RecipientID: actors[1].ID, Reason: "Issue 2 to stay returnable",
+		}, "key-return-filter-iss-02")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Return Issue 1 fully (10 units)
+		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: retItem.ID, Kind: "return", OriginalID: iss1.ID, QuantityMilli: 10000, Restock: true, Reason: "Complete return of issue 1",
+		}, "key-return-filter-ret-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Query returnStatus = "returnable": must return only Issue 2
+		returnable, totalReturnable, err := inv.Movements(ctx, a, retItem.ID, "issue", 1, 10, "", "returnable")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if totalReturnable != 1 || len(returnable) != 1 || returnable[0].ID != iss2.ID {
+			t.Fatalf("expected 1 returnable issue (Issue 2), got total=%d, len=%d", totalReturnable, len(returnable))
+		}
+
+		// Query returnStatus = "returned": must return only Issue 1
+		returned, totalReturned, err := inv.Movements(ctx, a, retItem.ID, "issue", 1, 10, "", "returned")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if totalReturned != 1 || len(returned) != 1 || returned[0].ID != iss1.ID {
+			t.Fatalf("expected 1 returned issue (Issue 1), got total=%d, len=%d", totalReturned, len(returned))
+		}
+
+		// Query returnStatus = "" (all): must return both
+		allIssues, totalAllIssues, err := inv.Movements(ctx, a, retItem.ID, "issue", 1, 10, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if totalAllIssues != 2 || len(allIssues) != 2 {
+			t.Fatalf("expected 2 total issues, got total=%d, len=%d", totalAllIssues, len(allIssues))
+		}
+	})
+
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := strings.TrimPrefix(r.Header.Get("Cookie"), "session=")
 		fmt.Fprintf(w, `{"user":{"id":%q},"session":{"userId":%q,"expiresAt":%q}}`, who, who, time.Now().Add(time.Hour).Format(time.RFC3339))

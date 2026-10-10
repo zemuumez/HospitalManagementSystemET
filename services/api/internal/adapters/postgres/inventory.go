@@ -3,9 +3,41 @@ package postgres
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/jackc/pgx/v5"
 	"hms.local/api/internal/domain"
 )
+
+var (
+	inventoryAttachmentRegex = regexp.MustCompile(`/(?:v1|api/hms)/attachments/([0-9a-fA-F]{32})(?:/content)?`)
+	inventoryRawTokenRegex   = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
+)
+
+func parseInventoryAttachmentToken(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if m := inventoryAttachmentRegex.FindStringSubmatch(raw); len(m) > 1 {
+		return m[1]
+	}
+	if inventoryRawTokenRegex.MatchString(raw) {
+		return raw
+	}
+	if idx := strings.Index(raw, "/attachments/"); idx != -1 {
+		part := raw[idx+len("/attachments/"):]
+		if slash := strings.Index(part, "/"); slash != -1 {
+			part = part[:slash]
+		}
+		if inventoryRawTokenRegex.MatchString(part) {
+			return part
+		}
+	}
+	return ""
+}
 
 func scanInventoryCategory(row pgx.Row) (domain.InventoryCategory, error) {
 	var c domain.InventoryCategory
@@ -205,11 +237,11 @@ func (s Store) DeleteInventoryItem(ctx context.Context, a domain.Actor, id strin
 	return tx.Commit(ctx)
 }
 
-const inventoryMovementFields = `m.id,m.item_id,m.kind,m.quantity_milli,COALESCE(m.recipient_id,''),COALESCE(m.original_id::text,''),m.supplier,m.store_name,m.reference,m.cost_minor,m.restock,m.reason,m.delta_milli,COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=m.id AND r.kind='return'), 0)::bigint,m.attachment_url,m.issued_date,m.return_due_date,m.issued_by,m.department,COALESCE(it.name,''),m.created_at`
+const inventoryMovementFields = `m.id,m.item_id,m.kind,m.quantity_milli,COALESCE(m.recipient_id,''),COALESCE(m.original_id::text,''),m.supplier,m.store_name,m.reference,m.cost_minor,m.restock,m.reason,m.delta_milli,COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=m.id AND r.kind='return'), 0)::bigint,m.attachment_url,m.issued_date,m.return_due_date,m.issued_by,m.department,COALESCE(it.name,''),COALESCE((SELECT true FROM inventory_movement v WHERE v.original_id=m.id AND v.kind='void_receipt'), false)::boolean,m.created_at`
 
 func scanInventoryMovement(row pgx.Row) (domain.InventoryMovement, error) {
 	var m domain.InventoryMovement
-	e := row.Scan(&m.ID, &m.ItemID, &m.Kind, &m.QuantityMilli, &m.RecipientID, &m.OriginalID, &m.Supplier, &m.StoreName, &m.Reference, &m.CostMinor, &m.Restock, &m.Reason, &m.DeltaMilli, &m.ReturnedMilli, &m.AttachmentURL, &m.IssuedDate, &m.ReturnDueDate, &m.IssuedBy, &m.Department, &m.ItemName, &m.CreatedAt)
+	e := row.Scan(&m.ID, &m.ItemID, &m.Kind, &m.QuantityMilli, &m.RecipientID, &m.OriginalID, &m.Supplier, &m.StoreName, &m.Reference, &m.CostMinor, &m.Restock, &m.Reason, &m.DeltaMilli, &m.ReturnedMilli, &m.AttachmentURL, &m.IssuedDate, &m.ReturnDueDate, &m.IssuedBy, &m.Department, &m.ItemName, &m.IsVoided, &m.CreatedAt)
 	return m, clinicalError(e)
 }
 func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.InventoryMovementInput, key string) (domain.InventoryMovement, error) {
@@ -234,6 +266,31 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	if !errors.Is(e, pgx.ErrNoRows) {
 		return out, e
 	}
+
+	if i.AttachmentURL != "" {
+		tok := parseInventoryAttachmentToken(i.AttachmentURL)
+		if tok != "" {
+			var attID string
+			var isPublic bool
+			var patID, encID *string
+			err := tx.QueryRow(ctx, `
+				SELECT id, is_public, patient_id::text, encounter_id::text
+				FROM secure_attachment
+				WHERE token = $1
+				FOR UPDATE
+			`, tok).Scan(&attID, &isPublic, &patID, &encID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return out, domain.ErrNotFound
+			}
+			if err != nil {
+				return out, err
+			}
+			if patID != nil || encID != nil {
+				return out, domain.ErrValidation
+			}
+		}
+	}
+
 	item, e := scanInventoryItem(tx.QueryRow(ctx, `SELECT `+inventoryItemFields+` FROM inventory_item WHERE id=$1 FOR UPDATE`, i.ItemID))
 	if e != nil {
 		return out, e
@@ -274,6 +331,69 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 		if i.Restock {
 			delta = i.QuantityMilli
 		}
+	case "void_receipt":
+		var origItemID, origKind, origStore, origRef, origSupplier string
+		var origQty, origCost int64
+		var origCreatedAt time.Time
+		e = tx.QueryRow(ctx, `
+			SELECT item_id, kind, quantity_milli, store_name, reference, supplier, cost_minor, created_at
+			FROM inventory_movement
+			WHERE id = $1
+			FOR UPDATE
+		`, i.OriginalID).Scan(&origItemID, &origKind, &origQty, &origStore, &origRef, &origSupplier, &origCost, &origCreatedAt)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return out, domain.ErrNotFound
+		}
+		if e != nil {
+			return out, clinicalError(e)
+		}
+		if origKind != "receive" || origItemID != i.ItemID {
+			return out, domain.ErrValidation
+		}
+
+		var alreadyVoided bool
+		e = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM inventory_movement
+				WHERE original_id = $1 AND kind = 'void_receipt'
+			)
+		`, i.OriginalID).Scan(&alreadyVoided)
+		if e != nil {
+			return out, e
+		}
+		if alreadyVoided {
+			return out, domain.ErrConflict
+		}
+
+		if item.BalanceMilli < origQty {
+			return out, domain.ErrConflict
+		}
+
+		var minRunningBal int64
+		e = tx.QueryRow(ctx, `
+			SELECT COALESCE(MIN(running_bal), $3)
+			FROM (
+				SELECT $3 - COALESCE(SUM(delta_milli) OVER (
+					ORDER BY created_at DESC, id DESC
+					ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+				), 0) AS running_bal
+				FROM inventory_movement
+				WHERE item_id = $1 AND created_at >= $2
+			) sub
+		`, i.ItemID, origCreatedAt, item.BalanceMilli).Scan(&minRunningBal)
+		if e != nil {
+			return out, e
+		}
+		if minRunningBal < origQty {
+			return out, domain.ErrConflict
+		}
+
+		delta = -origQty
+		i.QuantityMilli = origQty
+		i.Supplier = origSupplier
+		i.StoreName = origStore
+		i.Reference = origRef
+		i.CostMinor = origCost
 	}
 	if item.BalanceMilli+delta < 0 || item.BalanceMilli+delta > 1000000000000 {
 		return out, domain.ErrStale
@@ -295,7 +415,7 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	}
 	return out, tx.Commit(ctx)
 }
-func (s Store) InventoryMovements(ctx context.Context, a domain.Actor, id string, kind string, page int, limit int, search string) ([]domain.InventoryMovement, int, error) {
+func (s Store) InventoryMovements(ctx context.Context, a domain.Actor, id string, kind string, page int, limit int, search string, returnStatus string) ([]domain.InventoryMovement, int, error) {
 	if a.Role != "admin" {
 		return nil, 0, domain.ErrForbidden
 	}
@@ -312,13 +432,13 @@ func (s Store) InventoryMovements(ctx context.Context, a domain.Actor, id string
 	defer tx.Rollback(ctx)
 
 	var total int
-	e = tx.QueryRow(ctx, `SELECT count(*) FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE ($1='' OR m.item_id=NULLIF($1,'')::uuid) AND ($2='' OR m.kind=$2) AND ($3='' OR m.reason ILIKE '%'||$3||'%' OR m.reference ILIKE '%'||$3||'%' OR m.supplier ILIKE '%'||$3||'%' OR it.name ILIKE '%'||$3||'%' OR m.department ILIKE '%'||$3||'%' OR m.issued_by ILIKE '%'||$3||'%')`, id, kind, search).Scan(&total)
+	e = tx.QueryRow(ctx, `SELECT count(*) FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE ($1='' OR m.item_id=NULLIF($1,'')::uuid) AND ($2='' OR m.kind=$2) AND ($3='' OR m.reason ILIKE '%'||$3||'%' OR m.reference ILIKE '%'||$3||'%' OR m.supplier ILIKE '%'||$3||'%' OR it.name ILIKE '%'||$3||'%' OR m.department ILIKE '%'||$3||'%' OR m.issued_by ILIKE '%'||$3||'%') AND ($4='' OR ($4='returnable' AND COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=m.id AND r.kind='return'), 0) < m.quantity_milli) OR ($4='returned' AND COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=m.id AND r.kind='return'), 0) >= m.quantity_milli))`, id, kind, search, returnStatus).Scan(&total)
 	if e != nil {
 		return nil, 0, e
 	}
 
 	offset := (page - 1) * limit
-	rows, e := tx.Query(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE ($1='' OR m.item_id=NULLIF($1,'')::uuid) AND ($2='' OR m.kind=$2) AND ($3='' OR m.reason ILIKE '%'||$3||'%' OR m.reference ILIKE '%'||$3||'%' OR m.supplier ILIKE '%'||$3||'%' OR it.name ILIKE '%'||$3||'%' OR m.department ILIKE '%'||$3||'%' OR m.issued_by ILIKE '%'||$3||'%') ORDER BY m.created_at DESC, m.id LIMIT $4 OFFSET $5`, id, kind, search, limit, offset)
+	rows, e := tx.Query(ctx, `SELECT `+inventoryMovementFields+` FROM inventory_movement m JOIN inventory_item it ON it.id=m.item_id WHERE ($1='' OR m.item_id=NULLIF($1,'')::uuid) AND ($2='' OR m.kind=$2) AND ($3='' OR m.reason ILIKE '%'||$3||'%' OR m.reference ILIKE '%'||$3||'%' OR m.supplier ILIKE '%'||$3||'%' OR it.name ILIKE '%'||$3||'%' OR m.department ILIKE '%'||$3||'%' OR m.issued_by ILIKE '%'||$3||'%') AND ($4='' OR ($4='returnable' AND COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=m.id AND r.kind='return'), 0) < m.quantity_milli) OR ($4='returned' AND COALESCE((SELECT sum(r.quantity_milli) FROM inventory_movement r WHERE r.original_id=m.id AND r.kind='return'), 0) >= m.quantity_milli)) ORDER BY m.created_at DESC, m.id LIMIT $5 OFFSET $6`, id, kind, search, returnStatus, limit, offset)
 	if e != nil {
 		return nil, 0, e
 	}

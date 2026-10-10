@@ -172,8 +172,8 @@ func (s Store) DeleteAttachment(ctx context.Context, a domain.Actor, token strin
 	if err != nil {
 		return "", err
 	}
-	// Clinical files cannot be deleted through public settings retirement!
-	if !isPublic || patientID != nil || encounterID != nil {
+	// Clinical files cannot be deleted through operational retirement!
+	if patientID != nil || encounterID != nil {
 		return "", domain.ErrForbidden
 	}
 
@@ -183,6 +183,8 @@ func (s Store) DeleteAttachment(ctx context.Context, a domain.Actor, token strin
 			SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 		) OR EXISTS(
 			SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
+		) OR EXISTS(
+			SELECT 1 FROM inventory_movement WHERE (attachment_url LIKE '%/attachments/' || $1 || '%' OR attachment_url = $1)
 		)
 	`, token).Scan(&inUse)
 	if err != nil {

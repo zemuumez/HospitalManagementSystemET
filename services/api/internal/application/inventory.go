@@ -13,7 +13,7 @@ type InventoryRepository interface {
 	SaveInventoryItem(context.Context, domain.Actor, string, domain.InventoryItemInput) (domain.InventoryItem, error)
 	DeleteInventoryItem(context.Context, domain.Actor, string) error
 	MoveInventory(context.Context, domain.Actor, domain.InventoryMovementInput, string) (domain.InventoryMovement, error)
-	InventoryMovements(context.Context, domain.Actor, string, string, int, int, string) ([]domain.InventoryMovement, int, error)
+	InventoryMovements(context.Context, domain.Actor, string, string, int, int, string, string) ([]domain.InventoryMovement, int, error)
 }
 type Inventory struct{ Store InventoryRepository }
 
@@ -89,12 +89,15 @@ func (i Inventory) Move(ctx context.Context, a domain.Actor, in domain.Inventory
 	}
 	return i.Store.MoveInventory(ctx, a, in, key)
 }
-func (i Inventory) Movements(ctx context.Context, a domain.Actor, id string, kind string, page int, limit int, search string) ([]domain.InventoryMovement, int, error) {
+func (i Inventory) Movements(ctx context.Context, a domain.Actor, id string, kind string, page int, limit int, search string, returnStatus string) ([]domain.InventoryMovement, int, error) {
 	if a.Role != "admin" {
 		return nil, 0, domain.ErrForbidden
 	}
-	if (id != "" && !domain.UUIDPattern.MatchString(id)) || !pageOK(page) || (kind != "" && kind != "receive" && kind != "issue" && kind != "return" && kind != "writeoff") || (limit != 0 && (limit < 1 || limit > 500)) || len(search) > 100 {
+	if (id != "" && !domain.UUIDPattern.MatchString(id)) || !pageOK(page) || (kind != "" && kind != "receive" && kind != "issue" && kind != "return" && kind != "writeoff" && kind != "void_receipt") || (limit != 0 && (limit < 1 || limit > 500)) || len(search) > 100 || (returnStatus != "" && returnStatus != "returnable" && returnStatus != "returned" && returnStatus != "all") {
 		return nil, 0, domain.ErrValidation
 	}
-	return i.Store.InventoryMovements(ctx, a, id, kind, page, limit, search)
+	if returnStatus == "all" {
+		returnStatus = ""
+	}
+	return i.Store.InventoryMovements(ctx, a, id, kind, page, limit, search, returnStatus)
 }

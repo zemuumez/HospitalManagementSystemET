@@ -173,6 +173,8 @@ func retireLockedDisplacedTokensTx(ctx context.Context, tx pgx.Tx, a domain.Acto
 				SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 			) OR EXISTS(
 				SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
+			) OR EXISTS(
+				SELECT 1 FROM inventory_movement WHERE (attachment_url LIKE '%/attachments/' || $1 || '%' OR attachment_url = $1)
 			)
 		`, tok).Scan(&inUse)
 		if err != nil {
@@ -522,6 +524,10 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 		      SELECT 1 FROM front_cms_setting fcs
 		      WHERE (fcs.value LIKE '%/attachments/' || sa.token || '%' OR fcs.value = sa.token)
 		  )
+		  AND NOT EXISTS (
+		      SELECT 1 FROM inventory_movement im
+		      WHERE (im.attachment_url LIKE '%/attachments/' || sa.token || '%' OR im.attachment_url = sa.token)
+		  )
 		ORDER BY sa.token ASC
 		LIMIT 100
 		FOR UPDATE OF sa SKIP LOCKED
@@ -562,6 +568,8 @@ func (s Store) CleanupAbandonedAttachments(ctx context.Context, a domain.Actor, 
 				SELECT 1 FROM hospital_general_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
 			) OR EXISTS(
 				SELECT 1 FROM front_cms_setting WHERE (value LIKE '%/attachments/' || $1 || '%' OR value = $1)
+			) OR EXISTS(
+				SELECT 1 FROM inventory_movement WHERE (attachment_url LIKE '%/attachments/' || $1 || '%' OR attachment_url = $1)
 			)
 		`, c.token).Scan(&inUse)
 		if err != nil {

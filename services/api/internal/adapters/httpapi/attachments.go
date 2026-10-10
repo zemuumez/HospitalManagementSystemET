@@ -75,7 +75,7 @@ func (s Server) attachments(w http.ResponseWriter, r *http.Request, a domain.Act
 		}
 		patientID := strings.TrimSpace(r.FormValue("patientId"))
 		isPublic := r.FormValue("isPublic") == "true"
-		if isPublic || patientID == "" {
+		if isPublic {
 			att, err := s.Attachments.UploadPublic(r.Context(), a, header.Filename, data)
 			if err != nil {
 				fail(w, err)
@@ -84,11 +84,15 @@ func (s Server) attachments(w http.ResponseWriter, r *http.Request, a domain.Act
 			write(w, http.StatusCreated, att)
 			return true
 		}
+		var patPtr *string
+		if patientID != "" {
+			patPtr = &patientID
+		}
 		var encounterID *string
 		if value := r.FormValue("encounterId"); value != "" {
 			encounterID = &value
 		}
-		att, err := s.Attachments.Upload(r.Context(), a, header.Filename, &patientID, encounterID, data)
+		att, err := s.Attachments.Upload(r.Context(), a, header.Filename, patPtr, encounterID, data)
 		if err != nil {
 			fail(w, err)
 			return true

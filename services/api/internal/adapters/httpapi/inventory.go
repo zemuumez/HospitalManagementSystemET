@@ -78,7 +78,7 @@ func (s Server) inventory(w http.ResponseWriter, r *http.Request, a domain.Actor
 	case len(parts) == 1 && parts[0] == "movements" && r.Method == "GET":
 		var data []domain.InventoryMovement
 		var total int
-		data, total, e = s.Inventory.Movements(r.Context(), a, r.URL.Query().Get("itemId"), r.URL.Query().Get("kind"), page, limit, r.URL.Query().Get("search"))
+		data, total, e = s.Inventory.Movements(r.Context(), a, r.URL.Query().Get("itemId"), r.URL.Query().Get("kind"), page, limit, r.URL.Query().Get("search"), r.URL.Query().Get("returnStatus"))
 		out = map[string]any{"movements": data, "total": total, "page": page, "limit": limit}
 	default:
 		return false

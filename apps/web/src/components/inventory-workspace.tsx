@@ -51,10 +51,11 @@ interface InventoryMovement {
   id: string;
   itemId: string;
   itemName?: string;
-  kind: string; // receive, issue, return, writeoff
+  kind: string; // receive, issue, return, writeoff, void_receipt
   quantityMilli: number;
   deltaMilli: number;
   returnedMilli?: number;
+  isVoided?: boolean;
   recipientId?: string;
   originalId?: string;
   supplier?: string;
@@ -118,6 +119,8 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   const [totalItems, setTotalItems] = useState(0);
   const [totalCategories, setTotalCategories] = useState(0);
   const [totalMovements, setTotalMovements] = useState(0);
+  const [totalReceipts, setTotalReceipts] = useState(0);
+  const [totalIssues, setTotalIssues] = useState(0);
 
   // Data states
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
@@ -267,15 +270,60 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
     setError("");
     const currentPage = targetPage ?? page;
     try {
-      // 1. Fetch catalogs for selectors (limit=500) so dropdowns are never truncated
+      // 1. Fetch complete catalogs for selectors without truncation (>500 items/categories)
+      const fetchCompleteCategories = async () => {
+        const first = await api<{
+          categories: InventoryCategory[];
+          total: number;
+        }>("inventory/categories?page=1&limit=500");
+        const list = [...(first.categories || [])];
+        const total = first.total ?? list.length;
+        if (total > 500) {
+          const pages = Math.ceil(total / 500);
+          const reqs = [];
+          for (let p = 2; p <= pages; p++) {
+            reqs.push(
+              api<{ categories: InventoryCategory[] }>(
+                `inventory/categories?page=${p}&limit=500`,
+              ),
+            );
+          }
+          const rest = await Promise.all(reqs);
+          for (const r of rest) {
+            if (r.categories) list.push(...r.categories);
+          }
+        }
+        return { categories: list, total };
+      };
+
+      const fetchCompleteItems = async () => {
+        const first = await api<{ items: InventoryItem[]; total: number }>(
+          "inventory/items?page=1&limit=500",
+        );
+        const list = [...(first.items || [])];
+        const total = first.total ?? list.length;
+        if (total > 500) {
+          const pages = Math.ceil(total / 500);
+          const reqs = [];
+          for (let p = 2; p <= pages; p++) {
+            reqs.push(
+              api<{ items: InventoryItem[] }>(
+                `inventory/items?page=${p}&limit=500`,
+              ),
+            );
+          }
+          const rest = await Promise.all(reqs);
+          for (const r of rest) {
+            if (r.items) list.push(...r.items);
+          }
+        }
+        return { items: list, total };
+      };
+
       const [catsCatalogRes, itemsCatalogRes, staffCatalogRes] =
         await Promise.all([
-          api<{ categories: InventoryCategory[]; total: number }>(
-            "inventory/categories?page=1&limit=500",
-          ),
-          api<{ items: InventoryItem[]; total: number }>(
-            "inventory/items?page=1&limit=500",
-          ),
+          fetchCompleteCategories(),
+          fetchCompleteItems(),
           fetch("/api/staff?page=1&limit=500")
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null),
@@ -331,6 +379,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
         movEndpoint += "&kind=receive";
       } else if (activeTab === "issued-items") {
         movEndpoint += "&kind=issue";
+        if (issueStatusFilter && issueStatusFilter !== "all") {
+          movEndpoint += `&returnStatus=${issueStatusFilter}`;
+        }
       }
       if (searchTerm) {
         movEndpoint += `&search=${encodeURIComponent(searchTerm)}`;
@@ -341,6 +392,40 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       }>(movEndpoint);
       setMovements(movRes.movements);
       setTotalMovements(movRes.total ?? movRes.movements.length);
+
+      if (activeTab === "item-stocks") {
+        setTotalReceipts(movRes.total ?? movRes.movements.length);
+      } else if (activeTab === "issued-items") {
+        setTotalIssues(movRes.total ?? movRes.movements.length);
+      }
+
+      // Maintain accurate per-kind tab badge counts on other tabs
+      if (activeTab === "item-stocks" && totalIssues === 0) {
+        api<{ total: number }>("inventory/movements?kind=issue&page=1&limit=1")
+          .then((r) => setTotalIssues(r.total ?? 0))
+          .catch(() => {});
+      } else if (activeTab === "issued-items" && totalReceipts === 0) {
+        api<{ total: number }>(
+          "inventory/movements?kind=receive&page=1&limit=1",
+        )
+          .then((r) => setTotalReceipts(r.total ?? 0))
+          .catch(() => {});
+      } else if (activeTab !== "item-stocks" && activeTab !== "issued-items") {
+        if (totalReceipts === 0) {
+          api<{ total: number }>(
+            "inventory/movements?kind=receive&page=1&limit=1",
+          )
+            .then((r) => setTotalReceipts(r.total ?? 0))
+            .catch(() => {});
+        }
+        if (totalIssues === 0) {
+          api<{ total: number }>(
+            "inventory/movements?kind=issue&page=1&limit=1",
+          )
+            .then((r) => setTotalIssues(r.total ?? 0))
+            .catch(() => {});
+        }
+      }
 
       setIsLive(true);
     } catch (cause) {
@@ -356,7 +441,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   useEffect(() => {
     setPage(1);
     void fetchInventoryData(1);
-  }, [activeTab, searchTerm, categoryFilter, lowStockOnly]);
+  }, [activeTab, searchTerm, categoryFilter, lowStockOnly, issueStatusFilter]);
 
   useEffect(() => {
     void fetchInventoryData(page);
@@ -530,14 +615,15 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("isPublic", "true");
       const res = await fetch("/api/hms/attachments", {
         method: "POST",
         body: formData,
       });
       if (!res.ok) throw new Error("Receipt upload failed");
       const data = await res.json();
-      const fileUrl = data.fileUrl || `/v1/attachments/${data.token}/content`;
+      const fileUrl = data.token
+        ? `/api/hms/attachments/${data.token}/content`
+        : data.fileUrl || "";
       setStockForm((prev) => ({ ...prev, attachmentUrl: fileUrl }));
     } catch (cause) {
       setError(
@@ -685,11 +771,12 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
         "inventory/movements",
         {
           itemId: voidingReceipt.itemId,
-          kind: "writeoff",
+          kind: "void_receipt",
+          originalId: voidingReceipt.id,
           quantityMilli: voidingReceipt.quantityMilli,
-          storeName: voidingReceipt.storeName || "",
           reason:
-            `Void receipt ${voidingReceipt.reference || ""}: ${voidReason}`.trim(),
+            voidReason.trim() ||
+            `Void receipt ${voidingReceipt.reference || ""}`.trim(),
         },
         "POST",
         () => {
@@ -698,8 +785,23 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           setSuccessMsg(t("Stock receipt voided successfully"));
         },
       );
-    } catch {
-      setError(t("Cannot void receipt: stock has already been consumed"));
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : "";
+      if (
+        msg.includes("conflict") ||
+        msg.includes("already been voided") ||
+        msg.includes("consumed")
+      ) {
+        setError(
+          t(
+            "Cannot void receipt: stock has already been consumed or receipt already voided",
+          ),
+        );
+      } else {
+        setError(
+          msg || t("Cannot void receipt: stock has already been consumed"),
+        );
+      }
     }
   };
 
@@ -799,13 +901,13 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       id: "item-stocks",
       label: t("Item Stocks"),
       icon: ArrowDownToLine,
-      count: totalMovements,
+      count: totalReceipts,
     },
     {
       id: "issued-items",
       label: t("Issued Items"),
       icon: ArrowUpFromLine,
-      count: totalMovements,
+      count: totalIssues,
     },
   ];
 
@@ -814,7 +916,9 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       ? totalItems
       : activeTab === "item-categories"
         ? totalCategories
-        : totalMovements;
+        : activeTab === "item-stocks"
+          ? totalReceipts
+          : totalIssues;
   const totalPages = Math.max(1, Math.ceil(currentTotal / pageSize));
 
   return (
@@ -1399,7 +1503,14 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs font-semibold">
-                        {m.reference || "-"}
+                        <div className="flex items-center gap-1.5">
+                          <span>{m.reference || "-"}</span>
+                          {m.isVoided && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
+                              {t("Voided")}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 font-bold font-mono text-emerald-600 dark:text-emerald-400">
                         +{(m.quantityMilli / 1000).toLocaleString()}{" "}
@@ -1443,13 +1554,24 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                           </button>
                           <button
                             type="button"
+                            disabled={m.isVoided}
                             onClick={() => {
-                              setVoidingReceipt(m);
-                              setVoidReason("");
+                              if (!m.isVoided) {
+                                setVoidingReceipt(m);
+                                setVoidReason("");
+                              }
                             }}
                             aria-label={t("Void Receipt")}
-                            title={t("Void Receipt")}
-                            className="p-1 text-muted-foreground hover:text-rose-600 rounded-md hover:bg-muted"
+                            title={
+                              m.isVoided
+                                ? t("Receipt already voided")
+                                : t("Void Receipt")
+                            }
+                            className={`p-1 rounded-md ${
+                              m.isVoided
+                                ? "text-muted-foreground/40 cursor-not-allowed opacity-40"
+                                : "text-muted-foreground hover:text-rose-600 hover:bg-muted"
+                            }`}
                           >
                             <Ban className="w-4 h-4" />
                           </button>
@@ -1463,7 +1585,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           {/* Pagination Controls */}
           <div className="p-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {t("Page")} {page} {t("of")} {totalPages} ({totalMovements}{" "}
+              {t("Page")} {page} {t("of")} {totalPages} ({totalReceipts}{" "}
               {t("Item Stocks")})
             </span>
             <div className="flex items-center gap-2">
@@ -1506,11 +1628,12 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               <select
                 aria-label={t("Filter by status")}
                 value={issueStatusFilter}
-                onChange={(e) =>
+                onChange={(e) => {
                   setIssueStatusFilter(
                     e.target.value as "all" | "returnable" | "returned",
-                  )
-                }
+                  );
+                  setPage(1);
+                }}
                 className="text-xs py-1.5 px-3 bg-background border border-border rounded-lg focus:outline-hidden inventory-input"
               >
                 <option value="all">{t("All Statuses")}</option>
@@ -1549,15 +1672,6 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
               <tbody className="divide-y divide-border/60">
                 {movements
                   .filter((m) => m.kind === "issue")
-                  .filter((m) => {
-                    const returned = m.returnedMilli || 0;
-                    const isFullyReturned = returned >= m.quantityMilli;
-                    if (issueStatusFilter === "returnable")
-                      return !isFullyReturned;
-                    if (issueStatusFilter === "returned")
-                      return isFullyReturned;
-                    return true;
-                  })
                   .map((m) => {
                     const issued = m.quantityMilli / 1000;
                     const returned = (m.returnedMilli || 0) / 1000;
@@ -1684,7 +1798,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
           {/* Pagination Controls */}
           <div className="p-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {t("Page")} {page} {t("of")} {totalPages} ({totalMovements}{" "}
+              {t("Page")} {page} {t("of")} {totalPages} ({totalIssues}{" "}
               {t("Issued Items")})
             </span>
             <div className="flex items-center gap-2">
@@ -2119,6 +2233,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                     {uploadingReceipt ? t("Uploading...") : t("Upload Receipt")}
                     <input
                       type="file"
+                      aria-label="Upload Receipt"
                       accept="image/*,application/pdf"
                       className="hidden"
                       onChange={(e) => {
@@ -2827,12 +2942,25 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         {getItemCategory(m.itemId)}
                       </p>
                     </div>
-                    <span className="uppercase text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-muted text-foreground">
-                      {m.kind}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {m.isVoided && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
+                          {t("Voided")}
+                        </span>
+                      )}
+                      <span className="uppercase text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-muted text-foreground">
+                        {m.kind}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="space-y-2 p-3 bg-muted/40 rounded-xl text-xs">
+                    {m.isVoided && (
+                      <div className="flex justify-between text-rose-600 dark:text-rose-400 font-semibold">
+                        <span>{t("Status:")}</span>
+                        <span>{t("Voided / Reversed")}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
                         {t("Quantity:")}
