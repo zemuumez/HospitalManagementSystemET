@@ -1178,9 +1178,19 @@ dialog:has(.modal-content) {
 .legacy-dark h3 {
   color: #e9ecef;
 }
+.legacy-dark .legacy-nav {
+  color: #cbd5e1;
+}
 .legacy-dark .legacy-nav.active,
 .legacy-dark .legacy-nav:hover {
   background: #2d2d49;
+  color: #c3c8ff;
+}
+.legacy-dark .legacy-submenu a {
+  color: #cbd5e1;
+}
+.legacy-dark .legacy-submenu a:hover,
+.legacy-dark .legacy-submenu a.active {
   color: #c3c8ff;
 }
 .legacy-dark .field,
@@ -2031,34 +2041,184 @@ html[lang="am"] .label {
 .legacy-dark .legacy-workspace,
 .legacy-dark .inventory-table-card,
 .legacy-dark .inventory-panel {
-  color: #e4e7eb;
+  color: #e2e8f0;
 }
 .legacy-dark .inventory-card-bg {
   background: #12151f !important;
   border-color: #2b3344 !important;
-  color: #e4e7eb !important;
+  color: #e2e8f0 !important;
 }
-.legacy-dark .inventory-table-header {
-  background: #1e202a !important;
-  color: #c4cbd7 !important;
+
+/* High-Contrast Navigation Tabs & Pill Counters */
+.legacy-dark .legacy-workspace nav button {
+  color: #cbd5e1 !important;
 }
+.legacy-dark .legacy-workspace nav button:hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+.legacy-dark .legacy-workspace nav button[class*="bg-primary"],
+.legacy-dark .legacy-workspace nav button.active {
+  background-color: #6571ff !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(101, 113, 255, 0.35) !important;
+}
+.legacy-dark .legacy-workspace nav button span:last-child {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  color: #cbd5e1 !important;
+}
+.legacy-dark .legacy-workspace nav button[class*="bg-primary"] span:last-child,
+.legacy-dark .legacy-workspace nav button.active span:last-child {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+/* Headings & Subtitles */
+.legacy-dark .legacy-workspace h2,
+.legacy-dark .legacy-workspace h3,
+.legacy-dark .legacy-workspace h4 {
+  color: #f8fafc !important;
+}
+.legacy-dark .legacy-workspace p.text-muted-foreground,
+.legacy-dark .legacy-workspace span.text-muted-foreground {
+  color: #94a3b8 !important;
+}
+.legacy-dark .legacy-workspace .text-emerald-950 {
+  color: #6ee7b7 !important;
+}
+
+/* High-Contrast Table Headers */
+.legacy-dark .inventory-table-header th {
+  background-color: #1a1e2b !important;
+  color: #cbd5e1 !important;
+  border-bottom: 1px solid #2b3344 !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* High-Contrast Table Rows & Cells */
 .legacy-dark .inventory-table-row {
-  background: #12151f !important;
-  color: #e4e7eb !important;
-  border-color: #2b3344 !important;
+  background-color: #12151f !important;
+  border-bottom: 1px solid #232936 !important;
 }
 .legacy-dark .inventory-table-row:hover {
-  background: #1a1e2b !important;
+  background-color: #1a1e2d !important;
 }
+.legacy-dark .inventory-table-row td {
+  color: #e2e8f0 !important;
+  border-color: #232936 !important;
+}
+.legacy-dark .inventory-table-row td.text-muted-foreground,
+.legacy-dark .inventory-table-row td .text-muted-foreground {
+  color: #94a3b8 !important;
+}
+.legacy-dark .inventory-table-row td.text-foreground,
+.legacy-dark .inventory-table-row td .text-foreground {
+  color: #f8fafc !important;
+  font-weight: 600 !important;
+}
+.legacy-dark .inventory-table-row td span.text-muted-foreground {
+  color: #94a3b8 !important;
+}
+.legacy-dark .inventory-table-row td span.font-mono.bg-muted {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+}
+
+/* Row Action Buttons */
+.legacy-dark .inventory-table-row button {
+  color: #cbd5e1 !important;
+}
+.legacy-dark .inventory-table-row button:hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Row Metric Accents */
+.legacy-dark .inventory-table-row .text-emerald-600 {
+  color: #34d399 !important;
+}
+.legacy-dark .inventory-table-row .text-amber-600 {
+  color: #fbbf24 !important;
+}
+.legacy-dark .inventory-table-row .text-rose-600 {
+  color: #f87171 !important;
+}
+
+/* High-Contrast Status Badges */
+.legacy-dark [data-status-badge="in-stock"],
+.legacy-dark [data-status-badge="returned"] {
+  background-color: rgba(16, 185, 129, 0.22) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(52, 211, 153, 0.45) !important;
+  font-weight: 600 !important;
+}
+.legacy-dark [data-status-badge="in-stock"] span.bg-emerald-500,
+.legacy-dark [data-status-badge="returned"] svg {
+  color: #34d399 !important;
+}
+
+.legacy-dark [data-status-badge="low-stock"],
+.legacy-dark [data-status-badge="issued"],
+.legacy-dark [data-status-badge="partial"] {
+  background-color: rgba(245, 158, 11, 0.22) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(251, 191, 36, 0.45) !important;
+  font-weight: 600 !important;
+}
+.legacy-dark [data-status-badge="low-stock"] span.bg-amber-500,
+.legacy-dark [data-status-badge="issued"] svg,
+.legacy-dark [data-status-badge="partial"] svg {
+  color: #fbbf24 !important;
+}
+.legacy-dark [data-status-badge="partial"]:hover {
+  background-color: rgba(245, 158, 11, 0.35) !important;
+  color: #fde68a !important;
+}
+
+.legacy-dark [data-status-badge="out-of-stock"] {
+  background-color: rgba(239, 68, 68, 0.22) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(248, 113, 113, 0.45) !important;
+  font-weight: 600 !important;
+}
+.legacy-dark [data-status-badge="out-of-stock"] span.bg-rose-500 {
+  background-color: #f87171 !important;
+}
+
+/* Input Fields & Dropdowns */
 .legacy-dark .inventory-input {
-  background: #161a25 !important;
+  background-color: #161a25 !important;
   border-color: #384257 !important;
-  color: #e4e7eb !important;
+  color: #f8fafc !important;
 }
+.legacy-dark .inventory-input::placeholder {
+  color: #94a3b8 !important;
+}
+.legacy-dark .inventory-input option {
+  background-color: #161a25 !important;
+  color: #f8fafc !important;
+}
+
+/* Pagination Controls */
+.legacy-dark .legacy-workspace .border-t {
+  border-color: #2b3344 !important;
+}
+.legacy-dark .legacy-workspace .border-t button {
+  color: #cbd5e1 !important;
+  border-color: #384257 !important;
+  background-color: #161a25 !important;
+}
+.legacy-dark .legacy-workspace .border-t button:hover:not(:disabled) {
+  color: #ffffff !important;
+  background-color: #252d3d !important;
+}
+
+/* Modals */
 .legacy-dark .inventory-modal-bg {
   background: #12151f !important;
   border-color: #2b3344 !important;
-  color: #e4e7eb !important;
+  color: #e2e8f0 !important;
 }
 .dashboard-widgets {
   gap: 20px;

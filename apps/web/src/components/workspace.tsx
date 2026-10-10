@@ -242,7 +242,7 @@ export function Workspace({ children }: { children: React.ReactNode }) {
       <PreviewRoleContext.Provider value={role}>
         <div
           data-ready={identity ? "true" : "false"}
-          className={`legacy-shell ${collapsed ? "is-collapsed" : ""} ${dark ? "legacy-dark" : ""}`}
+          className={`legacy-shell ${collapsed ? "is-collapsed" : ""} ${dark ? "legacy-dark dark" : ""}`}
         >
           <a className="sr-only focus:not-sr-only" href="#main-content">
             {t("Skip to content")}

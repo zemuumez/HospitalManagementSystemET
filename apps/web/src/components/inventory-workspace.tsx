@@ -855,7 +855,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                   isActive
                     ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-200 dark:hover:text-white dark:hover:bg-slate-800/60"
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -864,7 +864,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                   className={`text-xs px-1.5 py-0.5 rounded-full ${
                     isActive
                       ? "bg-primary-foreground/20 text-primary-foreground font-semibold"
-                      : "bg-muted text-muted-foreground"
+                      : "bg-slate-200 text-slate-700 dark:bg-slate-700/60 dark:text-slate-200"
                   }`}
                 >
                   {tab.count}
@@ -1104,17 +1104,26 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
                         </td>
                         <td className="px-4 py-3">
                           {isOut ? (
-                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-800 dark:text-rose-300 font-medium">
+                            <span
+                              data-status-badge="out-of-stock"
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-800 dark:text-rose-300 font-medium"
+                            >
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                               {t("Out of Stock")}
                             </span>
                           ) : isLow ? (
-                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 font-medium">
+                            <span
+                              data-status-badge="low-stock"
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 font-medium"
+                            >
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                               {t("Low Stock")}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-medium">
+                            <span
+                              data-status-badge="in-stock"
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-medium"
+                            >
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                               {t("In Stock")}
                             </span>

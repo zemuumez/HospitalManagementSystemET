@@ -128,8 +128,8 @@ The following authentic screenshots were captured during isolated browser execut
 - `09_inventory_partial_return.png`: Partial return modal and updated 75 balance.
 - `10_inventory_remaining_return_completed.png`: Complete return updating issue status badge to Returned.
 - `11_inventory_record_protection.png`: Modal rejection preventing deletion of referenced item/category.
-- `12_inventory_dark_mode.png`: Authentic dark mode showing real `.legacy-shell.legacy-dark` and `#12151f` card background.
-- `13_inventory_amharic_localization.png`: Authentic Amharic localization covering all tabs, action buttons, table headers, search placeholders, and dialog controls.
+- `12_inventory_dark_mode.png`: Authentic dark mode showing real `.legacy-shell.legacy-dark` with high-contrast row text, navigation tabs, pill counters, and vibrant WCAG-compliant status badges.
+- `13_inventory_amharic_localization.png`: Authentic Amharic localization covering all tabs, header subtitles ("የሕክምና ቁሳቁሶች ክምችት ሚዛን እና የድጋሚ ማዘዣ መጠንን ይከታተሉ"), action buttons, table headers, search placeholders, and dialog controls.
 
 ---
 

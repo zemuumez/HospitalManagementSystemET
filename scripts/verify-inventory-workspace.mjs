@@ -1463,6 +1463,37 @@ async function main() {
       `Expected dark card background (#12151f), got ${cardBg}`,
     );
 
+    // Verify dark mode status badge and nav contrast
+    const statusBadgeColor = await page.$eval(
+      '[data-status-badge="in-stock"]',
+      (el) => window.getComputedStyle(el).color,
+    );
+    console.log(
+      "Verified Dark mode status badge computed color:",
+      statusBadgeColor,
+    );
+    assert(
+      statusBadgeColor.includes("52, 211, 153"),
+      `Expected vibrant emerald text (rgb(52, 211, 153)), got ${statusBadgeColor}`,
+    );
+
+    const navBtnColor = await page.$eval(
+      'nav button:not([class*="bg-primary"])',
+      (el) => window.getComputedStyle(el).color,
+    );
+    console.log(
+      "Verified Dark mode inactive nav button computed color:",
+      navBtnColor,
+    );
+    assert(
+      navBtnColor.includes("203, 213, 225") ||
+        navBtnColor.includes("148, 163, 184") ||
+        navBtnColor.includes("226, 232, 240") ||
+        (navBtnColor.includes("oklab") &&
+          parseFloat(navBtnColor.slice(6)) >= 0.65),
+      `Expected high-contrast slate text, got ${navBtnColor}`,
+    );
+
     await page.screenshot({
       path: resolve(screenshotsDir, "12_inventory_dark_mode.png"),
     });
@@ -1579,6 +1610,22 @@ async function main() {
     // Return to Items tab for complete Amharic screenshot
     await page.locator('button[data-tab="items"]').click();
     await page.waitForTimeout(500);
+
+    // Verify subtitle is translated into Amharic and not in English
+    assert(
+      (await page
+        .getByText("የሕክምና ቁሳቁሶች ክምችት ሚዛን እና የድጋሚ ማዘዣ መጠንን ይከታተሉ")
+        .count()) >= 1,
+      "Subtitle 'Track medical supply stock balances and reorder thresholds' must appear in Amharic",
+    );
+    assert.equal(
+      await page
+        .getByText("Track medical supply stock balances and reorder thresholds")
+        .count(),
+      0,
+      "English subtitle must NOT be displayed in Amharic mode",
+    );
+
     await page.screenshot({
       path: resolve(screenshotsDir, "13_inventory_amharic_localization.png"),
     });
