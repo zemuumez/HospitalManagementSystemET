@@ -120,7 +120,27 @@ Following the final review (`INVENTORY-FINAL-REVIEW-2026-10-11.md` on `origin/co
 
 ---
 
-## 6. UI & Localization Parity
+## 6. Ledger & Upgrade Review Remediation (G1–G2)
+
+Following the ledger review (`INVENTORY-LEDGER-REVIEW-2026-10-11.md` on `origin/codex/inventory-ledger-review`), two critical audit findings were resolved and verified:
+
+- **G1 (Migrated Legacy History Conservative Policy)**:
+  - Inferred legacy balances cannot be trusted as true serialized history because historical lock-acquisition order cannot be reconstructed from `created_at` timestamps or delta signs under clock skew.
+  - Removed the speculative timestamp backfill from migration `055_inventory_void_and_ledger_order.sql`. Pre-existing legacy movements remain strictly with `ledger_seq = 0, balance_after_milli = 0`.
+  - Enforced an explicit conservative policy in `services/api/internal/adapters/postgres/inventory.go`: automated `void_receipt` reversals of unverified legacy receipts (`ledger_seq <= 0`) are safely rejected with `domain.ErrConflict` (`409 Conflict`).
+  - Completely removed the sequence-zero timestamp reverse-window fallback query, avoiding false proofs of historical ordering.
+  - New post-cutover receipts recorded under the item lock receive strictly monotonic positive `ledger_seq > 0` and accurate running balances, allowing genuine consumption checking via `MIN(balance_after_milli) WHERE ledger_seq >= origSeq`.
+  - Added a populated prior-054 upgrade regression test in `F1` featuring out-of-order timestamps and intervening consumption, proving legacy receipts cannot bypass consumption protection and verifying that fresh post-upgrade receipts void cleanly.
+
+- **G2 (Database-Enabled Go Suite Fixture Repairs)**:
+  - `R1` (`inventory_test.go`): Replaced hardcoded attachment tokens with distinct cryptographically random 32-character hex tokens and 64-character hashes for each test fixture, eliminating unique constraint collisions (`secure_attachment_token_key`).
+  - `F2` & `F1` (`inventory_test.go`): Lengthened all test idempotency keys to `>= 16` characters (`key-order-rec-a-0001`, `key-order-rec-b-0001`, `key-tie-rec-00000001`, `key-tie-issue-0000001`, `key-upg-rec-00000001`, `key-upg-void-00000001`), satisfying application validation constraints.
+  - `S4` (`cms_settings_test.go`): Linked clinical fixture 4 to a real test patient so it is correctly identified as clinical, and added an explicit aged private nonclinical fixture (Fixture 5) verifying that non-clinical private uploads are properly cleaned up.
+  - Browser test fixture runner (`verify-inventory-workspace.mjs`): Updated `insertMovementFixture` to compute and store `ledger_seq` and `balance_after_milli`, ensuring test database fixtures match post-cutover application ledger sequencing.
+
+---
+
+## 7. UI & Localization Parity
 
 - **Unified 4-Tab Workspace (`inventory-workspace.tsx`)**:
   - `items`: Item register, live balance badges (`In Stock`, `Low Stock`, `Out of Stock`), category filtering, search, view modal with movement history, edit modal, delete protection.
@@ -136,19 +156,19 @@ Following the final review (`INVENTORY-FINAL-REVIEW-2026-10-11.md` on `origin/co
 
 ---
 
-## 7. Verification Results
+## 8. Verification Results
 
-### 7.1 Quality Gates
+### 8.1 Quality Gates
 
 | Suite / Gate | Command | Result |
 | :--- | :--- | :--- |
-| **Go Isolated Database Tests** | `go test ./...` in `services/api` | **PASSED** (100% passing across adapters/postgres, adapters/httpapi, delivery, domain, stripe, privatefiles, including F1, F2, F3 regressions) |
+| **Go Isolated Database Tests** | `go test ./...` in `services/api` | **PASSED** (100% passing across adapters/postgres, adapters/httpapi, delivery, domain, stripe, privatefiles, including F1, F2, F3, G1, G2 regressions) |
 | **Frontend Typecheck** | `npm run typecheck` | **PASSED** (0 errors) |
 | **Code Formatting** | `npm run format:check` | **PASSED** (100% clean Prettier) |
 | **Frontend Unit Tests** | `npm test` | **PASSED** (8/8 unit tests passed, including translation completeness) |
 | **Isolated Inventory Browser Suite** | `npm run test:inventory` | **PASSED** (23/23 journeys passed, 0 failures, exit code 0) |
 
-### 7.2 Browser Suite Journeys (23/23 Passed)
+### 8.2 Browser Suite Journeys (23/23 Passed)
 
 1. `Journey 1`: Admin lands on Inventory workspace with clean 4-tab interface.
 2. `Journey 2`: Empty database state verified without hardcoded mocks.
@@ -171,12 +191,12 @@ Following the final review (`INVENTORY-FINAL-REVIEW-2026-10-11.md` on `origin/co
 19. `Journey 19`: Theme & Amharic Localization parity (Finding I5 regression) verifying real `.legacy-dark` computed card styling, high-contrast tab navigation, and complete Amharic controls.
 20. `Journey 20`: Findings I1 and R3 regression — full catalog pagination across 505 items in modal selectors; server-backed returnStatus filtering before pagination with page reset; discoverability of older outstanding issues behind returned issues.
 21. `Journey 21`: Finding I2 regression — empty category disables submission and clears child selection; prevents unintended stock mutations.
-22. `Journey 22`: Findings I3, R1, R2, and F3 regression — real file attachment upload/download bytes; direct attachment retirement conflict (409); aged cleanup preservation of bound receipts while deleting aged abandoned private uploads; shared settings asset displacement preservation; rejection of clinical/missing tokens; durable linked `void_receipt` reversal with `original_id`; UI voided badge and disabled buttons; repeated void rejection (409); independent voiding of multiple receipts on the same item; and intervening consumption protection across subsequent replenishment (409).
+22. `Journey 22`: Findings I3, R1, R2, F3, and G1 regression — real file attachment upload/download bytes; direct attachment retirement conflict (409); aged cleanup preservation of bound receipts while deleting aged abandoned private uploads; shared settings asset displacement preservation; rejection of clinical/missing tokens; durable linked `void_receipt` reversal with `original_id`; UI voided badge and disabled buttons; repeated void rejection (409); independent voiding of multiple receipts on the same item; and intervening consumption protection across subsequent replenishment (409).
 23. `Journey 23`: Finding I4 regression — fractional (1500 milli = 1.5 units) and zero (0 milli = 0 units) reorder thresholds preserved without rounding drift.
 
 ---
 
-## 8. Visual Evidence
+## 9. Visual Evidence
 
 The following authentic screenshots were captured during isolated browser execution:
 
@@ -196,7 +216,7 @@ The following authentic screenshots were captured during isolated browser execut
 
 ---
 
-## 9. Remaining Limitations & Exclusions
+## 10. Remaining Limitations & Exclusions
 
 - **Standalone Purchase Orders Aggregate**: Basic inventory tracks stock receipts (`item-stocks`) and issues (`issued-items`). Multi-step procurement approval hierarchies and purchase order contracts belong to future procurement modules and are not part of the inventory workspace contract.
 - **Lot Number & Supplier-Contact Tracking**: The inspected movement contract does not include separate lot expiration registers or supplier contact books; supplier name and store name are captured as transaction metadata.

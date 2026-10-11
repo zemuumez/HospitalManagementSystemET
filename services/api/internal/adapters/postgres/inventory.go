@@ -5,7 +5,6 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"hms.local/api/internal/domain"
@@ -341,13 +340,12 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	case "void_receipt":
 		var origItemID, origKind, origStore, origRef, origSupplier string
 		var origQty, origCost, origSeq, origBalAfter int64
-		var origCreatedAt time.Time
 		e = tx.QueryRow(ctx, `
-			SELECT item_id, kind, quantity_milli, store_name, reference, supplier, cost_minor, created_at, ledger_seq, balance_after_milli
+			SELECT item_id, kind, quantity_milli, store_name, reference, supplier, cost_minor, ledger_seq, balance_after_milli
 			FROM inventory_movement
 			WHERE id = $1
 			FOR UPDATE
-		`, i.OriginalID).Scan(&origItemID, &origKind, &origQty, &origStore, &origRef, &origSupplier, &origCost, &origCreatedAt, &origSeq, &origBalAfter)
+		`, i.OriginalID).Scan(&origItemID, &origKind, &origQty, &origStore, &origRef, &origSupplier, &origCost, &origSeq, &origBalAfter)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return out, domain.ErrNotFound
 		}
@@ -372,30 +370,22 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 			return out, domain.ErrConflict
 		}
 
+		// Conservative legacy policy: reject automatic voids of legacy receipts (ledger_seq <= 0)
+		// because historical lock-acquisition order cannot be reliably reconstructed from timestamps.
+		if origSeq <= 0 {
+			return out, domain.ErrConflict
+		}
+
 		if item.BalanceMilli < origQty {
 			return out, domain.ErrConflict
 		}
 
 		var minRunningBal int64
-		if origSeq > 0 {
-			e = tx.QueryRow(ctx, `
-				SELECT COALESCE(MIN(balance_after_milli), $3)
-				FROM inventory_movement
-				WHERE item_id = $1 AND ledger_seq >= $2
-			`, i.ItemID, origSeq, item.BalanceMilli).Scan(&minRunningBal)
-		} else {
-			e = tx.QueryRow(ctx, `
-				SELECT COALESCE(MIN(running_bal), $3)
-				FROM (
-					SELECT $3 - COALESCE(SUM(delta_milli) OVER (
-						ORDER BY created_at DESC, CASE WHEN delta_milli > 0 THEN 0 ELSE 1 END, id DESC
-						ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-					), 0) AS running_bal
-					FROM inventory_movement
-					WHERE item_id = $1 AND created_at >= $2
-				) sub
-			`, i.ItemID, origCreatedAt, item.BalanceMilli).Scan(&minRunningBal)
-		}
+		e = tx.QueryRow(ctx, `
+			SELECT COALESCE(MIN(balance_after_milli), $3)
+			FROM inventory_movement
+			WHERE item_id = $1 AND ledger_seq >= $2
+		`, i.ItemID, origSeq, item.BalanceMilli).Scan(&minRunningBal)
 		if e != nil {
 			return out, e
 		}

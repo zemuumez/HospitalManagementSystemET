@@ -1088,16 +1088,33 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 				t.Fatal(err)
 			}
 
-			// Fixture 4: Aged clinical private asset (>24h, is_public=false)
+			// Fixture 4: Aged clinical private asset (>24h, is_public=false, linked to patient)
+			var patID string
+			err = db.QueryRow(ctx, `SELECT id FROM patient LIMIT 1`).Scan(&patID)
+			if err != nil {
+				_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, gender, birth_date) VALUES('Clinical', 'Patient', 'male', '1990-01-01') RETURNING id`).Scan(&patID)
+			}
 			clinToken := "c4444444444444444444444444444444"
 			clinID := "44444444-4444-4444-4444-444444444444"
 			_, err = db.Exec(ctx, `
-				INSERT INTO secure_attachment (id, token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, created_at)
-				VALUES ($1, $2, 'clinical_lab.pdf', 'application/pdf', 512, 'clinical_lab.pdf', $3, $4, false, clock_timestamp() - interval '48 hours')
-				ON CONFLICT (id) DO NOTHING
-			`, clinID, clinToken, strings.Repeat("b", 64), admin.ID)
+				INSERT INTO secure_attachment (id, token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, patient_id, created_at)
+				VALUES ($1, $2, 'clinical_lab.pdf', 'application/pdf', 512, 'clinical_lab.pdf', $3, $4, false, $5::uuid, clock_timestamp() - interval '48 hours')
+				ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token, storage_path = EXCLUDED.storage_path, patient_id = EXCLUDED.patient_id, created_at = EXCLUDED.created_at
+			`, clinID, clinToken, strings.Repeat("b", 64), admin.ID, patID)
 			if err != nil {
 				t.Fatalf("failed to insert clinical fixture 4: %v", err)
+			}
+
+			// Fixture 5: Aged private nonclinical asset (>24h, is_public=false, patient_id=NULL, encounter_id=NULL)
+			privNonClinToken := "c5555555555555555555555555555555"
+			privNonClinID := "55555555-5555-5555-5555-555555555555"
+			_, err = db.Exec(ctx, `
+				INSERT INTO secure_attachment (id, token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, created_at)
+				VALUES ($1, $2, 'private_draft.pdf', 'application/pdf', 512, 'private_draft.pdf', $3, $4, false, clock_timestamp() - interval '48 hours')
+				ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token, storage_path = EXCLUDED.storage_path, created_at = EXCLUDED.created_at
+			`, privNonClinID, privNonClinToken, strings.Repeat("c", 64), admin.ID)
+			if err != nil {
+				t.Fatalf("failed to insert aged private nonclinical fixture 5: %v", err)
 			}
 
 			// Test operational entry point: RunOperationalAttachmentCleanup
@@ -1113,6 +1130,13 @@ func testCMSSettings(t *testing.T, db *pgxpool.Pool, store Store, actors []domai
 			_, _, err = attSrv.Download(ctx, domain.Actor{}, attAgedUnref.Token)
 			if !errors.Is(err, domain.ErrNotFound) {
 				t.Fatalf("expected Fixture 1 to be deleted, got %v", err)
+			}
+
+			// Assert Fixture 5 (aged private nonclinical) is deleted
+			var privExists bool
+			_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token = $1)`, privNonClinToken).Scan(&privExists)
+			if privExists {
+				t.Fatal("Fixture 5 (aged private nonclinical) must be deleted by operational cleanup")
 			}
 
 			// Assert Fixture 2 (recent pending) is preserved

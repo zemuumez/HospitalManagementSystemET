@@ -26,33 +26,6 @@ ALTER TABLE inventory_movement
   ADD COLUMN IF NOT EXISTS ledger_seq bigint NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS balance_after_milli bigint NOT NULL DEFAULT 0;
 
--- Backfill preexisting movements with deterministic ledger sequence and running balance.
--- Deterministic order handles timestamp ties: receipts (+delta) precede issues (-delta) so balance never goes negative.
-ALTER TABLE inventory_movement DISABLE TRIGGER immutable_inventory_movement;
-
-WITH ordered AS (
-  SELECT id,
-         row_number() OVER (
-           PARTITION BY item_id
-           ORDER BY created_at ASC,
-                    CASE WHEN delta_milli > 0 THEN 0 ELSE 1 END,
-                    id ASC
-         ) AS seq,
-         sum(delta_milli) OVER (
-           PARTITION BY item_id
-           ORDER BY created_at ASC,
-                    CASE WHEN delta_milli > 0 THEN 0 ELSE 1 END,
-                    id ASC
-         ) AS bal
-  FROM inventory_movement
-)
-UPDATE inventory_movement m
-SET ledger_seq = o.seq,
-    balance_after_milli = o.bal
-FROM ordered o
-WHERE m.id = o.id AND (m.ledger_seq = 0 OR m.balance_after_milli = 0);
-
-ALTER TABLE inventory_movement ENABLE TRIGGER immutable_inventory_movement;
-
 CREATE INDEX IF NOT EXISTS inventory_movement_item_ledger_seq
   ON inventory_movement(item_id, ledger_seq);
+

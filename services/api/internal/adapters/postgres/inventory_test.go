@@ -2,18 +2,24 @@ package postgres
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"hms.local/api/internal/adapters/httpapi"
-	"hms.local/api/internal/application"
-	"hms.local/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"hms.local/api/internal/adapters/httpapi"
+	"hms.local/api/internal/application"
+	"hms.local/api/internal/domain"
 )
 
 func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.Actor) {
@@ -238,14 +244,31 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 	})
 
 	t.Run("R1: receipt attachment lifecycle and reference protection", func(t *testing.T) {
+		genToken := func() string {
+			b := make([]byte, 16)
+			if _, err := rand.Read(b); err != nil {
+				t.Fatal(err)
+			}
+			return hex.EncodeToString(b)
+		}
+		genHash := func() string {
+			b := make([]byte, 32)
+			if _, err := rand.Read(b); err != nil {
+				t.Fatal(err)
+			}
+			return hex.EncodeToString(b)
+		}
+
 		attItem, err := inv.SaveItem(ctx, a, "", domain.InventoryItemInput{CategoryID: category.ID, Name: "Attachment item", Unit: "vial", Active: true})
 		if err != nil {
 			t.Fatal(err)
 		}
 		// 1. Create a genuine non-clinical receipt attachment
-		attReceipt, err := store.SaveAttachment(ctx, a, "22223333444455556666777788889999", domain.CreateSecureAttachmentInput{
-			FileName: "receipt-real.pdf", MimeType: "application/pdf", FileSizeBytes: 2048, StoragePath: "/storage/receipt-real.pdf",
-			Sha256Hash: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", IsPublic: false,
+		tokRec := genToken()
+		pathRec := "/storage/" + tokRec + "-receipt.pdf"
+		attReceipt, err := store.SaveAttachment(ctx, a, tokRec, domain.CreateSecureAttachmentInput{
+			FileName: "receipt-real.pdf", MimeType: "application/pdf", FileSizeBytes: 2048, StoragePath: pathRec,
+			Sha256Hash: genHash(), IsPublic: false,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -256,9 +279,11 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		if err != nil {
 			t.Fatalf("failed to query patient: %v", err)
 		}
-		attClinical, err := store.SaveAttachment(ctx, a, "33334444555566667777888899990000", domain.CreateSecureAttachmentInput{
-			FileName: "patient-xray.png", MimeType: "image/png", FileSizeBytes: 2048, StoragePath: "/storage/patient-xray.png",
-			Sha256Hash: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", IsPublic: false, PatientID: &patientUUID,
+		tokClin := genToken()
+		pathClin := "/storage/" + tokClin + "-patient-xray.png"
+		attClinical, err := store.SaveAttachment(ctx, a, tokClin, domain.CreateSecureAttachmentInput{
+			FileName: "patient-xray.png", MimeType: "image/png", FileSizeBytes: 2048, StoragePath: pathClin,
+			Sha256Hash: genHash(), IsPublic: false, PatientID: &patientUUID,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -293,9 +318,11 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 		// 6. F3: Aged private upload lifecycle, reference preservation, and clinical protection
 		// Aged unreferenced private upload (created 48h ago)
-		attAgedUnref, err := store.SaveAttachment(ctx, a, "11112222333344445555666677778888", domain.CreateSecureAttachmentInput{
+		tokAged := genToken()
+		pathAged := "/storage/" + tokAged + "-abandoned.pdf"
+		attAgedUnref, err := store.SaveAttachment(ctx, a, tokAged, domain.CreateSecureAttachmentInput{
 			FileName: "abandoned-receipt.pdf", MimeType: "application/pdf", FileSizeBytes: 1024,
-			StoragePath: "/storage/abandoned-receipt.pdf", Sha256Hash: "1111222233334444555566667777888811112222333344445555666677778888",
+			StoragePath: pathAged, Sha256Hash: genHash(),
 			IsPublic: false,
 		})
 		if err != nil {
@@ -306,9 +333,11 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 
 		// Recent pending private upload (created recently)
-		attRecent, err := store.SaveAttachment(ctx, a, "22223333444455556666777788889999", domain.CreateSecureAttachmentInput{
+		tokRecent := genToken()
+		pathRecent := "/storage/" + tokRecent + "-recent.pdf"
+		attRecent, err := store.SaveAttachment(ctx, a, tokRecent, domain.CreateSecureAttachmentInput{
 			FileName: "recent-receipt.pdf", MimeType: "application/pdf", FileSizeBytes: 1024,
-			StoragePath: "/storage/recent-receipt.pdf", Sha256Hash: "2222333344445555666677778888999922223333444455556666777788889999",
+			StoragePath: pathRecent, Sha256Hash: genHash(),
 			IsPublic: false,
 		})
 		if err != nil {
@@ -326,11 +355,12 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		if err != nil {
 			_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, gender, birth_date) VALUES('Test', 'Patient', 'male', '1990-01-01') RETURNING id`).Scan(&testPatID)
 		}
-		attClinToken := "55556666777788889999000011112222"
+		tokClinRec := genToken()
+		pathClinRec := "/storage/" + tokClinRec + "-clinical-rec.pdf"
 		_, err = db.Exec(ctx, `
 			INSERT INTO secure_attachment(token, file_name, mime_type, file_size_bytes, storage_path, sha256_hash, uploader_id, is_public, patient_id, created_at)
-			VALUES($1, 'clinical-record.pdf', 'application/pdf', 1024, '/storage/clinical-record.pdf', '5555666677778888999900001111222255556666777788889999000011112222', $2, false, $3::uuid, clock_timestamp() - interval '48 hours')
-		`, attClinToken, a.ID, testPatID)
+			VALUES($1, 'clinical-record.pdf', 'application/pdf', 1024, $2, $3, $4, false, $5::uuid, clock_timestamp() - interval '48 hours')
+		`, tokClinRec, pathClinRec, genHash(), a.ID, testPatID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -371,15 +401,17 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 
 		// 4. Clinical attachment MUST be preserved
-		_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token=$1)`, attClinToken).Scan(&clinExists)
+		_ = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM secure_attachment WHERE token=$1)`, tokClinRec).Scan(&clinExists)
 		if !clinExists {
-			t.Fatalf("expected clinical attachment %s to be retained", attClinToken)
+			t.Fatalf("expected clinical attachment %s to be retained", tokClinRec)
 		}
 
 		// 7. Shared settings reference: if displaced from general settings, still preserved by receipt
-		attShared, err := store.SaveAttachment(ctx, a, "44445555666677778888999900001111", domain.CreateSecureAttachmentInput{
-			FileName: "hospital-seal.png", MimeType: "image/png", FileSizeBytes: 2048, StoragePath: "/storage/hospital-seal.png",
-			Sha256Hash: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd", IsPublic: true,
+		tokShared := genToken()
+		pathShared := "/storage/" + tokShared + "-seal.png"
+		attShared, err := store.SaveAttachment(ctx, a, tokShared, domain.CreateSecureAttachmentInput{
+			FileName: "hospital-seal.png", MimeType: "image/png", FileSizeBytes: 2048, StoragePath: pathShared,
+			Sha256Hash: genHash(), IsPublic: true,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -522,7 +554,7 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		// 1. Receipt A adds 100 units (100000 milli).
 		recA, err := inv.Move(ctx, a, domain.InventoryMovementInput{
 			ItemID: orderItem.ID, Kind: "receive", QuantityMilli: 100000, Reference: "REC-A-ORDER", Reason: "Batch A witness",
-		}, "key-order-rec-a")
+		}, "key-order-rec-a-0001")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -554,7 +586,7 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		var bID string
 		err = txB.QueryRow(ctx, `
 			INSERT INTO inventory_movement(item_id, kind, quantity_milli, delta_milli, supplier, store_name, reference, cost_minor, restock, reason, actor_id, request_key, request_hash, attachment_url, issued_date, return_due_date, issued_by, department, ledger_seq, balance_after_milli)
-			VALUES($1, 'receive', 100000, 100000, '', '', 'REC-B-REPLENISH', 0, false, 'Replenishment B', $2, 'key-order-rec-b', 'hash-b', '', '', '', '', '', $3, $4)
+			VALUES($1, 'receive', 100000, 100000, '', '', 'REC-B-REPLENISH', 0, false, 'Replenishment B', $2, 'key-order-rec-b-0001', 'hash-b', '', '', '', '', '', $3, $4)
 			RETURNING id
 		`, orderItem.ID, a.ID, nextSeqB, curBalB+100000).Scan(&bID)
 		if err != nil {
@@ -587,13 +619,13 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 		recTie, err := inv.Move(ctx, a, domain.InventoryMovementInput{
 			ItemID: tieItem.ID, Kind: "receive", QuantityMilli: 100000, Reference: "REC-TIE-1", Reason: "Tie test receipt",
-		}, "key-tie-rec-1")
+		}, "key-tie-rec-00000001")
 		if err != nil {
 			t.Fatal(err)
 		}
 		_, err = inv.Move(ctx, a, domain.InventoryMovementInput{
 			ItemID: tieItem.ID, Kind: "issue", QuantityMilli: 60000, RecipientID: actors[1].ID, Reason: "Tie test issue",
-		}, "key-tie-issue-1")
+		}, "key-tie-issue-0000001")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -646,7 +678,7 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 		upgRec, err := inv.Move(ctx, a, domain.InventoryMovementInput{
 			ItemID: upgItem.ID, Kind: "receive", QuantityMilli: 25000, Reference: "REC-UPG-01", Reason: "Upgrade receipt test",
-		}, "key-upg-rec-001")
+		}, "key-upg-rec-00000001")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -655,12 +687,186 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 		upgVoid, err := inv.Move(ctx, a, domain.InventoryMovementInput{
 			ItemID: upgItem.ID, Kind: "void_receipt", OriginalID: upgRec.ID, QuantityMilli: 25000, Reason: "Upgrade void test",
-		}, "key-upg-void-001")
+		}, "key-upg-void-00000001")
 		if err != nil {
 			t.Fatalf("expected void on upgraded schema to succeed, got %v", err)
 		}
 		if upgVoid.DeltaMilli != -25000 || upgVoid.LedgerSeq <= upgRec.LedgerSeq {
 			t.Fatalf("unexpected upgVoid result: %+v", upgVoid)
+		}
+
+		// Populated prior-054 upgrade regression:
+		// Create a separate isolated schema to verify upgrade transition with historical data
+		upgRand := make([]byte, 8)
+		if _, err := rand.Read(upgRand); err != nil {
+			t.Fatal(err)
+		}
+		upgSchema := fmt.Sprintf("hms_upg_%x", upgRand)
+		quotedSchema := pgx.Identifier{upgSchema}.Sanitize()
+		if _, err := db.Exec(ctx, "CREATE SCHEMA "+quotedSchema); err != nil {
+			t.Fatalf("failed to create upgrade test schema: %v", err)
+		}
+		defer func() {
+			_, _ = db.Exec(ctx, "DROP SCHEMA "+quotedSchema+" CASCADE")
+		}()
+
+		cfg, err := pgxpool.ParseConfig(db.Config().ConnString())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.ConnConfig.RuntimeParams["search_path"] = upgSchema
+		upgPool, err := pgxpool.NewWithConfig(ctx, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer upgPool.Close()
+
+		// Run migrations 001 through 054 (strictly excluding 055)
+		migrationFiles, err := filepath.Glob("../../../../../db/migrations/*.sql")
+		if err != nil || len(migrationFiles) < 3 {
+			t.Fatal("migrations unavailable")
+		}
+		for _, file := range migrationFiles {
+			if strings.HasSuffix(file, "055_inventory_void_and_ledger_order.sql") {
+				continue
+			}
+			sql, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := upgPool.Exec(ctx, string(sql)); err != nil {
+				t.Fatalf("failed applying pre-055 migration %s: %v", file, err)
+			}
+		}
+
+		// Seed actors and permissions in the pre-055 schema
+		for _, act := range actors {
+			if _, err := upgPool.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,$1,$1||'@example.test') ON CONFLICT DO NOTHING`, act.ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := upgPool.Exec(ctx, `INSERT INTO staff_access(user_id,role) VALUES($1,$2) ON CONFLICT DO NOTHING`, act.ID, act.Role); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		upgStore := Store{DB: upgPool}
+		upgInv := application.Inventory{Store: upgStore}
+
+		// Create category and item under 054 schema
+		preCat, err := upgInv.SaveCategory(ctx, a, "", domain.InventoryCategoryInput{Name: "Pre-Upgrade Category", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		preItem, err := upgInv.SaveItem(ctx, a, "", domain.InventoryItemInput{
+			CategoryID: preCat.ID, Name: "Pre-Upgrade Item", Unit: "vial", Active: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Insert valid ledger movements in actual order:
+		// A (+100 = 100000 milli, balance=100000)
+		// C (-50 = 50000 milli issue, balance=50000)
+		// B (+100 = 100000 milli, balance=150000)
+		// In pre-055 schema (migration 054), inventory_movement does not have ledger_seq or balance_after_milli yet.
+		baseTime := time.Date(2026, 10, 10, 10, 0, 0, 0, time.UTC)
+		insertLegacyMovement := func(kind string, qtyMilli, deltaMilli int64, recipientID, ref, key string, createdAt time.Time) string {
+			tx, err := upgPool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(ctx)
+			var mID string
+			err = tx.QueryRow(ctx, `
+				INSERT INTO inventory_movement(
+					item_id, kind, quantity_milli, delta_milli, recipient_id, supplier,
+					store_name, reference, cost_minor, restock, reason, actor_id,
+					request_key, request_hash, attachment_url, issued_date, return_due_date,
+					issued_by, department, created_at
+				) VALUES (
+					$1, $2, $3, $4, NULLIF($5, ''), '',
+					'Main store', $6, 0, false, 'Legacy test', $7,
+					$8, 'hash', '', '', '',
+					'', '', $9
+				) RETURNING id
+			`, preItem.ID, kind, qtyMilli, deltaMilli, recipientID, ref, a.ID, key, createdAt).Scan(&mID)
+			if err != nil {
+				t.Fatalf("failed inserting legacy movement: %v", err)
+			}
+			_, err = tx.Exec(ctx, `UPDATE inventory_item SET balance_milli = balance_milli + $2, version = version + 1 WHERE id = $1`, preItem.ID, deltaMilli)
+			if err != nil {
+				t.Fatalf("failed updating item balance for legacy movement: %v", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				t.Fatalf("failed committing legacy movement: %v", err)
+			}
+			return mID
+		}
+
+		recLegacyAID := insertLegacyMovement("receive", 100000, 100000, "", "REC-LEGACY-A", "key-leg-rec-a-0000001", baseTime)
+		_ = insertLegacyMovement("issue", 50000, -50000, actors[1].ID, "", "key-leg-iss-c-0000001", baseTime.Add(20*time.Second))
+		_ = insertLegacyMovement("receive", 100000, 100000, "", "REC-LEGACY-B", "key-leg-rec-b-0000001", baseTime.Add(10*time.Second))
+
+		// Verify balance before upgrade is 150000 milli
+		var balBefore int64
+		_ = upgPool.QueryRow(ctx, `SELECT balance_milli FROM inventory_item WHERE id=$1`, preItem.ID).Scan(&balBefore)
+		if balBefore != 150000 {
+			t.Fatalf("expected balance 150000 before upgrade, got %d", balBefore)
+		}
+
+		// Apply Migration 055 to upgrade the schema
+		sql055, err := os.ReadFile("../../../../../db/migrations/055_inventory_void_and_ledger_order.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := upgPool.Exec(ctx, string(sql055)); err != nil {
+			t.Fatalf("failed applying migration 055 on populated database: %v", err)
+		}
+
+		// Verify existing balance is preserved
+		var balPreserved int64
+		_ = upgPool.QueryRow(ctx, `SELECT balance_milli FROM inventory_item WHERE id=$1`, preItem.ID).Scan(&balPreserved)
+		if balPreserved != 150000 {
+			t.Fatalf("expected balance 150000 preserved after upgrade, got %d", balPreserved)
+		}
+
+		// Verify legacy rows have ledger_seq = 0
+		var legSeqA int64
+		_ = upgPool.QueryRow(ctx, `SELECT ledger_seq FROM inventory_movement WHERE id=$1`, recLegacyAID).Scan(&legSeqA)
+		if legSeqA != 0 {
+			t.Fatalf("expected legacy row to have ledger_seq=0, got %d", legSeqA)
+		}
+
+		// 1. Attempting to void legacy Receipt A MUST BE REJECTED with ErrConflict (409)
+		// Even though current item balance (150) >= receipt quantity (100), Receipt A was consumed,
+		// and legacy unverified history cannot be trusted to reconstruct serialized order.
+		_, err = upgInv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: preItem.ID, Kind: "void_receipt", OriginalID: recLegacyAID, QuantityMilli: 100000, Reason: "Attempt void legacy receipt A",
+		}, "key-upg-void-legacy-001")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict (409) voiding legacy receipt A, got %v", err)
+		}
+
+		// 2. Fresh post-upgrade receipt CAN be recorded and voided correctly
+		recFresh, err := upgInv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: preItem.ID, Kind: "receive", QuantityMilli: 40000, Reference: "REC-POST-UPG", Reason: "Post-upgrade fresh batch",
+		}, "key-upg-rec-fresh-0001")
+		if err != nil {
+			t.Fatalf("failed to record post-upgrade receipt: %v", err)
+		}
+		if recFresh.LedgerSeq <= 0 {
+			t.Fatalf("expected post-upgrade receipt to have positive ledger_seq, got %d", recFresh.LedgerSeq)
+		}
+
+		// Voiding fresh unconsumed post-upgrade receipt succeeds:
+		voidFresh, err := upgInv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: preItem.ID, Kind: "void_receipt", OriginalID: recFresh.ID, QuantityMilli: 40000, Reason: "Void fresh post-upgrade receipt",
+		}, "key-upg-void-fresh-0001")
+		if err != nil {
+			t.Fatalf("expected void of fresh post-upgrade receipt to succeed, got %v", err)
+		}
+		if voidFresh.DeltaMilli != -40000 || voidFresh.LedgerSeq <= recFresh.LedgerSeq {
+			t.Fatalf("invalid voidFresh result: %+v", voidFresh)
 		}
 	})
 

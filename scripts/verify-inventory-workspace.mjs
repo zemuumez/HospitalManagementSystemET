@@ -104,17 +104,29 @@ async function main() {
       (kind === "receive" ? `REF-${randomBytes(6).toString("hex")}` : "");
     const supp = supplier || (kind === "receive" ? "Standard Supplier" : "");
 
+    const maxSeqRes = await db.query(
+      "SELECT COALESCE(MAX(ledger_seq), 0) + 1 AS next_seq FROM inventory_movement WHERE item_id = $1",
+      [itemId],
+    );
+    const nextSeq = Number(maxSeqRes.rows[0]?.next_seq || 1);
+    const sumDeltaRes = await db.query(
+      "SELECT COALESCE(SUM(delta_milli), 0) AS running_sum FROM inventory_movement WHERE item_id = $1",
+      [itemId],
+    );
+    const balAfter =
+      Number(sumDeltaRes.rows[0]?.running_sum || 0) + Number(deltaMilli);
+
     return db.query(
       `INSERT INTO inventory_movement(
         item_id, kind, quantity_milli, delta_milli, recipient_id, original_id,
         supplier, store_name, reference, cost_minor, restock, reason,
         actor_id, request_key, request_hash, issued_date, department, issued_by,
-        return_due_date, attachment_url, created_at
+        return_due_date, attachment_url, ledger_seq, balance_after_milli, created_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, $11, $12,
         $13, $14, $15, $16, $17, $18,
-        $19, $20, ${createdAtClause}
+        $19, $20, $21, $22, ${createdAtClause}
       ) RETURNING id`,
       [
         itemId,
@@ -137,6 +149,8 @@ async function main() {
         issuedBy || "",
         returnDueDate || "",
         attachmentUrl || "",
+        nextSeq,
+        balAfter,
       ],
     );
   };
