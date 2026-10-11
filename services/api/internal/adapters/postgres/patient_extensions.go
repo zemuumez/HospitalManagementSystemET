@@ -262,23 +262,49 @@ func (s Store) DeleteTemplate(ctx context.Context, a domain.Actor, id string) er
 	}
 	defer tx.Rollback(ctx)
 
-	// Check if referenced by any patient or active smart card
-	var inUse bool
-	err = tx.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM patient WHERE smart_card_template_id = $1::uuid
-			UNION ALL
-			SELECT 1 FROM patient_smart_card WHERE template_id = $1::uuid AND status = 'active'
-		)
-	`, id).Scan(&inUse)
+	// Verify template exists
+	var exists bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM patient_id_card_template WHERE id = $1::uuid)`, id).Scan(&exists)
 	if err != nil {
 		return err
 	}
-	if inUse {
-		return domain.ErrInUse
+	if !exists {
+		return domain.ErrNotFound
 	}
 
-	tag, err := tx.Exec(ctx, `DELETE FROM patient_id_card_template WHERE id = $1`, id)
+	// Clear assignments on patients while preserving patient records and patient_unique_id
+	_, err = tx.Exec(ctx, `
+		UPDATE patient
+		SET smart_card_template_id = NULL
+		WHERE smart_card_template_id = $1::uuid
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	// Revoke active cards associated with this template so old cards cannot retain unintended access
+	_, err = tx.Exec(ctx, `
+		UPDATE patient_smart_card
+		SET status = 'revoked',
+		    revoked_reason = 'template_deleted',
+		    template_id = NULL
+		WHERE template_id = $1::uuid AND status = 'active'
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	// Disassociate any remaining inactive cards from this template
+	_, err = tx.Exec(ctx, `
+		UPDATE patient_smart_card
+		SET template_id = NULL
+		WHERE template_id = $1::uuid
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM patient_id_card_template WHERE id = $1::uuid`, id)
 	if err != nil {
 		return err
 	}

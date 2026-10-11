@@ -168,7 +168,7 @@ async function main() {
       "Starting Journey 1: Template CRUD, Duplicate Names, Toggles...",
     );
     await page.goto(`${base}/modules/patient-id-card-template`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
 
     // Check heading
@@ -176,7 +176,7 @@ async function main() {
     assert.match(heading, /Smart Patient Card Templates/i);
 
     // Verify seeded templates exist
-    await page.waitForSelector("table tbody tr");
+    await page.waitForSelector('table tbody tr:has-text("Standard")');
     const tableText = await page.textContent("table");
     assert.ok(
       tableText.includes("Standard"),
@@ -431,9 +431,9 @@ async function main() {
 
     // Navigate to smart cards in fresh context
     await freshPage.goto(`${base}/modules/generate-patient-id-card`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
-    await freshPage.waitForSelector("table tbody tr");
+    await freshPage.waitForSelector('table tbody tr:has-text("Abebe Bikila")');
     const freshTable = await freshPage.textContent("table");
     assert.ok(
       freshTable.includes("Abebe Bikila"),
@@ -460,7 +460,7 @@ async function main() {
     );
     // Reload cards table to reflect latest active cards after concurrent generation
     await page.goto(`${base}/modules/generate-patient-id-card`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
     await page.waitForSelector('table tbody tr:has-text("Abebe Bikila")');
     const currentAbebeRow = page.locator('tr:has-text("Abebe Bikila")');
@@ -523,19 +523,6 @@ async function main() {
       "Forged token must return 404 Not Found",
     );
 
-    // Test Referenced-Template Deletion Rejection (VIP template is in use)
-    const delVipStatus = await page.evaluate(async (tmplId) => {
-      const res = await fetch(`/api/hms/smart-cards/templates/${tmplId}`, {
-        method: "DELETE",
-      });
-      return res.status;
-    }, tmplId);
-    assert.equal(
-      delVipStatus,
-      409,
-      "Referenced template deletion must be rejected with 409 RECORD_IN_USE",
-    );
-
     // Screenshot 5: View card modal
     const shot5 = resolve(screenshotsDir, "05_smart_cards_view_modal.png");
     await page.screenshot({ path: shot5, fullPage: true });
@@ -546,10 +533,18 @@ async function main() {
     await page.click('button:has-text("Close")');
     await page.waitForSelector(".smart-card-modal", { state: "detached" });
 
-    // Test Card Assignment Deletion: Removes card, preserves patient & unique ID, revokes QR
-    page.on("dialog", (dialog) => dialog.accept());
-    await currentAbebeRow.locator('button[aria-label*="Delete card"]').click();
-    await page.waitForTimeout(1000);
+    // Test Referenced-Template Deletion: Clears assignments, preserves patients & unique IDs, revokes cards
+    const delVipStatus = await page.evaluate(async (tmplId) => {
+      const res = await fetch(`/api/hms/smart-cards/templates/${tmplId}`, {
+        method: "DELETE",
+      });
+      return res.status;
+    }, tmplId);
+    assert.equal(
+      delVipStatus,
+      200,
+      `Referenced template deletion must succeed with 200, got ${delVipStatus}`,
+    );
 
     // Verify patient in DB is preserved and template assignment cleared
     const abebePatientDb = (
@@ -560,15 +555,15 @@ async function main() {
     assert.equal(
       abebePatientDb.patient_unique_id,
       abebeIdText,
-      "Patient unique ID must be preserved in DB after card deletion",
+      "Patient unique ID must be preserved in DB after template deletion",
     );
     assert.equal(
       abebePatientDb.smart_card_template_id,
       null,
-      "Patient smart_card_template_id must be cleared in DB after card deletion",
+      "Patient smart_card_template_id must be cleared in DB after template deletion",
     );
 
-    // Verify previously valid QR token is now REVOKED!
+    // Verify previously valid QR token is now REVOKED because its template was deleted!
     const revokedVerifyRes = await fetch(
       `${base}/v1/smart-cards/verify?token=${qrToken}`,
     );
@@ -584,11 +579,31 @@ async function main() {
       "revoked",
       "Status must be 'revoked'",
     );
-    console.log("Verified revoked QR token rejection successfully.");
+    console.log(
+      "Verified revoked QR token rejection after template deletion successfully.",
+    );
 
     // ─── JOURNEY 5: Dark Mode, Printable Output, Amharic Controls ─────────
     console.log("Starting Journey 5: Dark Mode and Amharic Localization...");
-    // Open modal on another patient's card to test print/download & dark mode
+    // Generate cards using Standard template
+    const stdTmplId = (
+      await db.query(
+        "SELECT id FROM patient_id_card_template WHERE name='Standard'",
+      )
+    ).rows[0].id;
+    await page.evaluate(async (tmplId) => {
+      await fetch("/api/hms/smart-cards/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: tmplId, mode: "all" }),
+      });
+    }, stdTmplId);
+
+    // Reload page to show generated cards
+    await page.goto(`${base}/modules/generate-patient-id-card`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForSelector('table tbody tr:has-text("Haile Gebrselassie")');
     const haileRow = page.locator('tr:has-text("Haile Gebrselassie")');
     await haileRow.locator('button[aria-label*="View card"]').click();
     await page.waitForSelector(".smart-card-modal");
@@ -633,8 +648,16 @@ async function main() {
       window.dispatchEvent(new Event("storage"));
     });
     await page.goto(`${base}/modules/generate-patient-id-card`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
     });
+
+    // Wait for client-side language hydration
+    await page.waitForFunction(() => document.documentElement.lang === "am");
+    await page.waitForSelector(
+      '.detail-tabs button.active:has-text("የታካሚ ስማርት ካርድ ያዘጋጁ")',
+    );
+    await page.waitForSelector('.table-toolbar select:has-text("ሁሉም አብነቶች")');
+    await page.waitForSelector('.reference-pagination label:has-text("አሳይ")');
 
     // Verify Amharic translated headings
     const amHeading = await page.textContent("h1");
@@ -642,6 +665,25 @@ async function main() {
       amHeading,
       /የታካሚ ስማርት ካርድ ያዘጋጁ/i,
       `Amharic heading must translate to 'የታካሚ ስማርት ካርድ ያዘጋጁ', got ${amHeading}`,
+    );
+
+    // Verify "All Templates" translates to "ሁሉም አብነቶች"
+    const tmplSelectText = await page
+      .locator(".table-toolbar select")
+      .textContent();
+    assert.ok(
+      tmplSelectText.includes("ሁሉም አብነቶች"),
+      `Amharic template filter must show 'ሁሉም አብነቶች', got ${tmplSelectText}`,
+    );
+
+    // Verify "Show" translates to "አሳይ"
+    const showLabelText = await page
+      .locator(".reference-pagination label")
+      .first()
+      .textContent();
+    assert.ok(
+      showLabelText.includes("አሳይ"),
+      `Amharic pagination label must show 'አሳይ', got ${showLabelText}`,
     );
 
     // Screenshot 7: Amharic Localization

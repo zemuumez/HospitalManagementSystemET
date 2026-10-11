@@ -288,14 +288,47 @@ func TestSmartCards_GenerationModesReassignmentAndDeletion(t *testing.T) {
 		t.Fatalf("expected previously issued cards to be revoked, got %d revoked", revokedCardsCount)
 	}
 
-	// ─── Referenced-Template Deletion Protection ──────────────────────────────
+	// ─── Referenced-Template Deletion: Clears Assignments, Preserves Patients, Revokes Cards ─────
 	// VIP template is currently in use by patients p1, p2, p3
 	err = app.DeleteTemplate(ctx, admin, vipTmpl.ID)
-	if !errors.Is(err, domain.ErrInUse) {
-		t.Fatalf("expected ErrInUse deleting referenced template, got %v", err)
+	if err != nil {
+		t.Fatalf("expected successful deletion of referenced template clearing assignments, got %v", err)
+	}
+
+	// Verify template is gone
+	_, err = app.GetTemplate(ctx, admin, vipTmpl.ID)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for deleted template, got %v", err)
+	}
+
+	// Verify patients still exist, unique IDs preserved, and smart_card_template_id is NULL
+	for _, pid := range []string{p1.ID, p2.ID, p3.ID} {
+		var pExists bool
+		var pUID string
+		var pTmplID *string
+		err = db.QueryRow(ctx, `SELECT true, patient_unique_id, smart_card_template_id::text FROM patient WHERE id = $1`, pid).Scan(&pExists, &pUID, &pTmplID)
+		if err != nil || !pExists {
+			t.Fatalf("patient %s was deleted or missing after template deletion!", pid)
+		}
+		if pUID == "" {
+			t.Fatalf("patient %s unique ID was wiped after template deletion!", pid)
+		}
+		if pTmplID != nil {
+			t.Fatalf("expected patient %s smart_card_template_id to be NULL after template deletion, got %v", pid, *pTmplID)
+		}
 	}
 
 	// ─── Card Assignment Deletion: Preserves Patient & Revokes QR ─────────────
+	// Issue a new card for p1 under standardTmpl to test isolated card assignment deletion
+	_, err = app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID: standardTmpl.ID,
+		Mode:       "single",
+		PatientID:  p1.ID,
+	})
+	if err != nil {
+		t.Fatalf("failed generating card for p1: %v", err)
+	}
+
 	issuedList, err := app.ListIssuedCards(ctx, admin, domain.ListIssuedCardsFilter{Page: 1, PageSize: 10})
 	if err != nil || len(issuedList.Cards) == 0 {
 		t.Fatal("failed listing issued cards")

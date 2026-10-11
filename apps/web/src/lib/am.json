@@ -1661,6 +1661,9 @@
   "Revoked": "የተሰረዘ",
   "Expired": "ጊዜው ያለፈበት",
   "Generating...": "በማዘጋጀት ላይ...",
-  "Cards Generated": "ካርዶች ተዘጋጅተዋል"
+  "Cards Generated": "ካርዶች ተዘጋጅተዋል",
+  "Show": "አሳይ",
+  "All Templates": "ሁሉም አብነቶች",
+  "Filter by template": "በአብነት አጣራ",
+  "Card Preview": "የካርድ ቅድመ-እይታ"
 }
-

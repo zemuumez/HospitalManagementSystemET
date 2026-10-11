@@ -21,8 +21,8 @@
 
 3. **Reassignment and Deletion Semantics:**
    - **Reassignment:** Generating a new card for a patient atomically marks prior active cards as `revoked` (reason: `superceded`), invalidating their QR tokens while preserving the patient record and `patient_unique_id`.
-   - **Unassignment / Deletion:** Deleting a card assignment via `DELETE /v1/smart-cards/cards/{id}` clears `patient.smart_card_template_id`, marks the card record `revoked` (`unassigned`), and immediately revokes the QR credential (returning `{ "valid": false, "status": "revoked" }`).
-   - **Referenced Template Deletion Protection:** Deleting a template referenced by any patient or active card returns `domain.ErrInUse`, mapped to HTTP `409 Conflict` (`RECORD_IN_USE`).
+   - **Card Unassignment / Deletion:** Deleting a card assignment via `DELETE /v1/smart-cards/cards/{id}` clears `patient.smart_card_template_id`, marks the card record `revoked` (`unassigned`), and immediately revokes the QR credential (returning `{ "valid": false, "status": "revoked" }`), while preserving the patient record and durable `patient_unique_id`.
+   - **Referenced Template Deletion:** Deleting a template in use clears patient template assignments (`patient.smart_card_template_id = NULL`), revokes associated active cards (`status = 'revoked', revoked_reason = 'template_deleted'`), deletes the template record, and preserves patient records and `patient_unique_id`. Old cards cannot retain unintended access once their template is removed.
 
 4. **Transactional & Retry-Safe Generation:**
    - Handled via `SELECT ... FROM patient WHERE ... FOR UPDATE` row-level locking.
@@ -43,35 +43,32 @@
 | **Template Defaults** | Name, Header Color (`#f4bf16` Standard, `#6571ff` VIP), 6 switches | Seeded in migration 057; customizable via modal | **MATCH** |
 | **Template 6 Toggles** | Email, Phone, DOB, Blood Group, Address, Patient Unique ID | Inline toggle switches on table + form switches in create/edit modal | **MATCH** |
 | **Duplicate Template Name** | Case-insensitive uniqueness enforcement | Returns `409 Conflict` from API; UI displays "Template name must be unique" | **MATCH** |
+| **Referenced Template Deletion** | Clear assignments without deleting patients; revoke active cards | Atomically clears `patient.smart_card_template_id`, revokes cards (`template_deleted`), preserves patients & `patient_unique_id` | **MATCH** |
 | **Live Modal Preview** | Real-time card layout preview updating as name, color, and toggles change | `<SmartCardView template={editingTemplate} />` inside template modal | **MATCH** |
 | **Generation Modes** | "All Patients", "Selected Patient", "Patients Without Cards" | Modal select dropdown switching dynamic inputs per mode | **MATCH** |
 | **Card View Modal** | Visual card with header banner, initials avatar, demographic fields, and authentic QR code | High-resolution SVG QR code rendered via pure ISO/IEC 18004 generator | **MATCH** |
 | **High-Res PNG Download** | Client-side 1000x460 canvas rendering with crisp typography and embedded QR | `downloadCardPng` using HTML5 2D Canvas context rendering | **MATCH** |
 | **Print Button** | Trigger browser print dialog | `window.print()` targeting `.printable-card-area` | **MATCH** |
 | **Theme / Dark Mode** | Clean contrast in light mode and `.legacy-dark` dark mode | Full dark mode styling via `.legacy-dark` rules | **MATCH** |
-| **Localization** | Amharic translation for all headings, switches, modes, and actions | Complete translations in `apps/web/src/lib/am.json` | **MATCH** |
+| **Localization** | Amharic translation for all headings, subtabs, filter dropdowns ("All Templates" -> "ሁሉም አብነቶች"), pagination ("Show" -> "አሳይ"), switches, and actions | Complete translations in `apps/web/src/lib/am.json` and verified on screen | **MATCH** |
 
 ---
 
 ## 3. Verification Test Results
 
 ### 3.1 Go Backend PostgreSQL Isolated Test Suite (`services/api`)
-Command: `$env:HMS_TEST_DATABASE_URL="postgresql://..."; go test ./...`
+Command: `$env:HMS_TEST_DATABASE_URL="postgresql://..."; go test -v ./internal/adapters/postgres -run "TestSmartCards_"`
 ```text
-ok      hms.local/api/internal/adapters/delivery      (cached)
-ok      hms.local/api/internal/adapters/httpapi       (cached)
-ok      hms.local/api/internal/adapters/postgres      29.254s
-  === RUN   TestSmartCards_TemplateLifecycleAndIntegrity
-  --- PASS: TestSmartCards_TemplateLifecycleAndIntegrity (2.12s)
-  === RUN   TestSmartCards_GenerationModesReassignmentAndDeletion
-  --- PASS: TestSmartCards_GenerationModesReassignmentAndDeletion (2.14s)
-  === RUN   TestSmartCards_AuthorizedQRVerificationAndAccessSeparation
-  --- PASS: TestSmartCards_AuthorizedQRVerificationAndAccessSeparation (2.17s)
-  === RUN   TestSmartCards_ConcurrentGenerationSafety
-  --- PASS: TestSmartCards_ConcurrentGenerationSafety (2.49s)
-ok      hms.local/api/internal/adapters/privatefiles  (cached)
-ok      hms.local/api/internal/adapters/stripe        (cached)
-ok      hms.local/api/internal/domain                 (cached)
+=== RUN   TestSmartCards_TemplateLifecycleAndIntegrity
+--- PASS: TestSmartCards_TemplateLifecycleAndIntegrity (2.73s)
+=== RUN   TestSmartCards_GenerationModesReassignmentAndDeletion
+--- PASS: TestSmartCards_GenerationModesReassignmentAndDeletion (2.54s)
+=== RUN   TestSmartCards_AuthorizedQRVerificationAndAccessSeparation
+--- PASS: TestSmartCards_AuthorizedQRVerificationAndAccessSeparation (2.61s)
+=== RUN   TestSmartCards_ConcurrentGenerationSafety
+--- PASS: TestSmartCards_ConcurrentGenerationSafety (2.99s)
+PASS
+ok  	hms.local/api/internal/adapters/postgres	12.435s
 ```
 **Result:** 100% Passed.
 
@@ -79,6 +76,8 @@ ok      hms.local/api/internal/domain                 (cached)
 Command: `npm run test:smart-cards`
 ```text
 === Starting Smart Cards Workspace Isolated Browser Verification ===
+Target Base URL: http://127.0.0.1:59861
+Screenshots Directory: C:\Users\USER\Documents\GitHub\HospitalManagementSystemET\.local\isolated-screenshots-d52d149c1275dd8734c473e2
 Authenticating QA Admin...
 QA Admin authenticated successfully.
 Starting Journey 1: Template CRUD, Duplicate Names, Toggles...
@@ -91,9 +90,9 @@ Running concurrent generation requests...
 Starting Journey 3: Fresh-Session Persistence Without Mocks...
 Captured: 04_smart_cards_fresh_session_persistence.png
 Starting Journey 4: QR Decoding, Verification, and Revocation...
-Verifying QR token against /v1/smart-cards/verify?token=5cba4557d1bf01bded29b1b470f1e2e3...
+Verifying QR token against /v1/smart-cards/verify?token=6fcc82f298326072ced7cbd4af290a47...
 Captured: 05_smart_cards_view_modal.png
-Verified revoked QR token rejection successfully.
+Verified revoked QR token rejection after template deletion successfully.
 Starting Journey 5: Dark Mode and Amharic Localization...
 Captured: 06_smart_cards_dark_mode.png
 Switching language to Amharic...
@@ -119,4 +118,4 @@ The following verification screenshots were recorded and stored in the artifact 
 4. `04_smart_cards_fresh_session_persistence.png`: Fresh browser session demonstrating real database persistence without mocks.
 5. `05_smart_cards_view_modal.png`: View Smart Card modal showing demographic data, authentic QR code matrix, and print/download buttons.
 6. `06_smart_cards_dark_mode.png`: Dark mode styling (`.legacy-dark`) on Smart Card modal and table elements.
-7. `07_smart_cards_amharic_localization.png`: Full Amharic localization (`የታካሚ ስማርት ካርድ ያዘጋጁ`, tabs, buttons, and switches).
+7. `07_smart_cards_amharic_localization.png`: Full Amharic localization (`የታካሚ ስማርት ካርድ ያዘጋጁ`, subtabs, table toolbar with `ሁሉም አብነቶች` (All Templates), pagination with `አሳይ` (Show), headers, and actions).

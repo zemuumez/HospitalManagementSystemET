@@ -279,7 +279,7 @@ export function SmartCardsWorkspace({
     }
   }
 
-  // Delete Template with 409 Record in use handling
+  // Delete Template (clears patient assignments and revokes associated cards)
   async function handleDeleteTemplate(tmpl: CardTemplate) {
     if (!window.confirm(`${t("Delete this template?")} (${tmpl.name})`)) return;
     try {
@@ -287,12 +287,6 @@ export function SmartCardsWorkspace({
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
       });
-      if (res.status === 409) {
-        setTemplateError(
-          "This template is used by patient cards. Remove those cards before deleting the template.",
-        );
-        return;
-      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setTemplateError(body.error || "Failed to delete template.");
