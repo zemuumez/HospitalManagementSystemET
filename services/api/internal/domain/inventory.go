@@ -1,6 +1,12 @@
 package domain
 
-import "time"
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"math"
+	"time"
+)
 
 type InventoryCategoryInput struct {
 	Name        string `json:"name"`
@@ -35,6 +41,40 @@ type InventoryItem struct {
 	BalanceMilli int64  `json:"balanceMilli"`
 }
 
+func (i *InventoryItemInput) UnmarshalJSON(data []byte) error {
+	type rawInput struct {
+		CategoryID   string      `json:"categoryId"`
+		Name         string      `json:"name"`
+		Unit         string      `json:"unit"`
+		Description  string      `json:"description"`
+		ReorderMilli json.Number `json:"reorderMilli"`
+		Active       bool        `json:"active"`
+		Version      int         `json:"version"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var raw rawInput
+	if err := dec.Decode(&raw); err != nil {
+		return err
+	}
+	if raw.ReorderMilli != "" {
+		if v, err := raw.ReorderMilli.Int64(); err == nil {
+			i.ReorderMilli = v
+		} else if f, err := raw.ReorderMilli.Float64(); err == nil {
+			i.ReorderMilli = int64(math.Round(f))
+		} else {
+			return errors.New("invalid reorderMilli")
+		}
+	}
+	i.CategoryID = raw.CategoryID
+	i.Name = raw.Name
+	i.Unit = raw.Unit
+	i.Description = raw.Description
+	i.Active = raw.Active
+	i.Version = raw.Version
+	return nil
+}
+
 func (i *InventoryItemInput) Validate() error {
 	if !UUIDPattern.MatchString(i.CategoryID) || !validText(&i.Name, 1, 150) || !validText(&i.Unit, 1, 40) || !validText(&i.Description, 0, 2000) || i.ReorderMilli < 0 || i.ReorderMilli > 1000000000000 || i.Version < 0 {
 		return ErrValidation
@@ -59,6 +99,66 @@ type InventoryMovementInput struct {
 	ReturnDueDate string `json:"returnDueDate"`
 	IssuedBy      string `json:"issuedBy"`
 	Department    string `json:"department"`
+}
+
+func (i *InventoryMovementInput) UnmarshalJSON(data []byte) error {
+	type rawInput struct {
+		ItemID        string      `json:"itemId"`
+		Kind          string      `json:"kind"`
+		QuantityMilli json.Number `json:"quantityMilli"`
+		RecipientID   string      `json:"recipientId"`
+		OriginalID    string      `json:"originalId"`
+		Supplier      string      `json:"supplier"`
+		StoreName     string      `json:"storeName"`
+		Reference     string      `json:"reference"`
+		CostMinor     json.Number `json:"costMinor"`
+		Restock       bool        `json:"restock"`
+		Reason        string      `json:"reason"`
+		AttachmentURL string      `json:"attachmentUrl"`
+		IssuedDate    string      `json:"issuedDate"`
+		ReturnDueDate string      `json:"returnDueDate"`
+		IssuedBy      string      `json:"issuedBy"`
+		Department    string      `json:"department"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var raw rawInput
+	if err := dec.Decode(&raw); err != nil {
+		return err
+	}
+	if raw.QuantityMilli != "" {
+		if v, err := raw.QuantityMilli.Int64(); err == nil {
+			i.QuantityMilli = v
+		} else if f, err := raw.QuantityMilli.Float64(); err == nil {
+			i.QuantityMilli = int64(math.Round(f))
+		} else {
+			return errors.New("invalid quantityMilli")
+		}
+	}
+	if raw.CostMinor != "" {
+		if v, err := raw.CostMinor.Int64(); err == nil {
+			i.CostMinor = v
+		} else if f, err := raw.CostMinor.Float64(); err == nil {
+			i.CostMinor = int64(math.Round(f))
+		} else {
+			return errors.New("invalid costMinor")
+		}
+	}
+	i.ItemID = raw.ItemID
+	i.Kind = raw.Kind
+	i.RecipientID = raw.RecipientID
+	i.OriginalID = raw.OriginalID
+	i.Supplier = raw.Supplier
+	i.StoreName = raw.StoreName
+	i.Reference = raw.Reference
+	i.Restock = raw.Restock
+	i.Reason = raw.Reason
+	i.AttachmentURL = raw.AttachmentURL
+	i.IssuedDate = raw.IssuedDate
+	i.ReturnDueDate = raw.ReturnDueDate
+	i.IssuedBy = raw.IssuedBy
+	i.Department = raw.Department
+	return nil
 }
 type InventoryMovement struct {
 	InventoryMovementInput

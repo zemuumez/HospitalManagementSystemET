@@ -650,20 +650,20 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       setError(t("Please select an eligible item"));
       return;
     }
+    const qty = Number(stockForm.quantity) || 0;
+    const unitCost = Number(stockForm.unitCost) || 0;
     await save(
       "inventory/movements",
       {
         itemId: stockForm.itemId,
         kind: "receive",
-        quantityMilli: Number(stockForm.quantity) * 1000,
-        costMinor: Math.round(
-          Number(stockForm.unitCost) * Number(stockForm.quantity) * 100,
-        ),
-        supplier: stockForm.supplier,
-        storeName: stockForm.storeName,
-        reference: stockForm.reference,
-        reason: stockForm.reason,
-        attachmentUrl: stockForm.attachmentUrl,
+        quantityMilli: Math.round(qty * 1000),
+        costMinor: Math.round(unitCost * qty * 100),
+        supplier: stockForm.supplier || "",
+        storeName: stockForm.storeName || "",
+        reference: stockForm.reference || "",
+        reason: stockForm.reason || "",
+        attachmentUrl: stockForm.attachmentUrl || "",
       },
       "POST",
       () => {
@@ -699,18 +699,19 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
       setError(t("Please select an eligible item"));
       return;
     }
+    const qty = Number(issueForm.quantity) || 0;
     await save(
       "inventory/movements",
       {
         itemId: issueForm.itemId,
         kind: "issue",
-        quantityMilli: Number(issueForm.quantity) * 1000,
-        recipientId: issueForm.recipientId,
-        reason: issueForm.reason,
-        department: issueForm.department,
-        issuedBy: issueForm.issuedBy,
-        issuedDate: issueForm.issuedDate,
-        returnDueDate: issueForm.returnDueDate,
+        quantityMilli: Math.round(qty * 1000),
+        recipientId: issueForm.recipientId || "",
+        reason: issueForm.reason || "",
+        department: issueForm.department || "",
+        issuedBy: issueForm.issuedBy || "",
+        issuedDate: issueForm.issuedDate || "",
+        returnDueDate: issueForm.returnDueDate || "",
       },
       "POST",
       () => {
@@ -734,15 +735,16 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
   const handleSaveReturn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!returningIssue) return;
+    const qty = Number(returnForm.quantity) || 0;
     await save(
       "inventory/movements",
       {
         itemId: returningIssue.itemId,
         kind: "return",
         originalId: returningIssue.id,
-        quantityMilli: Number(returnForm.quantity) * 1000,
-        restock: returnForm.restock,
-        reason: returnForm.reason,
+        quantityMilli: Math.round(qty * 1000),
+        restock: Boolean(returnForm.restock),
+        reason: returnForm.reason || "",
       },
       "POST",
       () => setReturningIssue(null),
@@ -754,7 +756,7 @@ export function InventoryWorkspace({ id = "items" }: { id?: string }) {
     setReturningIssue(issue);
     const returned = issue.returnedMilli || 0;
     const remaining = Math.max(0, issue.quantityMilli - returned);
-    const remainingUnits = remaining / 1000;
+    const remainingUnits = Math.round(remaining) / 1000;
     setReturnForm({
       quantity: remainingUnits > 0 ? remainingUnits : 1,
       restock: true,
@@ -3146,5 +3148,6 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
     } catch {}
     throw new Error(msg);
   }
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : (null as unknown as T);
 }
