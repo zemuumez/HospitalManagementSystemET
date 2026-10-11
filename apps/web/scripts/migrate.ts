@@ -1,4 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pool } from "../src/lib/db.ts";
 async function main() {
@@ -8,7 +9,13 @@ async function main() {
     await client.query(
       "CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())",
     );
-    const folder = resolve(process.cwd(), "../../db/migrations");
+    const candidateFolders = [
+      resolve(process.cwd(), "db/migrations"),
+      resolve(process.cwd(), "../db/migrations"),
+      resolve(process.cwd(), "../../db/migrations"),
+    ];
+    const folder =
+      candidateFolders.find((f) => existsSync(f)) || candidateFolders[0];
     for (const name of (await readdir(folder))
       .filter((n) => n.endsWith(".sql"))
       .sort()) {

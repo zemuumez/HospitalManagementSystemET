@@ -92,6 +92,7 @@ export function SmartCardsWorkspace({
 
   // Generation Modal state
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [submissionKey, setSubmissionKey] = useState("");
   const [generateMode, setGenerateMode] = useState<
     "all" | "single" | "unassigned"
   >("all");
@@ -101,6 +102,12 @@ export function SmartCardsWorkspace({
   const [generateError, setGenerateError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [successNotice, setSuccessNotice] = useState("");
+
+  function newGenerationKey() {
+    return typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `card-gen-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
 
   // Load templates from API
   async function loadTemplates() {
@@ -313,10 +320,11 @@ export function SmartCardsWorkspace({
 
     setGenerating(true);
     setGenerateError("");
-    const idempotencyKey =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `card-gen-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    // Retain key and payload for one logical submission across uncertain responses and user retries
+    const idempotencyKey = submissionKey || newGenerationKey();
+    if (!submissionKey) {
+      setSubmissionKey(idempotencyKey);
+    }
     try {
       const res = await fetch("/api/hms/smart-cards/generate", {
         method: "POST",
@@ -336,17 +344,20 @@ export function SmartCardsWorkspace({
         const body = await res.json().catch(() => ({}));
         setGenerateError(body.error || "Failed to generate smart cards.");
         setGenerating(false);
+        // Do NOT reset submissionKey on error: retry from the same dialog will reuse the key
         return;
       }
 
       const result = await res.json();
       setGenerating(false);
       setGenerateOpen(false);
+      setSubmissionKey("");
       setSuccessNotice(`${result.generatedCount || 0} ${t("Cards Generated")}`);
       loadCards();
     } catch {
       setGenerating(false);
       setGenerateError("Server error during card generation.");
+      // Do NOT reset submissionKey on network failure: retry from the same dialog will reuse the key
     }
   }
 
@@ -620,6 +631,7 @@ export function SmartCardsWorkspace({
                 setGenerateError("");
                 setGenerateMode("all");
                 loadPatients();
+                setSubmissionKey(newGenerationKey());
                 setGenerateOpen(true);
               }}
             >
@@ -926,7 +938,10 @@ export function SmartCardsWorkspace({
       {generateOpen && (
         <Modal
           titleId="generate-cards-title"
-          onClose={() => setGenerateOpen(false)}
+          onClose={() => {
+            setGenerateOpen(false);
+            setSubmissionKey("");
+          }}
         >
           <form onSubmit={handleGenerateCards}>
             <div className="modal-heading">
@@ -936,7 +951,10 @@ export function SmartCardsWorkspace({
               <button
                 type="button"
                 aria-label={t("Close")}
-                onClick={() => setGenerateOpen(false)}
+                onClick={() => {
+                  setGenerateOpen(false);
+                  setSubmissionKey("");
+                }}
               >
                 <X />
               </button>
@@ -957,11 +975,12 @@ export function SmartCardsWorkspace({
                 <select
                   className="field"
                   value={generateMode}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setGenerateMode(
                       e.target.value as "all" | "single" | "unassigned",
-                    )
-                  }
+                    );
+                    setSubmissionKey(newGenerationKey());
+                  }}
                 >
                   <option value="all">{t("All Patients")}</option>
                   <option value="single">{t("Selected Patient")}</option>
@@ -977,7 +996,10 @@ export function SmartCardsWorkspace({
                   className="field"
                   required
                   value={generateTemplateId}
-                  onChange={(e) => setGenerateTemplateId(e.target.value)}
+                  onChange={(e) => {
+                    setGenerateTemplateId(e.target.value);
+                    setSubmissionKey(newGenerationKey());
+                  }}
                 >
                   {templates.map((tmpl) => (
                     <option key={tmpl.id} value={tmpl.id}>
@@ -994,7 +1016,10 @@ export function SmartCardsWorkspace({
                     className="field"
                     required
                     value={generatePatientId}
-                    onChange={(e) => setGeneratePatientId(e.target.value)}
+                    onChange={(e) => {
+                      setGeneratePatientId(e.target.value);
+                      setSubmissionKey(newGenerationKey());
+                    }}
                   >
                     {patientsList.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -1013,7 +1038,10 @@ export function SmartCardsWorkspace({
               <button
                 type="button"
                 className="secondary"
-                onClick={() => setGenerateOpen(false)}
+                onClick={() => {
+                  setGenerateOpen(false);
+                  setSubmissionKey("");
+                }}
               >
                 {t("Cancel")}
               </button>

@@ -474,19 +474,14 @@ func (s Store) GenerateSmartCards(ctx context.Context, a domain.Actor, in domain
 			if err := json.Unmarshal(rawResp, &cached); err != nil {
 				return domain.GenerateSmartCardsResult{}, err
 			}
-			if len(cached.Cards) > 0 {
-				var activeCount int
-				cardIDs := make([]string, len(cached.Cards))
-				for i, c := range cached.Cards {
-					cardIDs[i] = c.ID
+			// Refresh current status of each card from patient_smart_card so callers see current state
+			for i := range cached.Cards {
+				var curStatus string
+				if err := tx.QueryRow(ctx, `SELECT status FROM patient_smart_card WHERE id = $1`, cached.Cards[i].ID).Scan(&curStatus); err == nil {
+					cached.Cards[i].Status = curStatus
 				}
-				err := tx.QueryRow(ctx, `SELECT count(*) FROM patient_smart_card WHERE id = ANY($1::uuid[]) AND status = 'active'`, cardIDs).Scan(&activeCount)
-				if err == nil && activeCount == len(cached.Cards) {
-					return cached, tx.Commit(ctx)
-				}
-			} else {
-				return cached, tx.Commit(ctx)
 			}
+			return cached, tx.Commit(ctx)
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return domain.GenerateSmartCardsResult{}, err
 		}
@@ -693,8 +688,6 @@ func (s Store) GenerateSmartCards(ctx context.Context, a domain.Actor, in domain
 			INSERT INTO smart_card_generation_request (
 				actor_id, idempotency_key, template_id, mode, patient_id, response_json
 			) VALUES ($1, $2, $3::uuid, $4, $5::uuid, $6)
-			ON CONFLICT (actor_id, idempotency_key) DO UPDATE
-			SET response_json = EXCLUDED.response_json
 		`, a.ID, in.IdempotencyKey, in.TemplateID, in.Mode, pIDArg, encoded)
 		if err != nil {
 			return domain.GenerateSmartCardsResult{}, err

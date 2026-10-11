@@ -1021,3 +1021,348 @@ func TestSmartCards_DurableGenerationIdempotency(t *testing.T) {
 		t.Fatalf("new card must be active: valid=%v, status=%s", verifyNew.Valid, verifyNew.Status)
 	}
 }
+
+// ─── F1: Database upgrade from prior 057 to 058 ─────────────────────────────
+func TestSmartCards_MigrationUpgrade057To058(t *testing.T) {
+	dsn := os.Getenv("HMS_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set HMS_TEST_DATABASE_URL to run isolated-schema PostgreSQL tests")
+	}
+	ctx := context.Background()
+	adminDB, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer adminDB.Close()
+
+	random := make([]byte, 12)
+	rand.Read(random)
+	schema := "hms_test_upg_" + hex.EncodeToString(random)
+	quoted := pgx.Identifier{schema}.Sanitize()
+	if _, err = adminDB.Exec(ctx, "CREATE SCHEMA "+quoted); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = adminDB.Exec(context.Background(), "DROP SCHEMA "+quoted+" CASCADE")
+	}()
+
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.RuntimeParams["search_path"] = schema
+	db, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Apply migrations up to 057 only
+	migrations, err := filepath.Glob("../../../../../db/migrations/*.sql")
+	if err != nil || len(migrations) < 3 {
+		t.Fatal("migration files unavailable")
+	}
+	for _, file := range migrations {
+		if filepath.Base(file) > "057_patient_smart_cards_parity.sql" {
+			continue // stop after 057
+		}
+		sql, e := os.ReadFile(file)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = db.Exec(ctx, string(sql)); e != nil {
+			t.Fatalf("failed migration %s: %v", file, e)
+		}
+	}
+
+	// Seed actor
+	admin := domain.Actor{ID: "admin-upg", Role: "admin", Name: "Admin Upgrade"}
+	if _, err = db.Exec(ctx, `INSERT INTO "user"(id, name, email) VALUES($1, $2, 'upg@example.test')`, admin.ID, admin.Name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, `INSERT INTO staff_access(user_id, role) VALUES($1, $2)`, admin.ID, admin.Role); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now apply migration 058 explicitly
+	sql058, err := os.ReadFile("../../../../../db/migrations/058_smart_card_generation_idempotency.sql")
+	if err != nil {
+		t.Fatalf("failed reading 058: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql058)); err != nil {
+		t.Fatalf("failed applying 058 upgrade: %v", err)
+	}
+
+	// Verify table exists
+	var tableExists bool
+	err = db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables
+			WHERE table_schema = $1 AND table_name = 'smart_card_generation_request'
+		)
+	`, schema).Scan(&tableExists)
+	if err != nil || !tableExists {
+		t.Fatalf("expected smart_card_generation_request to exist after 058, exists=%v err=%v", tableExists, err)
+	}
+
+	// Test store operations against upgraded database
+	store := Store{DB: db}
+	hospital := application.Hospital{Store: store, Now: time.Now}
+	app := application.PatientExtensionsService{Store: store}
+
+	p, err := hospital.Register(ctx, admin, domain.PatientInput{
+		GivenName:   "Upgrade",
+		FamilyName:  "Test",
+		DateOfBirth: "1991-01-01",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	templates, err := app.ListTemplates(ctx, admin)
+	if err != nil || len(templates) == 0 {
+		t.Fatal("templates missing")
+	}
+
+	// Generation and replay must succeed on upgraded schema
+	res1, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     templates[0].ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: "upg-idem-key-1",
+	})
+	if err != nil || len(res1.Cards) == 0 {
+		t.Fatalf("generation failed on upgraded schema: %v", err)
+	}
+
+	res2, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     templates[0].ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: "upg-idem-key-1",
+	})
+	if err != nil || len(res2.Cards) == 0 {
+		t.Fatalf("replay failed on upgraded schema: %v", err)
+	}
+	if res2.Cards[0].ID != res1.Cards[0].ID {
+		t.Fatalf("expected identical card on replay after upgrade, got %s vs %s", res1.Cards[0].ID, res2.Cards[0].ID)
+	}
+}
+
+// ─── F2: Completed requests must never re-issue credentials after revocation ──
+func TestSmartCards_ReplayAfterRevocationAndDeletion(t *testing.T) {
+	db, store, cleanup := setupSmartCardsTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	admin := domain.Actor{ID: "admin-user", Role: "admin"}
+	hospital := application.Hospital{Store: store, Now: time.Now}
+	app := application.PatientExtensionsService{Store: store}
+
+	p, err := hospital.Register(ctx, admin, domain.PatientInput{
+		GivenName:   "RevokeReplay",
+		FamilyName:  "Patient",
+		DateOfBirth: "1993-03-03",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	templates, err := app.ListTemplates(ctx, admin)
+	if err != nil || len(templates) < 2 {
+		t.Fatal("need templates")
+	}
+	tmplA := templates[0]
+	tmplB := templates[1]
+
+	keyA := "replay-test-key-A"
+
+	// 1. Generate Card A with keyA
+	genA, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplA.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyA,
+	})
+	if err != nil || len(genA.Cards) == 0 {
+		t.Fatalf("failed generating Card A: %v", err)
+	}
+	cardA := genA.Cards[0]
+
+	// 2. Delete Card A assignment (deliberate unassignment)
+	err = app.DeleteCardAssignment(ctx, admin, cardA.ID)
+	if err != nil {
+		t.Fatalf("failed deleting Card A assignment: %v", err)
+	}
+
+	// Confirm patient has no active cards and no template assignment
+	var activeCount int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM patient_smart_card WHERE patient_id=$1 AND status='active'`, p.ID).Scan(&activeCount); err != nil {
+		t.Fatal(err)
+	}
+	if activeCount != 0 {
+		t.Fatalf("expected 0 active cards after assignment deletion, got %d", activeCount)
+	}
+	var tmplID *string
+	if err := db.QueryRow(ctx, `SELECT smart_card_template_id::text FROM patient WHERE id=$1`, p.ID).Scan(&tmplID); err != nil {
+		t.Fatal(err)
+	}
+	if tmplID != nil {
+		t.Fatalf("expected smart_card_template_id to be NULL, got %v", *tmplID)
+	}
+
+	// 3. Replay identical request with keyA after deletion
+	// CRITICAL F2 REQUIREMENT: Replay MUST NOT issue a new active credential or restore the assignment!
+	replayA, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplA.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyA,
+	})
+	if err != nil {
+		t.Fatalf("replaying request should return without error: %v", err)
+	}
+	if len(replayA.Cards) == 0 {
+		t.Fatal("expected cached cards returned")
+	}
+
+	// Replay must return Card A (with its current status "revoked"), NOT a new active card!
+	if replayA.Cards[0].ID != cardA.ID {
+		t.Fatalf("replaying completed request after deletion issued a NEW credential! expected %s, got %s", cardA.ID, replayA.Cards[0].ID)
+	}
+	if replayA.Cards[0].Status != "revoked" {
+		t.Fatalf("replaying completed request after deletion returned status '%s', expected 'revoked'", replayA.Cards[0].Status)
+	}
+
+	// Patient must STILL have 0 active cards in DB!
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM patient_smart_card WHERE patient_id=$1 AND status='active'`, p.ID).Scan(&activeCount); err != nil {
+		t.Fatal(err)
+	}
+	if activeCount != 0 {
+		t.Fatalf("replaying completed request after deletion issued a NEW active credential in database! activeCount=%d", activeCount)
+	}
+
+	// Patient assignment in DB must STILL be NULL!
+	if err := db.QueryRow(ctx, `SELECT smart_card_template_id::text FROM patient WHERE id=$1`, p.ID).Scan(&tmplID); err != nil {
+		t.Fatal(err)
+	}
+	if tmplID != nil {
+		t.Fatalf("replaying completed request after deletion restored patient assignment! got %v", *tmplID)
+	}
+
+	// QR verification of Card A must STILL be revoked!
+	verifyA, err := app.VerifySmartCardQR(ctx, cardA.QRToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verifyA.Valid || verifyA.Status != "revoked" {
+		t.Fatalf("Card A was re-activated! valid=%v status=%s", verifyA.Valid, verifyA.Status)
+	}
+
+	// 4. Replay after deliberate reassignment:
+	// Generate Card B with new keyB
+	keyB := "replay-test-key-B"
+	genB, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplB.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyB,
+	})
+	if err != nil || len(genB.Cards) == 0 {
+		t.Fatalf("failed generating Card B: %v", err)
+	}
+	cardB := genB.Cards[0]
+
+	// Replaying older keyA must NOT supersede Card B!
+	replayOldA, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplA.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyA,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayOldA.Cards[0].ID != cardA.ID || replayOldA.Cards[0].Status != "revoked" {
+		t.Fatalf("replaying old key returned unexpected card: %v", replayOldA.Cards[0])
+	}
+
+	// Card B must STILL be active in DB!
+	var statusB string
+	if err := db.QueryRow(ctx, `SELECT status FROM patient_smart_card WHERE id=$1`, cardB.ID).Scan(&statusB); err != nil {
+		t.Fatal(err)
+	}
+	if statusB != "active" {
+		t.Fatalf("replaying older key superseded active card B! statusB=%s", statusB)
+	}
+
+	// Patient assignment must STILL be tmplB!
+	if err := db.QueryRow(ctx, `SELECT smart_card_template_id::text FROM patient WHERE id=$1`, p.ID).Scan(&tmplID); err != nil {
+		t.Fatal(err)
+	}
+	if tmplID == nil || *tmplID != tmplB.ID {
+		t.Fatalf("replaying older key mutated patient assignment: expected %s, got %v", tmplB.ID, tmplID)
+	}
+
+	// 5. Replay after direct revocation:
+	err = app.RevokeSmartCard(ctx, admin, cardB.ID, "lost")
+	if err != nil {
+		t.Fatalf("failed direct revocation: %v", err)
+	}
+	replayB, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplB.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyB,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayB.Cards[0].ID != cardB.ID || replayB.Cards[0].Status != "revoked" {
+		t.Fatalf("replaying after direct revocation must return revoked card B, got %v", replayB.Cards[0])
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM patient_smart_card WHERE patient_id=$1 AND status='active'`, p.ID).Scan(&activeCount); err != nil {
+		t.Fatal(err)
+	}
+	if activeCount != 0 {
+		t.Fatalf("replaying after direct revocation resurrected card B! activeCount=%d", activeCount)
+	}
+
+	// 6. Replay after template deletion:
+	tmplC, err := app.CreateTemplate(ctx, admin, domain.CreatePatientIDCardTemplateInput{
+		Name:  "Temp Replay Template",
+		Color: "#abcdef",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyC := "replay-test-key-C"
+	genC, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplC.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyC,
+	})
+	if err != nil || len(genC.Cards) == 0 {
+		t.Fatal(err)
+	}
+	cardC := genC.Cards[0]
+
+	// Delete template tmplC
+	if err := app.DeleteTemplate(ctx, admin, tmplC.ID); err != nil {
+		t.Fatalf("failed deleting template tmplC: %v", err)
+	}
+
+	// Replay keyC: must return cardC (revoked), NOT crash or insert invalid records
+	replayC, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplC.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyC,
+	})
+	if err != nil {
+		t.Fatalf("replaying after template deletion must succeed: %v", err)
+	}
+	if replayC.Cards[0].ID != cardC.ID || replayC.Cards[0].Status != "revoked" {
+		t.Fatalf("expected card C revoked, got %v", replayC.Cards[0])
+	}
+}

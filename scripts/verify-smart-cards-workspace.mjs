@@ -284,7 +284,31 @@ async function main() {
     const cardsHeading = await page.locator(".page-heading h1").textContent();
     assert.match(cardsHeading, /Generate Patient Smart Cards/i);
 
-    // Mode 1: "Selected Patient" (Single mode)
+    // Mode 1: "Selected Patient" (Single mode) with F3 Lost-Response Retry Verification
+    console.log(
+      "Configuring browser lost-response interception for Mode 1 retry verification (Finding F3)...",
+    );
+    let generateAttempts = 0;
+    let interceptedKeyAttempt1 = null;
+    let interceptedKeyAttempt2 = null;
+    await page.route("**/api/hms/smart-cards/generate", async (route) => {
+      generateAttempts++;
+      const req = route.request();
+      const headers = req.headers();
+      const body = JSON.parse(req.postData() || "{}");
+      if (generateAttempts === 1) {
+        interceptedKeyAttempt1 =
+          headers["idempotency-key"] || body.idempotencyKey;
+        // Deliver request to server and allow DB commitment, but abort response delivery to browser
+        await route.fetch();
+        await route.abort("failed");
+      } else {
+        interceptedKeyAttempt2 =
+          headers["idempotency-key"] || body.idempotencyKey;
+        await route.continue();
+      }
+    });
+
     await page.locator(".page-heading button.primary").click();
     await page.waitForSelector("#generate-cards-title");
     const modal1 = page.locator("dialog[open]");
@@ -303,8 +327,43 @@ async function main() {
     await patientSelect.waitFor();
     await patientSelect.selectOption({ label: "Abebe Bikila (+251911223344)" });
 
+    // First attempt: Server generates card, but response is dropped/aborted before browser receives it
+    await modal1.locator('button:has-text("Save")').click();
+
+    // Verify error notice appears in the modal dialog while dialog remains open
+    await page.waitForSelector('dialog[open] p[role="alert"]');
+    const alertText = await page.textContent('dialog[open] p[role="alert"]');
+    assert.ok(
+      alertText.length > 0,
+      "Modal must show error notice when network response is lost/aborted",
+    );
+    assert.ok(
+      await modal1.isVisible(),
+      "Modal must remain open after failed response to allow retry",
+    );
+
+    // Second attempt: User retries by clicking "Save" again in the SAME open dialog
     await modal1.locator('button:has-text("Save")').click();
     await page.waitForSelector("dialog[open]", { state: "detached" });
+
+    // Remove route interception
+    await page.unroute("**/api/hms/smart-cards/generate");
+
+    // Assert that the exact same idempotency key was sent across both attempts
+    assert.ok(
+      interceptedKeyAttempt1,
+      "First attempt must have sent an idempotency key",
+    );
+    assert.equal(
+      interceptedKeyAttempt1,
+      interceptedKeyAttempt2,
+      "Browser retry from the same dialog MUST reuse the exact same idempotency key",
+    );
+    assert.equal(
+      generateAttempts,
+      2,
+      "Exactly 2 generation attempts must have been recorded",
+    );
 
     // Verify card appears in table
     await page.waitForSelector('table tbody tr:has-text("Abebe Bikila")');
@@ -316,6 +375,19 @@ async function main() {
       "Patient Unique ID must match format P-XXXXX",
     );
     console.log(`Generated Abebe Bikila Unique ID: ${abebeIdText}`);
+
+    // Verify Abebe Bikila has EXACTLY 1 active card in PostgreSQL (no duplicate or replacement)
+    const abebeCards = (
+      await db.query(
+        "SELECT sc.id, sc.card_number, sc.qr_token, sc.status FROM patient_smart_card sc JOIN patient p ON p.id=sc.patient_id WHERE p.phone='+251911223344'",
+      )
+    ).rows;
+    assert.equal(
+      abebeCards.length,
+      1,
+      `Abebe Bikila must have exactly 1 card row in DB after retry, found ${abebeCards.length}`,
+    );
+    assert.equal(abebeCards[0].status, "active");
 
     // Mode 2: "Patients Without Cards"
     await page.locator(".page-heading button.primary").click();
