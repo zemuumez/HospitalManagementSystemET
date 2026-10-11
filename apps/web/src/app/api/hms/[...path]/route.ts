@@ -221,6 +221,12 @@ function isAllowedPath(path: string[]): boolean {
     if (path[0] === "inventory" && ["categories", "items"].includes(path[1])) {
       return true;
     }
+    if (path[0] === "smart-cards" && ["templates", "cards"].includes(path[1])) {
+      return true;
+    }
+    if (path[0] === "smart-cards" && path[2] === "revoke") {
+      return true;
+    }
     if (path[0] === "attachments" && path[2] === "content") {
       return true;
     }

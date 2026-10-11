@@ -34,22 +34,90 @@ func (c *PatientContactConsent) Validate() error {
 	return nil
 }
 
-// ─── Patient Smart Card ───────────────────────────────────────────────────────
+// ─── Patient Smart Card & Templates ──────────────────────────────────────────
+
+type PatientIDCardTemplate struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Color           string    `json:"color"`
+	Email           bool      `json:"email"`
+	Phone           bool      `json:"phone"`
+	DOB             bool      `json:"dob"`
+	BloodGroup      bool      `json:"bloodGroup"`
+	Address         bool      `json:"address"`
+	PatientUniqueID bool      `json:"patientUniqueId"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+}
+
+type CreatePatientIDCardTemplateInput struct {
+	Name            string `json:"name"`
+	Color           string `json:"color"`
+	Email           *bool  `json:"email,omitempty"`
+	Phone           *bool  `json:"phone,omitempty"`
+	DOB             *bool  `json:"dob,omitempty"`
+	BloodGroup      *bool  `json:"bloodGroup,omitempty"`
+	Address         *bool  `json:"address,omitempty"`
+	PatientUniqueID *bool  `json:"patientUniqueId,omitempty"`
+}
+
+func (c *CreatePatientIDCardTemplateInput) Validate() error {
+	c.Name = strings.TrimSpace(c.Name)
+	c.Color = strings.TrimSpace(c.Color)
+	if len(c.Name) < 1 || len(c.Name) > 100 {
+		return ErrValidation
+	}
+	if len(c.Color) < 1 || len(c.Color) > 30 {
+		return ErrValidation
+	}
+	return nil
+}
+
+type UpdatePatientIDCardTemplateInput struct {
+	Name            *string `json:"name,omitempty"`
+	Color           *string `json:"color,omitempty"`
+	Email           *bool   `json:"email,omitempty"`
+	Phone           *bool   `json:"phone,omitempty"`
+	DOB             *bool   `json:"dob,omitempty"`
+	BloodGroup      *bool   `json:"bloodGroup,omitempty"`
+	Address         *bool   `json:"address,omitempty"`
+	PatientUniqueID *bool   `json:"patientUniqueId,omitempty"`
+}
+
+func (u *UpdatePatientIDCardTemplateInput) Validate() error {
+	if u.Name != nil {
+		trimmed := strings.TrimSpace(*u.Name)
+		if len(trimmed) < 1 || len(trimmed) > 100 {
+			return ErrValidation
+		}
+		u.Name = &trimmed
+	}
+	if u.Color != nil {
+		trimmed := strings.TrimSpace(*u.Color)
+		if len(trimmed) < 1 || len(trimmed) > 30 {
+			return ErrValidation
+		}
+		u.Color = &trimmed
+	}
+	return nil
+}
 
 type PatientSmartCard struct {
-	ID            string    `json:"id"`
-	PatientID     string    `json:"patientId"`
-	PatientName   string    `json:"patientName,omitempty"`
-	MRN           string    `json:"mrn,omitempty"`
-	BloodGroup    string    `json:"bloodGroup,omitempty"`
-	CardNumber    string    `json:"cardNumber"`
-	QRToken       string    `json:"qrToken"`
-	TemplateName  string    `json:"templateName"`
-	Status        string    `json:"status"` // active, revoked, expired
-	RevokedReason string    `json:"revokedReason,omitempty"`
-	IssuedAt      time.Time `json:"issuedAt"`
-	ExpiresAt     time.Time `json:"expiresAt"`
-	IssuedBy      string    `json:"issuedBy"`
+	ID              string    `json:"id"`
+	PatientID       string    `json:"patientId"`
+	PatientName     string    `json:"patientName,omitempty"`
+	PatientUniqueID string    `json:"patientUniqueId,omitempty"`
+	MRN             string    `json:"mrn,omitempty"`
+	BloodGroup      string    `json:"bloodGroup,omitempty"`
+	CardNumber      string    `json:"cardNumber"`
+	QRToken         string    `json:"qrToken"`
+	TemplateName    string    `json:"templateName"`
+	TemplateID      string    `json:"templateId,omitempty"`
+	Status          string    `json:"status"` // active, revoked, expired
+	RevokedReason   string    `json:"revokedReason,omitempty"`
+	IssuedAt        time.Time `json:"issuedAt"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	IssuedBy        string    `json:"issuedBy"`
 }
 
 type IssueSmartCardInput struct {
@@ -73,6 +141,86 @@ func (i *IssueSmartCardInput) Validate() error {
 		i.ValidityDays = 365 // default 1 year
 	}
 	return nil
+}
+
+type GenerateSmartCardsInput struct {
+	TemplateID string `json:"templateId"`
+	Mode       string `json:"mode"` // "all", "single", "unassigned"
+	PatientID  string `json:"patientId,omitempty"`
+}
+
+func (g *GenerateSmartCardsInput) Validate() error {
+	g.Mode = strings.ToLower(strings.TrimSpace(g.Mode))
+	if !UUIDPattern.MatchString(g.TemplateID) {
+		return ErrValidation
+	}
+	switch g.Mode {
+	case "all", "unassigned":
+		// valid
+	case "single":
+		if !UUIDPattern.MatchString(g.PatientID) {
+			return ErrValidation
+		}
+	default:
+		return ErrValidation
+	}
+	return nil
+}
+
+type IssuedCardRecord struct {
+	ID              string    `json:"id"`
+	PatientID       string    `json:"patientId"`
+	PatientName     string    `json:"patientName"`
+	PatientUniqueID string    `json:"patientUniqueId"`
+	CardNumber      string    `json:"cardNumber"`
+	QRToken         string    `json:"qrToken"`
+	TemplateID      string    `json:"templateId"`
+	TemplateName    string    `json:"templateName"`
+	TemplateColor   string    `json:"templateColor"`
+	Status          string    `json:"status"`
+	IssuedAt        time.Time `json:"issuedAt"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	IssuedBy        string    `json:"issuedBy"`
+	Email           string    `json:"email,omitempty"`
+	Phone           string    `json:"phone,omitempty"`
+	DOB             string    `json:"dob,omitempty"`
+	BloodGroup      string    `json:"bloodGroup,omitempty"`
+	Address         string    `json:"address,omitempty"`
+	MRN             string    `json:"mrn,omitempty"`
+}
+
+type GenerateSmartCardsResult struct {
+	GeneratedCount int                `json:"generatedCount"`
+	Cards          []IssuedCardRecord `json:"cards"`
+}
+
+type ListIssuedCardsFilter struct {
+	Search     string
+	TemplateID string
+	Page       int
+	PageSize   int
+}
+
+type IssuedCardsPage struct {
+	Cards      []IssuedCardRecord `json:"cards"`
+	TotalCount int                `json:"totalCount"`
+	Page       int                `json:"page"`
+	PageSize   int                `json:"pageSize"`
+}
+
+type SmartCardVerificationResult struct {
+	Valid           bool      `json:"valid"`
+	Status          string    `json:"status"`
+	RevokedReason   string    `json:"revokedReason,omitempty"`
+	CardNumber      string    `json:"cardNumber,omitempty"`
+	ExpiresAt       time.Time `json:"expiresAt,omitempty"`
+	PatientName     string    `json:"patientName,omitempty"`
+	PatientUniqueID string    `json:"patientUniqueId,omitempty"`
+	Email           string    `json:"email,omitempty"`
+	Phone           string    `json:"phone,omitempty"`
+	DOB             string    `json:"dob,omitempty"`
+	BloodGroup      string    `json:"bloodGroup,omitempty"`
+	Address         string    `json:"address,omitempty"`
 }
 
 // ─── Patient Duplicates & Merge ───────────────────────────────────────────────

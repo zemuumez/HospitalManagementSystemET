@@ -18,11 +18,21 @@ type PatientExtensionsRepository interface {
 	PatientContactConsent(ctx context.Context, patientID string) (domain.PatientContactConsent, error)
 	SavePatientContactConsent(ctx context.Context, a domain.Actor, c domain.PatientContactConsent) error
 
+	// ID Card Templates
+	ListTemplates(ctx context.Context) ([]domain.PatientIDCardTemplate, error)
+	GetTemplate(ctx context.Context, id string) (domain.PatientIDCardTemplate, error)
+	CreateTemplate(ctx context.Context, a domain.Actor, in domain.CreatePatientIDCardTemplateInput) (domain.PatientIDCardTemplate, error)
+	UpdateTemplate(ctx context.Context, a domain.Actor, id string, in domain.UpdatePatientIDCardTemplateInput) (domain.PatientIDCardTemplate, error)
+	DeleteTemplate(ctx context.Context, a domain.Actor, id string) error
+
 	// Smart cards
 	PatientSmartCards(ctx context.Context, patientID string) ([]domain.PatientSmartCard, error)
 	IssueSmartCard(ctx context.Context, a domain.Actor, card domain.PatientSmartCard) (domain.PatientSmartCard, error)
 	RevokeSmartCard(ctx context.Context, a domain.Actor, cardID string, reason string) error
-	VerifySmartCardQR(ctx context.Context, qrToken string) (domain.PatientSmartCard, error)
+	VerifySmartCardQR(ctx context.Context, qrToken string) (domain.SmartCardVerificationResult, error)
+	GenerateSmartCards(ctx context.Context, a domain.Actor, in domain.GenerateSmartCardsInput) (domain.GenerateSmartCardsResult, error)
+	ListIssuedCards(ctx context.Context, a domain.Actor, filter domain.ListIssuedCardsFilter) (domain.IssuedCardsPage, error)
+	DeleteCardAssignment(ctx context.Context, a domain.Actor, cardID string) error
 
 	// Duplicates & merge
 	FindDuplicatePatients(ctx context.Context, query string) ([]domain.DuplicatePatientCandidate, error)
@@ -59,6 +69,52 @@ func (s PatientExtensionsService) SaveConsent(ctx context.Context, a domain.Acto
 		return err
 	}
 	return s.Store.SavePatientContactConsent(ctx, a, c)
+}
+
+// ─── ID Card Templates ────────────────────────────────────────────────────────
+
+func (s PatientExtensionsService) ListTemplates(ctx context.Context, a domain.Actor) ([]domain.PatientIDCardTemplate, error) {
+	return s.Store.ListTemplates(ctx)
+}
+
+func (s PatientExtensionsService) GetTemplate(ctx context.Context, a domain.Actor, id string) (domain.PatientIDCardTemplate, error) {
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.PatientIDCardTemplate{}, domain.ErrValidation
+	}
+	return s.Store.GetTemplate(ctx, id)
+}
+
+func (s PatientExtensionsService) CreateTemplate(ctx context.Context, a domain.Actor, in domain.CreatePatientIDCardTemplateInput) (domain.PatientIDCardTemplate, error) {
+	if a.Role != "admin" && a.Role != "receptionist" {
+		return domain.PatientIDCardTemplate{}, domain.ErrForbidden
+	}
+	if err := in.Validate(); err != nil {
+		return domain.PatientIDCardTemplate{}, err
+	}
+	return s.Store.CreateTemplate(ctx, a, in)
+}
+
+func (s PatientExtensionsService) UpdateTemplate(ctx context.Context, a domain.Actor, id string, in domain.UpdatePatientIDCardTemplateInput) (domain.PatientIDCardTemplate, error) {
+	if a.Role != "admin" && a.Role != "receptionist" {
+		return domain.PatientIDCardTemplate{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.PatientIDCardTemplate{}, domain.ErrValidation
+	}
+	if err := in.Validate(); err != nil {
+		return domain.PatientIDCardTemplate{}, err
+	}
+	return s.Store.UpdateTemplate(ctx, a, id, in)
+}
+
+func (s PatientExtensionsService) DeleteTemplate(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" && a.Role != "receptionist" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	return s.Store.DeleteTemplate(ctx, a, id)
 }
 
 // ─── Smart Cards ─────────────────────────────────────────────────────────────
@@ -120,12 +176,49 @@ func (s PatientExtensionsService) RevokeSmartCard(ctx context.Context, a domain.
 	return s.Store.RevokeSmartCard(ctx, a, cardID, reason)
 }
 
-func (s PatientExtensionsService) VerifySmartCardQR(ctx context.Context, qrToken string) (domain.PatientSmartCard, error) {
+func (s PatientExtensionsService) VerifySmartCardQR(ctx context.Context, qrToken string) (domain.SmartCardVerificationResult, error) {
 	qrToken = strings.TrimSpace(qrToken)
 	if len(qrToken) < 16 || len(qrToken) > 128 {
-		return domain.PatientSmartCard{}, domain.ErrValidation
+		return domain.SmartCardVerificationResult{}, domain.ErrValidation
 	}
 	return s.Store.VerifySmartCardQR(ctx, qrToken)
+}
+
+func (s PatientExtensionsService) GenerateSmartCards(ctx context.Context, a domain.Actor, in domain.GenerateSmartCardsInput) (domain.GenerateSmartCardsResult, error) {
+	if a.Role != "admin" && a.Role != "receptionist" {
+		return domain.GenerateSmartCardsResult{}, domain.ErrForbidden
+	}
+	if err := in.Validate(); err != nil {
+		return domain.GenerateSmartCardsResult{}, err
+	}
+	return s.Store.GenerateSmartCards(ctx, a, in)
+}
+
+func (s PatientExtensionsService) ListIssuedCards(ctx context.Context, a domain.Actor, filter domain.ListIssuedCardsFilter) (domain.IssuedCardsPage, error) {
+	if !a.Can("patients.read") && a.Role != "admin" && a.Role != "receptionist" && a.Role != "doctor" {
+		return domain.IssuedCardsPage{}, domain.ErrForbidden
+	}
+	if filter.Page <= 0 {
+		filter.Page = 1
+	}
+	if filter.PageSize <= 0 {
+		filter.PageSize = 10
+	}
+	if filter.PageSize > 100 {
+		filter.PageSize = 100
+	}
+	filter.Search = strings.TrimSpace(filter.Search)
+	return s.Store.ListIssuedCards(ctx, a, filter)
+}
+
+func (s PatientExtensionsService) DeleteCardAssignment(ctx context.Context, a domain.Actor, cardID string) error {
+	if a.Role != "admin" && a.Role != "receptionist" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(cardID) {
+		return domain.ErrValidation
+	}
+	return s.Store.DeleteCardAssignment(ctx, a, cardID)
 }
 
 // ─── Duplicates & Merge ───────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import {
 } from "@/lib/front-settings";
 import { groups, people } from "@/lib/legacy";
 import { SettingsWorkspace } from "./settings-workspace";
+import { SmartCardsWorkspace } from "./smart-cards-workspace";
 
 export const extraScreens = [
   "front-settings",
@@ -33,7 +34,11 @@ export function LegacyExtras({ id }: { id: string }) {
     return <SettingsWorkspace id={id} />;
   if (id === "attendance" || id === "manage-attendance")
     return <Attendance manage={id === "manage-attendance"} />;
-  return <SmartCards templates={id === "patient-id-card-template"} />;
+  return (
+    <SmartCardsWorkspace
+      initialTab={id === "patient-id-card-template" ? "templates" : "cards"}
+    />
+  );
 }
 type SettingField = {
   key: string;

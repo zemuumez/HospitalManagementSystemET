@@ -30,6 +30,7 @@ import { screens } from "@/lib/legacy";
 import { LegacyScreen } from "@/components/legacy-screen";
 import { LegacyExtras } from "@/components/legacy-extras";
 import { SettingsWorkspace } from "@/components/settings-workspace";
+import { SmartCardsWorkspace } from "@/components/smart-cards-workspace";
 export default async function ModulePage({
   params,
 }: {
@@ -204,14 +205,17 @@ export default async function ModulePage({
     ].includes(slug)
   )
     return <SettingsWorkspace key={slug} id={slug} />;
-  if (
-    [
-      "attendance",
-      "manage-attendance",
-      "patient-id-card-template",
-      "generate-patient-id-card",
-    ].includes(slug)
-  )
+  if (slug === "attendance" || slug === "manage-attendance")
     return <LegacyExtras key={slug} id={slug} />;
+  if (
+    slug === "patient-id-card-template" ||
+    slug === "generate-patient-id-card"
+  )
+    return (
+      <SmartCardsWorkspace
+        key={slug}
+        initialTab={slug === "patient-id-card-template" ? "templates" : "cards"}
+      />
+    );
   return <LegacyScreen key={screen.id} screen={screen} />;
 }
