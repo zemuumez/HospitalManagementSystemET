@@ -6,11 +6,11 @@ import {
   Pencil,
   Trash2,
   Printer,
+  FileDown,
   X,
   Palette,
   Plus,
   RotateCcw,
-  Check,
   AlertCircle,
   Settings2,
   Loader2,
@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { Modal } from "./modal";
 import { useLanguage } from "./language";
-import { people } from "@/lib/legacy";
 import toothSvg from "@/lib/odontogram-svg.json";
 import { api, type Patient } from "@/lib/api";
 
@@ -34,16 +33,50 @@ export type OdontogramLegend = {
 
 export type Chart = {
   id: string;
-  patientId?: string;
+  patientId: string;
   patient: string;
+  patientMrn?: string;
+  doctorId: string;
   doctor: string;
+  encounterId?: string;
   description: string;
   conditions: Record<number, string>;
+  version: number;
+  createdBy?: string;
+  updatedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isLegacy?: boolean;
+};
+
+export type ServerOdontogramChart = {
+  id: string;
+  patientId: string;
+  patientName?: string;
+  patientMrn?: string;
+  doctorId: string;
+  doctorName?: string;
+  encounterId?: string;
+  description: string;
+  odontogram: Record<string, string>;
+  version: number;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  isLegacy: boolean;
+};
+
+export type DoctorOption = {
+  id: string;
+  name: string;
+  department?: string;
 };
 
 export type ServerToothEntry = {
   id: string;
   patientId: string;
+  chartId?: string;
   encounterId?: string;
   toothNumber: number;
   condition: string;
@@ -53,6 +86,7 @@ export type ServerToothEntry = {
   updatedAt: string;
 };
 
+// Legacy helper functions preserved for test and audit tool compatibility
 export function legendCodeToDomainCondition(code: string): string {
   switch (code) {
     case "Healthy":
@@ -211,7 +245,6 @@ const PRESET_COLORS = [
   "#64748b",
 ];
 
-const chartStorageKey = "hms-odontogram-register-preview";
 const legendsStorageKey = "hms-odontogram-legends-v2";
 
 export function getLegendColorMap(
@@ -221,7 +254,6 @@ export function getLegendColorMap(
   for (const leg of legends) {
     map[leg.code] = leg.color;
   }
-  // Ensure fallback defaults exist
   if (!map["Healthy"]) map["Healthy"] = "#ffffff";
   return map;
 }
@@ -239,7 +271,8 @@ export function drawing(
 export function OdontogramRegister() {
   const { t } = useLanguage();
   const [rows, setRows] = useState<Chart[]>([]);
-  const [ready, setReady] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadingCharts, setLoadingCharts] = useState(true);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Chart | null>(null);
   const [tooth, setTooth] = useState(1);
@@ -254,77 +287,15 @@ export function OdontogramRegister() {
   );
   const [legendFormError, setLegendFormError] = useState("");
 
-  // Persistent API States (Section 4 Integration)
-  const [remotePatients, setRemotePatients] = useState<
-    { id: string; name: string; mrn: string }[]
-  >([]);
-  const [loadingRemote, setLoadingRemote] = useState(false);
+  // Persistent Clinical Data
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [doctorsList, setDoctorsList] = useState<DoctorOption[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [loadingTeeth, setLoadingTeeth] = useState(false);
-  const [apiConnected, setApiConnected] = useState(false);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successBanner, setSuccessBanner] = useState("");
 
-  const loadPatients = useCallback(async () => {
-    setLoadingRemote(true);
-    setErrorMessage("");
-    try {
-      const res = await api<{ patients: Patient[] }>("patients?page=1");
-      if (
-        res?.patients &&
-        Array.isArray(res.patients) &&
-        res.patients.length > 0
-      ) {
-        setRemotePatients(
-          res.patients.map((p) => ({
-            id: p.id,
-            name: `${p.givenName} ${p.familyName}`.trim(),
-            mrn: p.mrn,
-          })),
-        );
-        setApiConnected(true);
-      } else {
-        setApiConnected(true);
-      }
-    } catch {
-      // Backend not yet populated with patients or in preview mode
-      setApiConnected(false);
-    } finally {
-      setLoadingRemote(false);
-    }
-  }, []);
-
-  const loadPatientOdontogram = useCallback(async (patientId: string) => {
-    if (!patientId) return;
-    setLoadingTeeth(true);
-    try {
-      const res = await api<{ teeth: ServerToothEntry[] }>(
-        `patients/${patientId}/odontogram`,
-      );
-      if (res?.teeth && Array.isArray(res.teeth)) {
-        const loadedConditions: Record<number, string> = {};
-        for (const tEntry of res.teeth) {
-          loadedConditions[tEntry.toothNumber] = domainConditionToLegendCode(
-            tEntry.condition,
-          );
-        }
-        setEditing((prev) =>
-          prev && prev.patientId === patientId
-            ? {
-                ...prev,
-                conditions: { ...prev.conditions, ...loadedConditions },
-              }
-            : prev,
-        );
-      }
-    } catch {
-      // Local fallback
-    } finally {
-      setLoadingTeeth(false);
-    }
-  }, []);
-
-  // Load rows, remote patients, and legends
+  // Load legends from session
   useEffect(() => {
     try {
       const storedLegends = sessionStorage.getItem(legendsStorageKey);
@@ -336,41 +307,103 @@ export function OdontogramRegister() {
     } catch {
       setLegends(defaultLegends);
     }
+  }, []);
 
+  // Save legends to session
+  const saveLegends = useCallback((newLegends: OdontogramLegend[]) => {
+    setLegends(newLegends);
     try {
-      setRows(
-        JSON.parse(sessionStorage.getItem(chartStorageKey) || "null") ||
-          people.map((patient, i) => ({
-            id: `sample-${i}`,
-            patient,
-            doctor: doctors[i % 3],
-            description: "Sample dental chart",
-            conditions: {},
-          })),
-      );
+      sessionStorage.setItem(legendsStorageKey, JSON.stringify(newLegends));
     } catch {}
-    setReady(true);
-    loadPatients();
-  }, [loadPatients]);
+  }, []);
 
-  // Sync rows
-  useEffect(() => {
-    if (ready) sessionStorage.setItem(chartStorageKey, JSON.stringify(rows));
-  }, [rows, ready]);
+  // Load clinical doctors & patients
+  const loadClinicalMetadata = useCallback(async () => {
+    try {
+      const [patRes, docRes] = await Promise.allSettled([
+        api<{ patients: Patient[] }>("patients?page=1&size=100"),
+        api<{ doctors: DoctorOption[] }>("doctors"),
+      ]);
+      if (patRes.status === "fulfilled" && patRes.value?.patients) {
+        setPatients(patRes.value.patients);
+      }
+      if (docRes.status === "fulfilled" && docRes.value?.doctors) {
+        setDoctorsList(docRes.value.doctors);
+      }
+    } catch {
+      // Non-blocking
+    }
+  }, []);
 
-  // Sync legends
+  // Load odontogram charts from backend
+  const loadCharts = useCallback(async () => {
+    setLoadingCharts(true);
+    setErrorMessage("");
+    try {
+      const queryParams = new URLSearchParams({
+        page: String(page),
+        size: String(size),
+      });
+      if (search.trim()) {
+        queryParams.set("search", search.trim());
+      }
+      const res = await api<{ charts: ServerOdontogramChart[]; total: number }>(
+        `odontograms?${queryParams.toString()}`,
+      );
+      if (res?.charts && Array.isArray(res.charts)) {
+        const mapped: Chart[] = res.charts.map((c) => {
+          const conditions: Record<number, string> = {};
+          if (c.odontogram) {
+            for (const [k, v] of Object.entries(c.odontogram)) {
+              conditions[Number(k)] = v;
+            }
+          }
+          return {
+            id: c.id,
+            patientId: c.patientId,
+            patient: c.patientName || `Patient ${c.patientId.slice(0, 8)}`,
+            patientMrn: c.patientMrn,
+            doctorId: c.doctorId,
+            doctor: c.doctorName || `Doctor ${c.doctorId.slice(0, 8)}`,
+            encounterId: c.encounterId,
+            description: c.description,
+            conditions,
+            version: c.version,
+            createdBy: c.createdBy,
+            updatedBy: c.updatedBy,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            isLegacy: c.isLegacy,
+          };
+        });
+        setRows(mapped);
+        setTotalCount(res.total ?? mapped.length);
+      } else {
+        setRows([]);
+        setTotalCount(0);
+      }
+    } catch (err: any) {
+      setErrorMessage(
+        err?.message || t("Failed to load odontograms from server"),
+      );
+      setRows([]);
+      setTotalCount(0);
+    } finally {
+      setLoadingCharts(false);
+    }
+  }, [page, size, search, t]);
+
   useEffect(() => {
-    if (ready)
-      sessionStorage.setItem(legendsStorageKey, JSON.stringify(legends));
-  }, [legends, ready]);
+    loadClinicalMetadata();
+  }, [loadClinicalMetadata]);
+
+  useEffect(() => {
+    loadCharts();
+  }, [loadCharts]);
 
   const colorMap = getLegendColorMap(legends);
 
-  const filtered = rows.filter((r) =>
-    `${r.patient} ${r.doctor}`.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  const avatar = (name: string) => (
+  const avatar = (name: string, subtext?: string) => (
     <span className="record-link">
       <span className="avatar">
         {name
@@ -381,7 +414,7 @@ export function OdontogramRegister() {
       </span>
       <span>
         {name}
-        <small>{name.toLowerCase().replaceAll(" ", ".")}@example.invalid</small>
+        {subtext && <small>{subtext}</small>}
       </span>
     </span>
   );
@@ -403,7 +436,6 @@ export function OdontogramRegister() {
       return;
     }
 
-    // Check duplicate code (case-insensitive)
     const duplicate = legends.some(
       (l) =>
         l.id !== editingLegend.id &&
@@ -442,30 +474,20 @@ export function OdontogramRegister() {
       updatedLegends = [...legends, updatedLegend];
     }
 
-    setLegends(updatedLegends);
+    saveLegends(updatedLegends);
 
-    // If code was changed, migrate existing conditions in current editor and stored charts
-    if (oldCode && oldCode !== trimmedCode) {
-      if (editing) {
-        const nextConditions = { ...editing.conditions };
-        for (const [tNum, cCode] of Object.entries(nextConditions)) {
-          if (cCode === oldCode) nextConditions[Number(tNum)] = trimmedCode;
+    if (oldCode && oldCode !== trimmedCode && editing) {
+      const nextConditions = { ...editing.conditions };
+      let changed = false;
+      for (const [tNum, cCode] of Object.entries(nextConditions)) {
+        if (cCode === oldCode) {
+          nextConditions[Number(tNum)] = trimmedCode;
+          changed = true;
         }
+      }
+      if (changed) {
         setEditing({ ...editing, conditions: nextConditions });
       }
-      setRows((prev) =>
-        prev.map((chart) => {
-          const nextConds = { ...chart.conditions };
-          let changed = false;
-          for (const [tNum, cCode] of Object.entries(nextConds)) {
-            if (cCode === oldCode) {
-              nextConds[Number(tNum)] = trimmedCode;
-              changed = true;
-            }
-          }
-          return changed ? { ...chart, conditions: nextConds } : chart;
-        }),
-      );
     }
 
     setEditingLegend(null);
@@ -481,33 +503,51 @@ export function OdontogramRegister() {
     }
     if (
       window.confirm(
-        t(
-          `Are you sure you want to delete legend "${target.name}" (${target.code})?`,
-        ),
+        t("Are you sure you want to delete this odontogram legend?"),
       )
     ) {
-      setLegends(legends.filter((l) => l.id !== legendId));
+      saveLegends(legends.filter((l) => l.id !== legendId));
     }
   }
 
   function handleResetLegends() {
     if (
       window.confirm(
-        t(
-          "Reset all odontogram legends to default dental conditions? Custom changes will be restored.",
-        ),
+        t("Reset all odontogram legends to the 11 default clinical labels?"),
       )
     ) {
-      setLegends(defaultLegends);
-      sessionStorage.setItem(legendsStorageKey, JSON.stringify(defaultLegends));
+      saveLegends(defaultLegends);
     }
   }
 
-  function print(row: Chart) {
+  // Delete Chart
+  async function handleDeleteChart(chart: Chart) {
+    if (
+      !window.confirm(
+        t("Are you sure you want to delete this dental examination chart?"),
+      )
+    ) {
+      return;
+    }
+    setIsDeletingId(chart.id);
+    setErrorMessage("");
+    try {
+      await api(`odontograms/${chart.id}`, { method: "DELETE" });
+      await loadCharts();
+      setSuccessBanner(t("Dental chart deleted successfully."));
+    } catch (err: any) {
+      setErrorMessage(err?.message || t("Failed to delete dental chart."));
+    } finally {
+      setIsDeletingId(null);
+    }
+  }
+
+  // Print Chart (In-browser full clinical report)
+  function handlePrint(row: Chart) {
     const win = window.open("", "_blank");
     if (!win) return;
     const d = win.document;
-    d.title = "Odontogram Report - " + row.patient;
+    d.title = `Odontogram Report - ${row.patient}`;
 
     const currentMap = getLegendColorMap(legends);
 
@@ -525,7 +565,7 @@ export function OdontogramRegister() {
         .code-badge { font-family: monospace; font-weight: bold; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
       </style>
       <h1>${row.patient} - ${row.doctor}</h1>
-      <div class="meta">Hospital Dental Examination Chart • Generated on ${new Date().toLocaleDateString()}</div>
+      <div class="meta">Hospital Dental Examination Chart • Chart ID: ${row.id} • Version ${row.version} • Generated on ${new Date().toLocaleDateString()}</div>
       <div class="desc"><strong>Clinical Notes:</strong> ${row.description || "No specific remarks"}</div>
       <div class="chart-box">
         ${drawing(row.conditions, currentMap)}
@@ -561,60 +601,15 @@ export function OdontogramRegister() {
     }, 250);
   }
 
+  // Open Chart-specific PDF
+  function handleDownloadPdf(row: Chart) {
+    window.open(`/api/hms/odontograms/${row.id}/pdf`, "_blank");
+  }
+
   return (
     <section>
-      {/* Persistent Connection Status & Alerts (Section 4 Integration) */}
+      {/* Top Banner / Alerts */}
       <div className="mb-3 d-flex flex-column gap-2">
-        <div
-          className="d-flex justify-content-between align-items-center flex-wrap gap-2 px-3 py-2 rounded border"
-          style={{
-            backgroundColor: apiConnected
-              ? "rgba(16, 185, 129, 0.08)"
-              : "rgba(245, 158, 11, 0.08)",
-            borderColor: apiConnected ? "#10b981" : "#f59e0b",
-          }}
-        >
-          <div className="d-flex align-items-center gap-2">
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                backgroundColor: apiConnected ? "#10b981" : "#f59e0b",
-                display: "inline-block",
-              }}
-            />
-            <span className="fs-7 fw-semibold">
-              {apiConnected
-                ? t(
-                    "Connected to Go/PostgreSQL Clinical Records (/v1/patients/{id}/odontogram)",
-                  )
-                : t("Local preview mode · Syncing locally")}
-            </span>
-            {remotePatients.length > 0 && (
-              <span
-                className="badge-available-stock fs-8 py-0 px-2"
-                style={{ backgroundColor: "#10b98122", color: "#10b981" }}
-              >
-                {remotePatients.length} {t("Authoritative Patients Loaded")}
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            className="btn-icon-link fs-7 d-flex align-items-center gap-1"
-            onClick={loadPatients}
-            disabled={loadingRemote}
-            title={t("Refresh patient records from API")}
-          >
-            <RefreshCw
-              size={13}
-              className={loadingRemote ? "animate-spin" : ""}
-            />
-            <span>{loadingRemote ? t("Syncing...") : t("Sync Backend")}</span>
-          </button>
-        </div>
-
         {successBanner && (
           <div
             className="alert-notice d-flex align-items-center justify-content-between py-2 px-3 border rounded"
@@ -668,7 +663,7 @@ export function OdontogramRegister() {
           <Search size={16} />
           <input
             aria-label={t("Search odontograms")}
-            placeholder={t("Search")}
+            placeholder={t("Search patient or doctor")}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -678,6 +673,20 @@ export function OdontogramRegister() {
         </label>
 
         <div className="d-flex align-items-center gap-2">
+          <button
+            type="button"
+            className="btn-icon-link fs-7 d-flex align-items-center gap-1 px-2 py-1 border rounded"
+            onClick={() => loadCharts()}
+            disabled={loadingCharts}
+            title={t("Refresh list from server")}
+          >
+            <RefreshCw
+              size={14}
+              className={loadingCharts ? "animate-spin" : ""}
+            />
+            <span>{loadingCharts ? t("Loading...") : t("Refresh")}</span>
+          </button>
+
           {/* Manage Legends Trigger */}
           <button
             type="button"
@@ -690,17 +699,23 @@ export function OdontogramRegister() {
             <span>{t("Odontogram Legends")}</span>
           </button>
 
-          {/* Add Odontogram Primary Button */}
+          {/* Add Odontogram Button */}
           <button
             className="primary"
             onClick={() => {
               setTooth(1);
               setEditing({
-                id: crypto.randomUUID(),
-                patient: "",
-                doctor: "",
+                id: "",
+                patientId: patients.length > 0 ? patients[0].id : "",
+                patient:
+                  patients.length > 0
+                    ? `${patients[0].givenName} ${patients[0].familyName}`.trim()
+                    : "",
+                doctorId: doctorsList.length > 0 ? doctorsList[0].id : "",
+                doctor: doctorsList.length > 0 ? doctorsList[0].name : "",
                 description: "",
                 conditions: {},
+                version: 0,
               });
             }}
           >
@@ -714,50 +729,120 @@ export function OdontogramRegister() {
         <table className="legacy-table">
           <thead>
             <tr>
-              {["Patient", "Doctor", "Action"].map((h) => (
-                <th key={h}>{t(h)}</th>
-              ))}
+              <th>{t("Patient")}</th>
+              <th>{t("Attending Doctor")}</th>
+              <th>{t("Clinical Notes")}</th>
+              <th>{t("Status / Conditions")}</th>
+              <th>{t("Action")}</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.slice((page - 1) * size, page * size).map((row) => (
-              <tr key={row.id}>
-                <td>{avatar(row.patient)}</td>
-                <td>{avatar(row.doctor)}</td>
-                <td>
-                  <div className="row-actions">
-                    <button
-                      aria-label={`Edit odontogram ${row.patient}`}
-                      onClick={() => setEditing(structuredClone(row))}
-                      title={t("Edit odontogram")}
-                    >
-                      <Pencil size={17} />
-                    </button>
-                    <button
-                      aria-label={`Delete odontogram ${row.patient}`}
-                      onClick={() => {
-                        if (window.confirm(t("Delete this odontogram?")))
-                          setRows(rows.filter((r) => r.id !== row.id));
-                      }}
-                      title={t("Delete odontogram")}
-                    >
-                      <Trash2 size={17} />
-                    </button>
-                    <button
-                      className="print-action"
-                      aria-label={`Print odontogram ${row.patient}`}
-                      onClick={() => print(row)}
-                      title={t("Print odontogram")}
-                    >
-                      <Printer size={17} />
-                    </button>
+            {loadingCharts ? (
+              <tr>
+                <td colSpan={5} className="text-center py-4 text-secondary">
+                  <div className="d-inline-flex align-items-center gap-2">
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>{t("Loading dental examination charts...")}</span>
                   </div>
                 </td>
               </tr>
-            ))}
-            {!filtered.length && (
+            ) : rows.length > 0 ? (
+              rows.map((row) => {
+                const conditionCount = Object.keys(row.conditions).length;
+                return (
+                  <tr key={row.id}>
+                    <td>
+                      {avatar(
+                        row.patient,
+                        row.patientMrn ? `MRN: ${row.patientMrn}` : undefined,
+                      )}
+                    </td>
+                    <td>{avatar(row.doctor)}</td>
+                    <td
+                      style={{
+                        maxWidth: "240px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={row.description}
+                    >
+                      <span className="fs-7 text-secondary">
+                        {row.description || t("Routine Dental Examination")}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="d-flex align-items-center gap-2">
+                        {row.isLegacy && (
+                          <span
+                            className="badge-available-stock fs-8 px-2 py-0"
+                            style={{
+                              backgroundColor: "#f59e0b22",
+                              color: "#d97706",
+                              borderColor: "#f59e0b",
+                            }}
+                          >
+                            {t("Legacy Chart")}
+                          </span>
+                        )}
+                        <span className="fs-8 text-secondary">
+                          {conditionCount}{" "}
+                          {conditionCount === 1
+                            ? t("tooth charted")
+                            : t("teeth charted")}
+                        </span>
+                        <span className="fs-8 text-secondary font-monospace">
+                          v{row.version}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          aria-label={`Edit odontogram ${row.patient}`}
+                          onClick={() => setEditing(structuredClone(row))}
+                          title={t("Edit odontogram")}
+                        >
+                          <Pencil size={17} />
+                        </button>
+                        <button
+                          aria-label={`Delete odontogram ${row.patient}`}
+                          disabled={isDeletingId === row.id}
+                          onClick={() => handleDeleteChart(row)}
+                          title={t("Delete odontogram")}
+                        >
+                          {isDeletingId === row.id ? (
+                            <Loader2 size={17} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={17} />
+                          )}
+                        </button>
+                        <button
+                          className="print-action"
+                          aria-label={`Print odontogram ${row.patient}`}
+                          onClick={() => handlePrint(row)}
+                          title={t("Print odontogram report")}
+                        >
+                          <Printer size={17} />
+                        </button>
+                        <button
+                          className="btn-icon-link"
+                          aria-label={`PDF export ${row.patient}`}
+                          onClick={() => handleDownloadPdf(row)}
+                          title={t("Download PDF")}
+                        >
+                          <FileDown size={17} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
               <tr>
-                <td colSpan={3}>{t("No records found")}</td>
+                <td colSpan={5} className="text-center py-4 text-secondary">
+                  {t("No dental charts found.")}
+                </td>
               </tr>
             )}
           </tbody>
@@ -784,22 +869,23 @@ export function OdontogramRegister() {
         </label>
         <span>
           {t("Showing")}{" "}
-          {filtered.length
-            ? Math.min((page - 1) * size + 1, filtered.length)
-            : 0}{" "}
-          - {Math.min(page * size, filtered.length)} {t("of")} {filtered.length}{" "}
+          {totalCount > 0 ? Math.min((page - 1) * size + 1, totalCount) : 0} -{" "}
+          {Math.min(page * size, totalCount)} {t("of")} {totalCount}{" "}
           {t("Results")}
         </span>
         <div>
-          {Array.from({ length: Math.ceil(filtered.length / size) }, (_, i) => (
-            <button
-              className={page === i + 1 ? "primary" : "secondary"}
-              key={i}
-              onClick={() => setPage(i + 1)}
-            >
-              {i + 1}
-            </button>
-          ))}
+          {Array.from(
+            { length: Math.ceil(totalCount / size) || 1 },
+            (_, i) => (
+              <button
+                className={page === i + 1 ? "primary" : "secondary"}
+                key={i}
+                onClick={() => setPage(i + 1)}
+              >
+                {i + 1}
+              </button>
+            ),
+          )}
         </div>
       </div>
 
@@ -861,62 +947,88 @@ export function OdontogramRegister() {
             onSubmit={async (e) => {
               e.preventDefault();
               if (!editing) return;
+
+              if (!editing.patientId) {
+                setErrorMessage(t("Please select a patient"));
+                return;
+              }
+              if (!editing.doctorId) {
+                setErrorMessage(t("Please select an attending doctor"));
+                return;
+              }
+
               setIsSaving(true);
               setErrorMessage("");
               setSuccessBanner("");
 
-              let apiSaved = false;
-              if (editing.patientId) {
-                try {
-                  for (const [tNumStr, code] of Object.entries(
-                    editing.conditions,
-                  )) {
-                    const toothNumber = Number(tNumStr);
-                    const condition = legendCodeToDomainCondition(code);
-                    await api(`patients/${editing.patientId}/odontogram`, {
-                      method: "POST",
-                      body: JSON.stringify({
-                        toothNumber,
-                        condition,
-                        procedureNotes: editing.description || "",
-                      }),
-                    });
-                  }
-                  apiSaved = true;
-                } catch (err: any) {
-                  console.warn("API odontogram save notice:", err);
+              const odontogramMap: Record<number, string> = {};
+              for (const [tNumStr, code] of Object.entries(
+                editing.conditions,
+              )) {
+                odontogramMap[Number(tNumStr)] = code;
+              }
+
+              const payload = {
+                patientId: editing.patientId,
+                doctorId: editing.doctorId,
+                encounterId: editing.encounterId || undefined,
+                description:
+                  editing.description.trim() ||
+                  "Dental Examination Chart",
+                odontogram: odontogramMap,
+                version: editing.version,
+              };
+
+              try {
+                if (editing.id) {
+                  await api(`odontograms/${editing.id}`, {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                  });
+                  await loadCharts();
+                  setSuccessBanner(t("Dental chart updated successfully."));
+                } else {
+                  await api("odontograms", {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                  });
+                  await loadCharts();
+                  setSuccessBanner(t("New dental chart created successfully."));
+                }
+                setEditing(null);
+              } catch (err: any) {
+                const msg = err?.message || "";
+                const isConflict =
+                  err?.status === 409 ||
+                  err?.code?.includes("CONFLICT") ||
+                  msg.toLowerCase().includes("conflict") ||
+                  msg.toLowerCase().includes("already used") ||
+                  msg.toLowerCase().includes("record changed") ||
+                  msg.includes("409");
+
+                if (isConflict) {
                   setErrorMessage(
-                    err?.message ||
-                      t(
-                        "Saved locally. Could not synchronize to remote patient record.",
-                      ),
+                    t(
+                      "Concurrent Edit Conflict: A newer version of this chart was saved by another session. Please close, refresh, and review changes.",
+                    ),
+                  );
+                } else {
+                  setErrorMessage(
+                    msg || t("Failed to save dental chart to server."),
                   );
                 }
+              } finally {
+                setIsSaving(false);
               }
-
-              setRows((old) =>
-                old.some((r) => r.id === editing.id)
-                  ? old.map((r) => (r.id === editing.id ? editing : r))
-                  : [editing, ...old],
-              );
-
-              if (apiSaved) {
-                setSuccessBanner(
-                  t(
-                    "Odontogram successfully saved to persistent patient records.",
-                  ),
-                );
-              }
-              setEditing(null);
-              setIsSaving(false);
             }}
           >
             <header className="modal-heading">
               <h2 id="odontogram-title">
-                {t(
-                  rows.some((r) => r.id === editing.id)
-                    ? "Edit Odontogram"
-                    : "Add Odontogram",
+                {t(editing.id ? "Edit Odontogram Chart" : "Add Odontogram Chart")}
+                {editing.id && (
+                  <span className="ms-2 fs-7 text-secondary fw-normal font-monospace">
+                    (v{editing.version})
+                  </span>
                 )}
               </h2>
               <button
@@ -927,89 +1039,77 @@ export function OdontogramRegister() {
                 <X size={20} />
               </button>
             </header>
+
             <div className="dental-editor-grid">
               <div>
                 <label>
                   <span className="label">
                     {t("Patient")}: <b className="text-red-500">*</b>
-                    {loadingTeeth && (
-                      <span className="ms-2 fs-7 text-primary d-inline-flex align-items-center gap-1">
-                        <Loader2 size={13} className="animate-spin" />{" "}
-                        {t("Loading clinical record...")}
-                      </span>
-                    )}
                   </span>
                   <select
                     required
                     className="field"
-                    value={editing.patientId || editing.patient}
+                    value={editing.patientId}
                     onChange={(e) => {
-                      const val = e.target.value;
-                      const matched = remotePatients.find((p) => p.id === val);
-                      if (matched) {
-                        setEditing({
-                          ...editing,
-                          patientId: matched.id,
-                          patient: matched.name,
-                        });
-                        loadPatientOdontogram(matched.id);
-                      } else {
-                        setEditing({
-                          ...editing,
-                          patientId: undefined,
-                          patient: val,
-                        });
-                      }
+                      const selId = e.target.value;
+                      const pat = patients.find((p) => p.id === selId);
+                      setEditing({
+                        ...editing,
+                        patientId: selId,
+                        patient: pat
+                          ? `${pat.givenName} ${pat.familyName}`.trim()
+                          : selId,
+                        patientMrn: pat?.mrn,
+                      });
                     }}
                   >
                     <option value="">{t("Select Patient")}</option>
-                    {remotePatients.length > 0 && (
-                      <optgroup label={t("Authoritative Patient Records")}>
-                        {remotePatients.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.mrn})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    <optgroup label={t("Standard Patients")}>
-                      {people.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </label>
-
-                <label>
-                  <span className="label">
-                    {t("Doctor")}: <b className="text-red-500">*</b>
-                  </span>
-                  <select
-                    required
-                    className="field"
-                    value={editing.doctor}
-                    onChange={(e) =>
-                      setEditing({ ...editing, doctor: e.target.value })
-                    }
-                  >
-                    <option value="">{t("Select Doctor")}</option>
-                    {doctors.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
+                    {patients.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.givenName} {p.familyName} ({p.mrn})
                       </option>
                     ))}
                   </select>
                 </label>
-                <label>
+
+                <label className="mt-3">
                   <span className="label">
-                    {t("Description")}: <b className="text-red-500">*</b>
+                    {t("Attending Doctor")}: <b className="text-red-500">*</b>
+                  </span>
+                  <select
+                    required
+                    className="field"
+                    value={editing.doctorId}
+                    onChange={(e) => {
+                      const selId = e.target.value;
+                      const doc = doctorsList.find((d) => d.id === selId);
+                      setEditing({
+                        ...editing,
+                        doctorId: selId,
+                        doctor: doc?.name || selId,
+                      });
+                    }}
+                  >
+                    <option value="">{t("Select Attending Doctor")}</option>
+                    {doctorsList.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} {d.department ? `(${d.department})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="mt-3">
+                  <span className="label">
+                    {t("Clinical Examination Notes")}: <b className="text-red-500">*</b>
                   </span>
                   <textarea
                     className="field"
                     required
-                    rows={5}
+                    rows={4}
+                    placeholder={t(
+                      "Record clinical diagnosis, periodontal remarks, treatment plan...",
+                    )}
                     value={editing.description}
                     onChange={(e) =>
                       setEditing({ ...editing, description: e.target.value })
@@ -1045,7 +1145,7 @@ export function OdontogramRegister() {
               </div>
 
               <div>
-                {/* Condition Palette with Quick Legend Management */}
+                {/* Condition Palette */}
                 <div className="d-flex justify-content-between align-items-center mb-2">
                   <span className="label mb-0 fw-semibold">
                     {t("Condition Palette (Click to assign)")}:
@@ -1124,7 +1224,7 @@ export function OdontogramRegister() {
                 </div>
 
                 <label className="mt-3">
-                  <span className="label">{t("Tooth")}</span>
+                  <span className="label">{t("Tooth Selector")}</span>
                   <select
                     className="field"
                     value={tooth}
@@ -1159,7 +1259,7 @@ export function OdontogramRegister() {
                     {t("Saving to backend...")}
                   </span>
                 ) : (
-                  t("Save")
+                  t("Save Dental Chart")
                 )}
               </button>
               <button

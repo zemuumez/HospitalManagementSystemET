@@ -143,10 +143,88 @@ func TestOdontogram_Validate(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid condition", func(t *testing.T) {
+	t.Run("invalid condition empty", func(t *testing.T) {
 		in := domain.SetToothConditionInput{
 			ToothNumber: 1,
-			Condition:   "unknown_condition",
+			Condition:   "   ",
+		}
+		if err := in.Validate(); err != domain.ErrValidation {
+			t.Fatalf("expected ErrValidation, got %v", err)
+		}
+	})
+}
+
+func TestOdontogramChart_Validate(t *testing.T) {
+	validPatient := "890a8e79-4f22-4bc9-be16-e0b59b02cf5f"
+	validDoc := "doc-123"
+
+	t.Run("valid chart input with all clinical codes", func(t *testing.T) {
+		in := domain.SaveOdontogramChartInput{
+			PatientID:   validPatient,
+			DoctorID:    validDoc,
+			Description: "Comprehensive examination",
+			Odontogram: map[int]string{
+				1:  "Healthy",
+				2:  "K",
+				3:  "C",
+				4:  "Ce",
+				5:  "D",
+				6:  "KR",
+				7:  "PS",
+				8:  "IP",
+				9:  "X",
+				10: "F",
+				11: "B",
+				12: "V", // Custom legend
+			},
+		}
+		if err := in.Validate(); err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("invalid patient id", func(t *testing.T) {
+		in := domain.SaveOdontogramChartInput{
+			PatientID:   "invalid-uuid",
+			DoctorID:    validDoc,
+			Description: "Checkup",
+			Odontogram:  map[int]string{1: "Healthy"},
+		}
+		if err := in.Validate(); err != domain.ErrValidation {
+			t.Fatalf("expected ErrValidation, got %v", err)
+		}
+	})
+
+	t.Run("empty doctor id", func(t *testing.T) {
+		in := domain.SaveOdontogramChartInput{
+			PatientID:   validPatient,
+			DoctorID:    "",
+			Description: "Checkup",
+			Odontogram:  map[int]string{1: "Healthy"},
+		}
+		if err := in.Validate(); err != domain.ErrValidation {
+			t.Fatalf("expected ErrValidation, got %v", err)
+		}
+	})
+
+	t.Run("empty description", func(t *testing.T) {
+		in := domain.SaveOdontogramChartInput{
+			PatientID:   validPatient,
+			DoctorID:    validDoc,
+			Description: "   ",
+			Odontogram:  map[int]string{1: "Healthy"},
+		}
+		if err := in.Validate(); err != domain.ErrValidation {
+			t.Fatalf("expected ErrValidation, got %v", err)
+		}
+	})
+
+	t.Run("invalid tooth number out of range", func(t *testing.T) {
+		in := domain.SaveOdontogramChartInput{
+			PatientID:   validPatient,
+			DoctorID:    validDoc,
+			Description: "Checkup",
+			Odontogram:  map[int]string{53: "K"},
 		}
 		if err := in.Validate(); err != domain.ErrValidation {
 			t.Fatalf("expected ErrValidation, got %v", err)

@@ -33,6 +33,9 @@ const inventoryWorkspaceMode = process.argv.includes("--inventory-workspace");
 const smartCardsWorkspaceMode = process.argv.includes(
   "--smart-cards-workspace",
 );
+const odontogramWorkspaceMode = process.argv.includes(
+  "--odontogram-workspace",
+);
 const dsn = new URL(process.env.DATABASE_URL);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
   throw Error("Browser QA requires a loopback PostgreSQL database");
@@ -286,7 +289,11 @@ try {
     });
     process.stdin.pause();
   } else {
-    if (doctorWorkspaceMode || settingsWorkspaceMode) {
+    if (
+      doctorWorkspaceMode ||
+      settingsWorkspaceMode ||
+      odontogramWorkspaceMode
+    ) {
       const { hashPassword } = await import("better-auth/crypto");
       const email = `qa-admin-${token}@example.test`;
       const password = randomBytes(24).toString("hex") + "Aa1!";
@@ -333,7 +340,9 @@ try {
                                 ? "scripts/verify-inventory-workspace.mjs"
                                 : smartCardsWorkspaceMode
                                   ? "scripts/verify-smart-cards-workspace.mjs"
-                                  : "scripts/verify-connected.mjs",
+                                  : odontogramWorkspaceMode
+                                    ? "scripts/verify-odontogram-workspace.mjs"
+                                    : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,

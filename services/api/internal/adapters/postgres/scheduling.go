@@ -603,6 +603,7 @@ func (s Store) DeleteDoctor(ctx context.Context, a domain.Actor, id string) erro
 			OR EXISTS(SELECT 1 FROM live_consultation WHERE doctor_id=$1)
 			OR EXISTS(SELECT 1 FROM patient_referral WHERE referred_by=$1)
 			OR EXISTS(SELECT 1 FROM patient_odontogram_entry WHERE diagnosed_by=$1)
+			OR EXISTS(SELECT 1 FROM odontogram_chart WHERE doctor_id=$1 OR created_by=$1)
 			OR EXISTS(SELECT 1 FROM clinical_note WHERE author_id=$1)
 			OR EXISTS(SELECT 1 FROM patient WHERE user_id=$1 OR clinician_user_id=$1)
 			OR EXISTS(SELECT 1 FROM audit_event WHERE actor_id=$1)

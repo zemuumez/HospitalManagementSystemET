@@ -373,12 +373,76 @@ func (i *CreatePatientReferralInput) Validate() error {
 
 // ─── Odontogram (Dental Chart) ────────────────────────────────────────────────
 
+type OdontogramChart struct {
+	ID          string         `json:"id"`
+	PatientID   string         `json:"patientId"`
+	PatientName string         `json:"patientName,omitempty"`
+	PatientMRN  string         `json:"patientMrn,omitempty"`
+	DoctorID    string         `json:"doctorId"`
+	DoctorName  string         `json:"doctorName,omitempty"`
+	EncounterID *string        `json:"encounterId,omitempty"`
+	Description string         `json:"description"`
+	Odontogram  map[int]string `json:"odontogram"`
+	Version     int            `json:"version"`
+	CreatedBy   string         `json:"createdBy"`
+	UpdatedBy   string         `json:"updatedBy"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
+	IsLegacy    bool           `json:"isLegacy"`
+}
+
+type SaveOdontogramChartInput struct {
+	PatientID   string         `json:"patientId"`
+	DoctorID    string         `json:"doctorId"`
+	EncounterID *string        `json:"encounterId,omitempty"`
+	Description string         `json:"description"`
+	Odontogram  map[int]string `json:"odontogram"`
+	Version     int            `json:"version,omitempty"`
+}
+
+func (i *SaveOdontogramChartInput) Validate() error {
+	i.PatientID = strings.TrimSpace(i.PatientID)
+	i.DoctorID = strings.TrimSpace(i.DoctorID)
+	i.Description = strings.TrimSpace(i.Description)
+
+	if !UUIDPattern.MatchString(i.PatientID) {
+		return ErrValidation
+	}
+	if i.DoctorID == "" || len(i.DoctorID) > 128 {
+		return ErrValidation
+	}
+	if i.EncounterID != nil && *i.EncounterID != "" && !UUIDPattern.MatchString(*i.EncounterID) {
+		return ErrValidation
+	}
+	if len(i.Description) < 1 || len(i.Description) > 2000 {
+		return ErrValidation
+	}
+	if i.Odontogram == nil {
+		i.Odontogram = make(map[int]string)
+	}
+	for toothNum, cond := range i.Odontogram {
+		if toothNum < 1 || toothNum > 52 {
+			return ErrValidation
+		}
+		trimmed := strings.TrimSpace(cond)
+		if trimmed == "" || len(trimmed) > 64 {
+			return ErrValidation
+		}
+		i.Odontogram[toothNum] = trimmed
+	}
+	if i.Version < 0 {
+		return ErrValidation
+	}
+	return nil
+}
+
 type OdontogramEntry struct {
 	ID             string    `json:"id"`
 	PatientID      string    `json:"patientId"`
+	ChartID        string    `json:"chartId"`
 	EncounterID    *string   `json:"encounterId,omitempty"`
 	ToothNumber    int       `json:"toothNumber"`
-	Condition      string    `json:"condition"` // healthy, caries, missing, filled, crown, implant, extracted, root_canal
+	Condition      string    `json:"condition"`
 	ProcedureNotes string    `json:"procedureNotes"`
 	DiagnosedBy    string    `json:"diagnosedBy"`
 	CreatedAt      time.Time `json:"createdAt"`
@@ -386,6 +450,7 @@ type OdontogramEntry struct {
 }
 
 type SetToothConditionInput struct {
+	ChartID        *string `json:"chartId,omitempty"`
 	EncounterID    *string `json:"encounterId,omitempty"`
 	ToothNumber    int     `json:"toothNumber"`
 	Condition      string  `json:"condition"`
@@ -398,9 +463,10 @@ func (i *SetToothConditionInput) Validate() error {
 	if i.ToothNumber < 1 || i.ToothNumber > 52 {
 		return ErrValidation
 	}
-	switch i.Condition {
-	case "healthy", "caries", "missing", "filled", "crown", "implant", "extracted", "root_canal":
-	default:
+	if len(i.Condition) < 1 || len(i.Condition) > 64 {
+		return ErrValidation
+	}
+	if i.ChartID != nil && *i.ChartID != "" && !UUIDPattern.MatchString(*i.ChartID) {
 		return ErrValidation
 	}
 	if i.EncounterID != nil && *i.EncounterID != "" && !UUIDPattern.MatchString(*i.EncounterID) {

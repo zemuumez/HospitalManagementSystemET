@@ -50,6 +50,12 @@ type ClinicalCareRepository interface {
 	// Odontogram
 	Odontogram(ctx context.Context, patientID string) ([]domain.OdontogramEntry, error)
 	SetToothCondition(ctx context.Context, a domain.Actor, patientID string, input domain.SetToothConditionInput) (domain.OdontogramEntry, error)
+	CreateOdontogramChart(ctx context.Context, a domain.Actor, input domain.SaveOdontogramChartInput) (domain.OdontogramChart, error)
+	UpdateOdontogramChart(ctx context.Context, a domain.Actor, id string, input domain.SaveOdontogramChartInput) (domain.OdontogramChart, error)
+	GetOdontogramChart(ctx context.Context, id string) (domain.OdontogramChart, error)
+	ListOdontogramCharts(ctx context.Context, a domain.Actor, patientID, search string, page, limit int) ([]domain.OdontogramChart, int, error)
+	DeleteOdontogramChart(ctx context.Context, id string) error
+	ValidatePatientEncounter(ctx context.Context, patientID, encounterID string) error
 }
 
 type ClinicalCareService struct {
@@ -386,6 +392,88 @@ func (s ClinicalCareService) SetToothCondition(ctx context.Context, a domain.Act
 		return domain.OdontogramEntry{}, err
 	}
 	return s.Store.SetToothCondition(ctx, a, patientID, input)
+}
+
+func (s ClinicalCareService) CreateOdontogramChart(ctx context.Context, a domain.Actor, input domain.SaveOdontogramChartInput) (domain.OdontogramChart, error) {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.OdontogramChart{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, input.PatientID, pointerValue(input.EncounterID), "clinical"); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	return s.Store.CreateOdontogramChart(ctx, a, input)
+}
+
+func (s ClinicalCareService) UpdateOdontogramChart(ctx context.Context, a domain.Actor, id string, input domain.SaveOdontogramChartInput) (domain.OdontogramChart, error) {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.OdontogramChart{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.OdontogramChart{}, domain.ErrValidation
+	}
+	if err := input.Validate(); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	existing, err := s.Store.GetOdontogramChart(ctx, id)
+	if err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, existing.PatientID, pointerValue(input.EncounterID), "clinical"); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	return s.Store.UpdateOdontogramChart(ctx, a, id, input)
+}
+
+func (s ClinicalCareService) GetOdontogramChart(ctx context.Context, a domain.Actor, id string) (domain.OdontogramChart, error) {
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.OdontogramChart{}, domain.ErrValidation
+	}
+	chart, err := s.Store.GetOdontogramChart(ctx, id)
+	if err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "patient" {
+		return domain.OdontogramChart{}, domain.ErrForbidden
+	}
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, chart.PatientID, pointerValue(chart.EncounterID), "odontogram_read"); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	return chart, nil
+}
+
+func (s ClinicalCareService) ListOdontogramCharts(ctx context.Context, a domain.Actor, patientID, search string, page, limit int) ([]domain.OdontogramChart, int, error) {
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "patient" {
+		return nil, 0, domain.ErrForbidden
+	}
+	if patientID != "" && !domain.UUIDPattern.MatchString(patientID) {
+		return nil, 0, domain.ErrValidation
+	}
+	if patientID != "" {
+		if err := s.Store.AuthorizeClinicalRecord(ctx, a, patientID, "", "odontogram_read"); err != nil {
+			return nil, 0, err
+		}
+	}
+	return s.Store.ListOdontogramCharts(ctx, a, patientID, search, page, limit)
+}
+
+func (s ClinicalCareService) DeleteOdontogramChart(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	chart, err := s.Store.GetOdontogramChart(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.Store.AuthorizeClinicalRecord(ctx, a, chart.PatientID, pointerValue(chart.EncounterID), "clinical"); err != nil {
+		return err
+	}
+	return s.Store.DeleteOdontogramChart(ctx, id)
 }
 
 func pointerValue(value *string) string {

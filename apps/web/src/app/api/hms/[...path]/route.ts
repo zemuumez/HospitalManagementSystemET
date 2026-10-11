@@ -101,6 +101,7 @@ const allowedRoot = new Set([
   "documents",
   "document-types",
   "smart-cards",
+  "odontograms",
   "addons",
   "sms",
   "mail",
@@ -178,6 +179,9 @@ function isAllowedPath(path: string[]): boolean {
       return ["payments", "refunds"].includes(path[2]);
     }
     if (path[0] === "medication-orders" && path[2] === "cancel") {
+      return true;
+    }
+    if (path[0] === "odontograms" && path[2] === "pdf") {
       return true;
     }
     if (

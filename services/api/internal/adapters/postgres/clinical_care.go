@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -679,9 +681,46 @@ func (s Store) CreatePatientReferral(ctx context.Context, a domain.Actor, input 
 
 // ─── Odontogram (Dental Chart) ────────────────────────────────────────────────
 
+func (s Store) ValidatePatientEncounter(ctx context.Context, patientID, encounterID string) error {
+	if encounterID == "" {
+		return nil
+	}
+	var exists bool
+	err := s.DB.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM encounter
+			WHERE id = $1::uuid AND canonical_patient_id(patient_id) = canonical_patient_id($2::uuid)
+		)
+	`, encounterID, patientID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return domain.ErrValidation
+	}
+	return nil
+}
+
+func (s Store) ValidateDoctor(ctx context.Context, doctorID string) error {
+	var exists bool
+	err := s.DB.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM "user" u
+			WHERE u.id = $1
+		)
+	`, doctorID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return domain.ErrValidation
+	}
+	return nil
+}
+
 func (s Store) Odontogram(ctx context.Context, patientID string) ([]domain.OdontogramEntry, error) {
 	rows, err := s.DB.Query(ctx, `
-		SELECT id, patient_id, encounter_id::text, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		SELECT id, patient_id, chart_id, encounter_id::text, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
 		FROM patient_odontogram_entry
 		WHERE canonical_patient_id(patient_id) = canonical_patient_id($1::uuid)
 		ORDER BY tooth_number ASC
@@ -696,7 +735,7 @@ func (s Store) Odontogram(ctx context.Context, patientID string) ([]domain.Odont
 		var e domain.OdontogramEntry
 		var encID *string
 		if err := rows.Scan(
-			&e.ID, &e.PatientID, &encID, &e.ToothNumber, &e.Condition, &e.ProcedureNotes,
+			&e.ID, &e.PatientID, &e.ChartID, &encID, &e.ToothNumber, &e.Condition, &e.ProcedureNotes,
 			&e.DiagnosedBy, &e.CreatedAt, &e.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -711,26 +750,428 @@ func (s Store) Odontogram(ctx context.Context, patientID string) ([]domain.Odont
 }
 
 func (s Store) SetToothCondition(ctx context.Context, a domain.Actor, patientID string, input domain.SetToothConditionInput) (domain.OdontogramEntry, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.OdontogramEntry{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var chartID string
+	if input.ChartID != nil && *input.ChartID != "" {
+		err = tx.QueryRow(ctx, `
+			SELECT id FROM odontogram_chart
+			WHERE id = $1 AND canonical_patient_id(patient_id) = canonical_patient_id($2::uuid)
+		`, *input.ChartID, patientID).Scan(&chartID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return domain.OdontogramEntry{}, domain.ErrNotFound
+			}
+			return domain.OdontogramEntry{}, err
+		}
+	} else {
+		// Target patient's legacy chart or most recent chart
+		err = tx.QueryRow(ctx, `
+			SELECT id FROM odontogram_chart
+			WHERE canonical_patient_id(patient_id) = canonical_patient_id($1::uuid)
+			ORDER BY is_legacy DESC, created_at DESC
+			LIMIT 1
+		`, patientID).Scan(&chartID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Create designated legacy chart for compatibility
+				err = tx.QueryRow(ctx, `
+					INSERT INTO odontogram_chart (
+						patient_id, doctor_id, description, odontogram,
+						version, created_by, updated_by, created_at, updated_at, is_legacy
+					) VALUES ($1, $2, 'Legacy clinical examination', '{}'::jsonb, 1, $2, $2, clock_timestamp(), clock_timestamp(), true)
+					RETURNING id
+				`, patientID, a.ID).Scan(&chartID)
+				if err != nil {
+					return domain.OdontogramEntry{}, err
+				}
+			} else {
+				return domain.OdontogramEntry{}, err
+			}
+		}
+	}
+
 	var e domain.OdontogramEntry
 	var encID *string
-	err := s.DB.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO patient_odontogram_entry (
-			patient_id, encounter_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, clock_timestamp(), clock_timestamp())
-		ON CONFLICT (patient_id, tooth_number) DO UPDATE SET
+			patient_id, chart_id, encounter_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp(), clock_timestamp())
+		ON CONFLICT (chart_id, tooth_number) DO UPDATE SET
 			encounter_id = COALESCE(EXCLUDED.encounter_id, patient_odontogram_entry.encounter_id),
 			condition = EXCLUDED.condition,
 			procedure_notes = EXCLUDED.procedure_notes,
 			diagnosed_by = EXCLUDED.diagnosed_by,
 			updated_at = clock_timestamp()
-		RETURNING id, patient_id, encounter_id::text, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
-	`, patientID, input.EncounterID, input.ToothNumber, input.Condition, input.ProcedureNotes, a.ID).Scan(
-		&e.ID, &e.PatientID, &encID, &e.ToothNumber, &e.Condition, &e.ProcedureNotes,
+		RETURNING id, patient_id, chart_id, encounter_id::text, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+	`, patientID, chartID, input.EncounterID, input.ToothNumber, input.Condition, input.ProcedureNotes, a.ID).Scan(
+		&e.ID, &e.PatientID, &e.ChartID, &encID, &e.ToothNumber, &e.Condition, &e.ProcedureNotes,
 		&e.DiagnosedBy, &e.CreatedAt, &e.UpdatedAt,
 	)
 	if err != nil {
 		return domain.OdontogramEntry{}, err
 	}
 	e.EncounterID = encID
+
+	// Atomically update chart JSON and version to prevent divergence
+	jsonKey := strconv.Itoa(input.ToothNumber)
+	_, err = tx.Exec(ctx, `
+		UPDATE odontogram_chart
+		SET odontogram = odontogram || jsonb_build_object($1::text, $2::text),
+			version = version + 1,
+			updated_by = $3,
+			updated_at = clock_timestamp()
+		WHERE id = $4
+	`, jsonKey, input.Condition, a.ID, chartID)
+	if err != nil {
+		return domain.OdontogramEntry{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.OdontogramEntry{}, err
+	}
 	return e, nil
+}
+
+func (s Store) CreateOdontogramChart(ctx context.Context, a domain.Actor, input domain.SaveOdontogramChartInput) (domain.OdontogramChart, error) {
+	if err := s.ValidatePatientEncounter(ctx, input.PatientID, pointerString(input.EncounterID)); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	if err := s.ValidateDoctor(ctx, input.DoctorID); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+
+	strMap := make(map[string]string, len(input.Odontogram))
+	for k, v := range input.Odontogram {
+		strMap[strconv.Itoa(k)] = v
+	}
+	jsonBytes, err := json.Marshal(strMap)
+	if err != nil {
+		return domain.OdontogramChart{}, domain.ErrValidation
+	}
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var chartID string
+	var encID *string
+	if input.EncounterID != nil && *input.EncounterID != "" {
+		encID = input.EncounterID
+	}
+
+	err = tx.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, encounter_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy
+		) VALUES ($1, $2, $3, $4, $5, 1, $6, $6, clock_timestamp(), clock_timestamp(), false)
+		RETURNING id
+	`, input.PatientID, input.DoctorID, encID, input.Description, jsonBytes, a.ID).Scan(&chartID)
+	if err != nil {
+		return domain.OdontogramChart{}, err
+	}
+
+	for toothNum, cond := range input.Odontogram {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO patient_odontogram_entry (
+				patient_id, chart_id, encounter_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp(), clock_timestamp())
+			ON CONFLICT (chart_id, tooth_number) DO UPDATE SET
+				condition = EXCLUDED.condition,
+				procedure_notes = EXCLUDED.procedure_notes,
+				diagnosed_by = EXCLUDED.diagnosed_by,
+				updated_at = clock_timestamp()
+		`, input.PatientID, chartID, encID, toothNum, cond, input.Description, a.ID)
+		if err != nil {
+			return domain.OdontogramChart{}, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+
+	return s.GetOdontogramChart(ctx, chartID)
+}
+
+func (s Store) UpdateOdontogramChart(ctx context.Context, a domain.Actor, id string, input domain.SaveOdontogramChartInput) (domain.OdontogramChart, error) {
+	if err := s.ValidatePatientEncounter(ctx, input.PatientID, pointerString(input.EncounterID)); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	if err := s.ValidateDoctor(ctx, input.DoctorID); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+
+	strMap := make(map[string]string, len(input.Odontogram))
+	for k, v := range input.Odontogram {
+		strMap[strconv.Itoa(k)] = v
+	}
+	jsonBytes, err := json.Marshal(strMap)
+	if err != nil {
+		return domain.OdontogramChart{}, domain.ErrValidation
+	}
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var currentVersion int
+	var patientID string
+	err = tx.QueryRow(ctx, `
+		SELECT version, patient_id::text
+		FROM odontogram_chart
+		WHERE id = $1
+		FOR UPDATE
+	`, id).Scan(&currentVersion, &patientID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.OdontogramChart{}, domain.ErrNotFound
+		}
+		return domain.OdontogramChart{}, err
+	}
+
+	// Stale edit concurrency check
+	if input.Version > 0 && input.Version != currentVersion {
+		return domain.OdontogramChart{}, domain.ErrConflict
+	}
+
+	var encID *string
+	if input.EncounterID != nil && *input.EncounterID != "" {
+		encID = input.EncounterID
+	}
+
+	cmd, err := tx.Exec(ctx, `
+		UPDATE odontogram_chart
+		SET doctor_id = $2,
+			encounter_id = $3,
+			description = $4,
+			odontogram = $5,
+			version = version + 1,
+			updated_by = $6,
+			updated_at = clock_timestamp()
+		WHERE id = $1 AND version = $7
+	`, id, input.DoctorID, encID, input.Description, jsonBytes, a.ID, currentVersion)
+	if err != nil {
+		return domain.OdontogramChart{}, err
+	}
+	if cmd.RowsAffected() == 0 {
+		return domain.OdontogramChart{}, domain.ErrConflict
+	}
+
+	// Atomically replace child rows
+	if _, err = tx.Exec(ctx, `DELETE FROM patient_odontogram_entry WHERE chart_id = $1`, id); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+
+	for toothNum, cond := range input.Odontogram {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO patient_odontogram_entry (
+				patient_id, chart_id, encounter_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, clock_timestamp(), clock_timestamp())
+		`, patientID, id, encID, toothNum, cond, input.Description, a.ID)
+		if err != nil {
+			return domain.OdontogramChart{}, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.OdontogramChart{}, err
+	}
+
+	return s.GetOdontogramChart(ctx, id)
+}
+
+func (s Store) GetOdontogramChart(ctx context.Context, id string) (domain.OdontogramChart, error) {
+	var c domain.OdontogramChart
+	var encID *string
+	var rawJSON []byte
+	err := s.DB.QueryRow(ctx, `
+		SELECT
+			c.id, c.patient_id,
+			TRIM(p.given_name || ' ' || p.family_name) AS patient_name,
+			p.medical_record_number::text AS patient_mrn,
+			c.doctor_id,
+			COALESCE(u.name, 'Doctor') AS doctor_name,
+			c.encounter_id::text,
+			c.description,
+			c.odontogram,
+			c.version,
+			c.created_by,
+			c.updated_by,
+			c.created_at,
+			c.updated_at,
+			c.is_legacy
+		FROM odontogram_chart c
+		JOIN patient p ON p.id = c.patient_id
+		LEFT JOIN "user" u ON u.id = c.doctor_id
+		WHERE c.id = $1
+	`, id).Scan(
+		&c.ID, &c.PatientID, &c.PatientName, &c.PatientMRN,
+		&c.DoctorID, &c.DoctorName, &encID, &c.Description,
+		&rawJSON, &c.Version, &c.CreatedBy, &c.UpdatedBy,
+		&c.CreatedAt, &c.UpdatedAt, &c.IsLegacy,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.OdontogramChart{}, domain.ErrNotFound
+		}
+		return domain.OdontogramChart{}, err
+	}
+	c.EncounterID = encID
+
+	strMap := make(map[string]string)
+	if len(rawJSON) > 0 {
+		_ = json.Unmarshal(rawJSON, &strMap)
+	}
+	c.Odontogram = make(map[int]string, len(strMap))
+	for k, v := range strMap {
+		if num, err := strconv.Atoi(k); err == nil {
+			c.Odontogram[num] = v
+		}
+	}
+	return c, nil
+}
+
+func (s Store) ListOdontogramCharts(ctx context.Context, a domain.Actor, patientID, search string, page, limit int) ([]domain.OdontogramChart, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 25
+	}
+	offset := (page - 1) * limit
+
+	var whereClauses []string
+	var args []any
+	idx := 1
+
+	// Role scoping
+	if a.Role == "patient" {
+		whereClauses = append(whereClauses, `patient_portal_owner(c.patient_id) = $`+strconv.Itoa(idx))
+		args = append(args, a.ID)
+		idx++
+	} else if a.Role == "doctor" {
+		whereClauses = append(whereClauses, `(p.clinician_user_id = $`+strconv.Itoa(idx)+` OR c.doctor_id = $`+strconv.Itoa(idx)+` OR c.created_by = $`+strconv.Itoa(idx)+`)`)
+		args = append(args, a.ID)
+		idx++
+	} else if a.Role != "admin" {
+		return nil, 0, domain.ErrForbidden
+	}
+
+	if patientID != "" {
+		whereClauses = append(whereClauses, `canonical_patient_id(c.patient_id) = canonical_patient_id($`+strconv.Itoa(idx)+`::uuid)`)
+		args = append(args, patientID)
+		idx++
+	}
+
+	if search != "" {
+		searchPat := "%" + strings.TrimSpace(search) + "%"
+		whereClauses = append(whereClauses, `(
+			p.given_name ILIKE $`+strconv.Itoa(idx)+` OR
+			p.family_name ILIKE $`+strconv.Itoa(idx)+` OR
+			p.medical_record_number::text ILIKE $`+strconv.Itoa(idx)+` OR
+			u.name ILIKE $`+strconv.Itoa(idx)+` OR
+			c.description ILIKE $`+strconv.Itoa(idx)+`
+		)`)
+		args = append(args, searchPat)
+		idx++
+	}
+
+	whereSQL := ""
+	if len(whereClauses) > 0 {
+		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM odontogram_chart c
+		JOIN patient p ON p.id = c.patient_id
+		LEFT JOIN "user" u ON u.id = c.doctor_id
+	` + whereSQL
+
+	var totalCount int
+	err := s.DB.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	dataQuery := `
+		SELECT
+			c.id, c.patient_id,
+			TRIM(p.given_name || ' ' || p.family_name) AS patient_name,
+			p.medical_record_number::text AS patient_mrn,
+			c.doctor_id,
+			COALESCE(u.name, 'Doctor') AS doctor_name,
+			c.encounter_id::text,
+			c.description,
+			c.odontogram,
+			c.version,
+			c.created_by,
+			c.updated_by,
+			c.created_at,
+			c.updated_at,
+			c.is_legacy
+		FROM odontogram_chart c
+		JOIN patient p ON p.id = c.patient_id
+		LEFT JOIN "user" u ON u.id = c.doctor_id
+	` + whereSQL + `
+		ORDER BY c.created_at DESC
+		LIMIT $` + strconv.Itoa(idx) + ` OFFSET $` + strconv.Itoa(idx+1)
+
+	dataArgs := append(args, limit, offset)
+	rows, err := s.DB.Query(ctx, dataQuery, dataArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var charts []domain.OdontogramChart
+	for rows.Next() {
+		var c domain.OdontogramChart
+		var encID *string
+		var rawJSON []byte
+		if err := rows.Scan(
+			&c.ID, &c.PatientID, &c.PatientName, &c.PatientMRN,
+			&c.DoctorID, &c.DoctorName, &encID, &c.Description,
+			&rawJSON, &c.Version, &c.CreatedBy, &c.UpdatedBy,
+			&c.CreatedAt, &c.UpdatedAt, &c.IsLegacy,
+		); err != nil {
+			return nil, 0, err
+		}
+		c.EncounterID = encID
+		strMap := make(map[string]string)
+		if len(rawJSON) > 0 {
+			_ = json.Unmarshal(rawJSON, &strMap)
+		}
+		c.Odontogram = make(map[int]string, len(strMap))
+		for k, v := range strMap {
+			if num, err := strconv.Atoi(k); err == nil {
+				c.Odontogram[num] = v
+			}
+		}
+		charts = append(charts, c)
+	}
+	if charts == nil {
+		charts = []domain.OdontogramChart{}
+	}
+	return charts, totalCount, nil
+}
+
+func (s Store) DeleteOdontogramChart(ctx context.Context, id string) error {
+	cmd, err := s.DB.Exec(ctx, `DELETE FROM odontogram_chart WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
