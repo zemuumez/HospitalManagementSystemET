@@ -721,13 +721,13 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 		defer upgPool.Close()
 
-		// Run migrations 001 through 054 (strictly excluding 055)
+		// Run migrations 001 through 054 (strictly excluding 055 and later)
 		migrationFiles, err := filepath.Glob("../../../../../db/migrations/*.sql")
 		if err != nil || len(migrationFiles) < 3 {
 			t.Fatal("migrations unavailable")
 		}
 		for _, file := range migrationFiles {
-			if strings.HasSuffix(file, "055_inventory_void_and_ledger_order.sql") {
+			if filepath.Base(file) >= "055" {
 				continue
 			}
 			sql, err := os.ReadFile(file)
@@ -823,6 +823,15 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 			t.Fatalf("failed applying migration 055 on populated database: %v", err)
 		}
 
+		// Apply Migration 056 to run the legacy ledger cutover
+		sql056, err := os.ReadFile("../../../../../db/migrations/056_inventory_legacy_ledger_cutover.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := upgPool.Exec(ctx, string(sql056)); err != nil {
+			t.Fatalf("failed applying migration 056 on populated database: %v", err)
+		}
+
 		// Verify existing balance is preserved
 		var balPreserved int64
 		_ = upgPool.QueryRow(ctx, `SELECT balance_milli FROM inventory_item WHERE id=$1`, preItem.ID).Scan(&balPreserved)
@@ -830,11 +839,12 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 			t.Fatalf("expected balance 150000 preserved after upgrade, got %d", balPreserved)
 		}
 
-		// Verify legacy rows have ledger_seq = 0
+		// Verify legacy rows have ledger_seq = 0 and legacy_unverified = true
 		var legSeqA int64
-		_ = upgPool.QueryRow(ctx, `SELECT ledger_seq FROM inventory_movement WHERE id=$1`, recLegacyAID).Scan(&legSeqA)
-		if legSeqA != 0 {
-			t.Fatalf("expected legacy row to have ledger_seq=0, got %d", legSeqA)
+		var legUnverifiedA bool
+		_ = upgPool.QueryRow(ctx, `SELECT ledger_seq, legacy_unverified FROM inventory_movement WHERE id=$1`, recLegacyAID).Scan(&legSeqA, &legUnverifiedA)
+		if legSeqA != 0 || !legUnverifiedA {
+			t.Fatalf("expected legacy row to have ledger_seq=0 and legacy_unverified=true, got seq=%d, unverified=%v", legSeqA, legUnverifiedA)
 		}
 
 		// 1. Attempting to void legacy Receipt A MUST BE REJECTED with ErrConflict (409)
@@ -858,6 +868,12 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 			t.Fatalf("expected post-upgrade receipt to have positive ledger_seq, got %d", recFresh.LedgerSeq)
 		}
 
+		var freshUnverified bool
+		_ = upgPool.QueryRow(ctx, `SELECT legacy_unverified FROM inventory_movement WHERE id=$1`, recFresh.ID).Scan(&freshUnverified)
+		if freshUnverified {
+			t.Fatalf("expected post-upgrade receipt to have legacy_unverified=false")
+		}
+
 		// Voiding fresh unconsumed post-upgrade receipt succeeds:
 		voidFresh, err := upgInv.Move(ctx, a, domain.InventoryMovementInput{
 			ItemID: preItem.ID, Kind: "void_receipt", OriginalID: recFresh.ID, QuantityMilli: 40000, Reason: "Void fresh post-upgrade receipt",
@@ -867,6 +883,304 @@ func testInventory(t *testing.T, db *pgxpool.Pool, store Store, actors []domain.
 		}
 		if voidFresh.DeltaMilli != -40000 || voidFresh.LedgerSeq <= recFresh.LedgerSeq {
 			t.Fatalf("invalid voidFresh result: %+v", voidFresh)
+		}
+
+		// =========================================================================
+		// Populated already-applied original 055 upgrade regression (Finding H1):
+		// Verifies that databases that previously ran migration 055 from commit 8cc47e7
+		// (which backfilled flawed sequence numbers and running balances derived from timestamps)
+		// are safely repaired by migration 056:
+		// - Migration runner skips 055 (because it is recorded in schema_migration)
+		// - Migration 056 runs, establishes cutover provenance in inventory_ledger_cutover,
+		//   resets ledger_seq and balance_after_milli to 0, and marks legacy_unverified = true
+		// - Existing stock totals, movement rows, and audit history are strictly preserved
+		// - Legacy receipts are rejected for automated voiding (domain.ErrConflict / 409)
+		// - Fresh post-repair receipts record positive sequence numbers and void cleanly
+		// =========================================================================
+		appliedRand := make([]byte, 8)
+		if _, err := rand.Read(appliedRand); err != nil {
+			t.Fatal(err)
+		}
+		appliedSchema := fmt.Sprintf("hms_upg_applied_%x", appliedRand)
+		quotedAppliedSchema := pgx.Identifier{appliedSchema}.Sanitize()
+		if _, err := db.Exec(ctx, "CREATE SCHEMA "+quotedAppliedSchema); err != nil {
+			t.Fatalf("failed to create applied-055 upgrade test schema: %v", err)
+		}
+		defer func() {
+			_, _ = db.Exec(ctx, "DROP SCHEMA "+quotedAppliedSchema+" CASCADE")
+		}()
+
+		cfgApp, err := pgxpool.ParseConfig(db.Config().ConnString())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfgApp.ConnConfig.RuntimeParams["search_path"] = appliedSchema
+		appPool, err := pgxpool.NewWithConfig(ctx, cfgApp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer appPool.Close()
+
+		// Create schema_migration tracking table
+		if _, err := appPool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+			t.Fatal(err)
+		}
+
+		// Run migrations 001 through 054 and record them in schema_migration
+		for _, file := range migrationFiles {
+			base := filepath.Base(file)
+			if base >= "055" {
+				continue
+			}
+			sql, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := appPool.Exec(ctx, string(sql)); err != nil {
+				t.Fatalf("failed applying pre-055 migration %s: %v", file, err)
+			}
+			if _, err := appPool.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1)`, base); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Seed actors and permissions in appPool schema
+		for _, act := range actors {
+			if _, err := appPool.Exec(ctx, `INSERT INTO "user"(id,name,email) VALUES($1,$1,$1||'@example.test') ON CONFLICT DO NOTHING`, act.ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := appPool.Exec(ctx, `INSERT INTO staff_access(user_id,role) VALUES($1,$2) ON CONFLICT DO NOTHING`, act.ID, act.Role); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		appStore := Store{DB: appPool}
+		appInv := application.Inventory{Store: appStore}
+
+		// Create category and item under 054 schema
+		catApp, err := appInv.SaveCategory(ctx, a, "", domain.InventoryCategoryInput{Name: "Applied-055 Category", Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		itemApp, err := appInv.SaveItem(ctx, a, "", domain.InventoryItemInput{
+			CategoryID: catApp.ID, Name: "Applied-055 Item", Unit: "ampoule", Active: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Insert valid ledger movements in actual order:
+		// A (+100 = 100000 milli, balance=100000) at baseTime
+		// C (-50 = 50000 milli issue, balance=50000) at baseTime + 20s
+		// B (+100 = 100000 milli, balance=150000) at baseTime + 10s
+		insertAppMovement := func(kind string, qtyMilli, deltaMilli int64, recipientID, ref, key string, createdAt time.Time) string {
+			tx, err := appPool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(ctx)
+			var mID string
+			err = tx.QueryRow(ctx, `
+				INSERT INTO inventory_movement(
+					item_id, kind, quantity_milli, delta_milli, recipient_id, supplier,
+					store_name, reference, cost_minor, restock, reason, actor_id,
+					request_key, request_hash, attachment_url, issued_date, return_due_date,
+					issued_by, department, created_at
+				) VALUES (
+					$1, $2, $3, $4, NULLIF($5, ''), '',
+					'Main store', $6, 0, false, 'Legacy test', $7,
+					$8, 'hash', '', '', '',
+					'', '', $9
+				) RETURNING id
+			`, itemApp.ID, kind, qtyMilli, deltaMilli, recipientID, ref, a.ID, key, createdAt).Scan(&mID)
+			if err != nil {
+				t.Fatalf("failed inserting legacy movement: %v", err)
+			}
+			_, err = tx.Exec(ctx, `UPDATE inventory_item SET balance_milli = balance_milli + $2, version = version + 1 WHERE id = $1`, itemApp.ID, deltaMilli)
+			if err != nil {
+				t.Fatalf("failed updating item balance: %v", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				t.Fatalf("failed committing legacy movement: %v", err)
+			}
+			return mID
+		}
+
+		recAID := insertAppMovement("receive", 100000, 100000, "", "REC-APPLIED-A", "key-app-rec-a-0000001", baseTime)
+		_ = insertAppMovement("issue", 50000, -50000, actors[1].ID, "", "key-app-iss-c-0000001", baseTime.Add(20*time.Second))
+		recBID := insertAppMovement("receive", 100000, 100000, "", "REC-APPLIED-B", "key-app-rec-b-0000001", baseTime.Add(10*time.Second))
+
+		// Apply the ORIGINAL migration 055 from commit 8cc47e7 (with flawed timestamp-based backfill)
+		// and record 055_inventory_void_and_ledger_order.sql in schema_migration:
+		original055SQL := `
+ALTER TABLE inventory_movement DROP CONSTRAINT IF EXISTS inventory_movement_kind_check;
+ALTER TABLE inventory_movement ADD CONSTRAINT inventory_movement_kind_check
+  CHECK (kind IN ('receive', 'issue', 'return', 'writeoff', 'void_receipt'));
+
+ALTER TABLE inventory_movement DROP CONSTRAINT IF EXISTS inventory_movement_check;
+ALTER TABLE inventory_movement ADD CONSTRAINT inventory_movement_check
+  CHECK (
+    (kind = 'receive' AND delta_milli = quantity_milli AND length(reference) > 0 AND recipient_id IS NULL AND original_id IS NULL) OR
+    (kind = 'issue' AND delta_milli = -quantity_milli AND recipient_id IS NOT NULL AND original_id IS NULL) OR
+    (kind = 'return' AND original_id IS NOT NULL AND recipient_id IS NOT NULL AND delta_milli = CASE WHEN restock THEN quantity_milli ELSE 0 END) OR
+    (kind = 'writeoff' AND delta_milli = -quantity_milli AND recipient_id IS NULL AND original_id IS NULL) OR
+    (kind = 'void_receipt' AND delta_milli = -quantity_milli AND recipient_id IS NULL AND original_id IS NOT NULL)
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_movement_void_receipt
+  ON inventory_movement(original_id)
+  WHERE kind = 'void_receipt';
+
+ALTER TABLE inventory_movement
+  ADD COLUMN IF NOT EXISTS ledger_seq bigint NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS balance_after_milli bigint NOT NULL DEFAULT 0;
+
+ALTER TABLE inventory_movement DISABLE TRIGGER immutable_inventory_movement;
+
+WITH ordered AS (
+  SELECT id,
+         row_number() OVER (
+           PARTITION BY item_id
+           ORDER BY created_at ASC,
+                    CASE WHEN delta_milli > 0 THEN 0 ELSE 1 END,
+                    id ASC
+         ) AS seq,
+         sum(delta_milli) OVER (
+           PARTITION BY item_id
+           ORDER BY created_at ASC,
+                    CASE WHEN delta_milli > 0 THEN 0 ELSE 1 END,
+                    id ASC
+         ) AS bal
+  FROM inventory_movement
+)
+UPDATE inventory_movement m
+SET ledger_seq = o.seq,
+    balance_after_milli = o.bal
+FROM ordered o
+WHERE m.id = o.id AND (m.ledger_seq = 0 OR m.balance_after_milli = 0);
+
+ALTER TABLE inventory_movement ENABLE TRIGGER immutable_inventory_movement;
+
+CREATE INDEX IF NOT EXISTS inventory_movement_item_ledger_seq
+  ON inventory_movement(item_id, ledger_seq);
+`
+		if _, err := appPool.Exec(ctx, original055SQL); err != nil {
+			t.Fatalf("failed applying original migration 055: %v", err)
+		}
+		if _, err := appPool.Exec(ctx, `INSERT INTO schema_migration(name) VALUES('055_inventory_void_and_ledger_order.sql')`); err != nil {
+			t.Fatal(err)
+		}
+
+		// Witness the flawed state under original 055:
+		// Receipt A was given ledger_seq=1, balance_after=100000
+		// Receipt B was given ledger_seq=2, balance_after=200000 (because tB < tC!)
+		// Issue C was given ledger_seq=3, balance_after=150000
+		var origSeqA, origBalA int64
+		_ = appPool.QueryRow(ctx, `SELECT ledger_seq, balance_after_milli FROM inventory_movement WHERE id=$1`, recAID).Scan(&origSeqA, &origBalA)
+		if origSeqA != 1 || origBalA != 100000 {
+			t.Fatalf("expected flawed 055 backfill to give seq=1, bal=100000, got seq=%d, bal=%d", origSeqA, origBalA)
+		}
+
+		// Now simulate runner migrate.ts:
+		// It checks schema_migration: '055_inventory_void_and_ledger_order.sql' is ALREADY present,
+		// so edited 055 file is SKIPPED!
+		var count055 int
+		_ = appPool.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='055_inventory_void_and_ledger_order.sql'`).Scan(&count055)
+		if count055 != 1 {
+			t.Fatalf("expected 055 already recorded in schema_migration")
+		}
+
+		// The runner then finds 056_inventory_legacy_ledger_cutover.sql which is NOT applied yet:
+		sql056App, err := os.ReadFile("../../../../../db/migrations/056_inventory_legacy_ledger_cutover.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := appPool.Exec(ctx, string(sql056App)); err != nil {
+			t.Fatalf("failed applying corrective migration 056: %v", err)
+		}
+		if _, err := appPool.Exec(ctx, `INSERT INTO schema_migration(name) VALUES('056_inventory_legacy_ledger_cutover.sql')`); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify provenance metadata recorded in inventory_ledger_cutover
+		var cutoverCount int
+		_ = appPool.QueryRow(ctx, `SELECT count(*) FROM inventory_ledger_cutover`).Scan(&cutoverCount)
+		if cutoverCount != 1 {
+			t.Fatalf("expected 1 cutover record in inventory_ledger_cutover, got %d", cutoverCount)
+		}
+
+		// Verify existing balance is preserved
+		var balAfterCutover int64
+		_ = appPool.QueryRow(ctx, `SELECT balance_milli FROM inventory_item WHERE id=$1`, itemApp.ID).Scan(&balAfterCutover)
+		if balAfterCutover != 150000 {
+			t.Fatalf("expected balance 150000 preserved after migration 056, got %d", balAfterCutover)
+		}
+
+		// Verify movement records are preserved (row count = 3)
+		var movCount int
+		_ = appPool.QueryRow(ctx, `SELECT count(*) FROM inventory_movement WHERE item_id=$1`, itemApp.ID).Scan(&movCount)
+		if movCount != 3 {
+			t.Fatalf("expected 3 movements preserved, got %d", movCount)
+		}
+
+		// Verify fabricated positive sequences are reset and marked legacy_unverified
+		var repSeqA, repBalA int64
+		var repUnverifiedA bool
+		_ = appPool.QueryRow(ctx, `SELECT ledger_seq, balance_after_milli, legacy_unverified FROM inventory_movement WHERE id=$1`, recAID).Scan(&repSeqA, &repBalA, &repUnverifiedA)
+		if repSeqA != 0 || repBalA != 0 || !repUnverifiedA {
+			t.Fatalf("expected repaired receipt A to have seq=0, bal=0, legacy_unverified=true, got seq=%d, bal=%d, unverified=%v", repSeqA, repBalA, repUnverifiedA)
+		}
+
+		var repSeqB, repBalB int64
+		var repUnverifiedB bool
+		_ = appPool.QueryRow(ctx, `SELECT ledger_seq, balance_after_milli, legacy_unverified FROM inventory_movement WHERE id=$1`, recBID).Scan(&repSeqB, &repBalB, &repUnverifiedB)
+		if repSeqB != 0 || repBalB != 0 || !repUnverifiedB {
+			t.Fatalf("expected repaired receipt B to have seq=0, bal=0, legacy_unverified=true, got seq=%d, bal=%d, unverified=%v", repSeqB, repBalB, repUnverifiedB)
+		}
+
+		// 1. Proves legacy receipt A cannot be voided (409 Conflict)
+		_, err = appInv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: itemApp.ID, Kind: "void_receipt", OriginalID: recAID, QuantityMilli: 100000, Reason: "Attempt void legacy receipt A after 056 repair",
+		}, "key-app-void-leg-a-001")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict (409) attempting to void legacy receipt A, got %v", err)
+		}
+
+		// Legacy receipt B also cannot be voided (409 Conflict)
+		_, err = appInv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: itemApp.ID, Kind: "void_receipt", OriginalID: recBID, QuantityMilli: 100000, Reason: "Attempt void legacy receipt B after 056 repair",
+		}, "key-app-void-leg-b-001")
+		if !errors.Is(err, domain.ErrConflict) {
+			t.Fatalf("expected ErrConflict (409) attempting to void legacy receipt B, got %v", err)
+		}
+
+		// 2. Proves fresh post-repair receipt gets positive sequence, legacy_unverified=false,
+		// and voids cleanly when unconsumed
+		recPostRepair, err := appInv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: itemApp.ID, Kind: "receive", QuantityMilli: 25000, Reference: "REC-POST-REPAIR-01", Reason: "Post-repair trusted receipt",
+		}, "key-app-rec-repair-0001")
+		if err != nil {
+			t.Fatalf("failed recording post-repair receipt: %v", err)
+		}
+		if recPostRepair.LedgerSeq <= 0 {
+			t.Fatalf("expected post-repair receipt to have positive ledger_seq, got %d", recPostRepair.LedgerSeq)
+		}
+
+		var postRepairUnverified bool
+		_ = appPool.QueryRow(ctx, `SELECT legacy_unverified FROM inventory_movement WHERE id=$1`, recPostRepair.ID).Scan(&postRepairUnverified)
+		if postRepairUnverified {
+			t.Fatalf("expected post-repair receipt to have legacy_unverified=false")
+		}
+
+		// Voiding fresh unconsumed receipt succeeds (201 / nil error)
+		voidPostRepair, err := appInv.Move(ctx, a, domain.InventoryMovementInput{
+			ItemID: itemApp.ID, Kind: "void_receipt", OriginalID: recPostRepair.ID, QuantityMilli: 25000, Reason: "Void trusted post-repair receipt",
+		}, "key-app-void-repair-0001")
+		if err != nil {
+			t.Fatalf("expected voiding trusted post-repair receipt to succeed, got %v", err)
+		}
+		if voidPostRepair.DeltaMilli != -25000 || voidPostRepair.LedgerSeq <= recPostRepair.LedgerSeq {
+			t.Fatalf("unexpected voidPostRepair: %+v", voidPostRepair)
 		}
 	})
 

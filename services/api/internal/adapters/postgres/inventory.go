@@ -340,12 +340,13 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 	case "void_receipt":
 		var origItemID, origKind, origStore, origRef, origSupplier string
 		var origQty, origCost, origSeq, origBalAfter int64
+		var origLegacyUnverified bool
 		e = tx.QueryRow(ctx, `
-			SELECT item_id, kind, quantity_milli, store_name, reference, supplier, cost_minor, ledger_seq, balance_after_milli
+			SELECT item_id, kind, quantity_milli, store_name, reference, supplier, cost_minor, ledger_seq, balance_after_milli, COALESCE(legacy_unverified, false)
 			FROM inventory_movement
 			WHERE id = $1
 			FOR UPDATE
-		`, i.OriginalID).Scan(&origItemID, &origKind, &origQty, &origStore, &origRef, &origSupplier, &origCost, &origSeq, &origBalAfter)
+		`, i.OriginalID).Scan(&origItemID, &origKind, &origQty, &origStore, &origRef, &origSupplier, &origCost, &origSeq, &origBalAfter, &origLegacyUnverified)
 		if errors.Is(e, pgx.ErrNoRows) {
 			return out, domain.ErrNotFound
 		}
@@ -370,9 +371,10 @@ func (s Store) MoveInventory(ctx context.Context, a domain.Actor, i domain.Inven
 			return out, domain.ErrConflict
 		}
 
-		// Conservative legacy policy: reject automatic voids of legacy receipts (ledger_seq <= 0)
-		// because historical lock-acquisition order cannot be reliably reconstructed from timestamps.
-		if origSeq <= 0 {
+		// Conservative legacy policy: reject automatic voids of legacy receipts
+		// (ledger_seq <= 0 or legacy_unverified) because historical lock-acquisition
+		// order cannot be reliably reconstructed from timestamps.
+		if origSeq <= 0 || origLegacyUnverified {
 			return out, domain.ErrConflict
 		}
 

@@ -140,7 +140,32 @@ Following the ledger review (`INVENTORY-LEDGER-REVIEW-2026-10-11.md` on `origin/
 
 ---
 
-## 7. UI & Localization Parity
+## 7. Cutover & Applied-Migration Remediation (Finding H1)
+
+Following the cutover review (`INVENTORY-CUTOVER-REVIEW-2026-10-11.md` on `origin/codex/inventory-cutover-review`), upgrade blocker H1 was resolved and verified:
+
+- **H1 (Already-Applied Migration 055 Repair & Conservative Cutover)**:
+  - Databases that applied migration 055 from `8cc47e7` retained speculative positive `ledger_seq` and `balance_after_milli` values because migration runners skip filenames already recorded in `schema_migration`.
+  - Created numbered corrective migration `db/migrations/056_inventory_legacy_ledger_cutover.sql`:
+    - Adds `legacy_unverified boolean NOT NULL DEFAULT false` to `inventory_movement`.
+    - Creates `inventory_ledger_cutover` provenance tracking table.
+    - Safely disables trigger `immutable_inventory_movement`, updates all movements present at cutover to `ledger_seq = 0, balance_after_milli = 0, legacy_unverified = true`, and re-enables the trigger.
+    - Strictly preserves existing stock balances (`balance_milli`), movement identities, quantities, costs, and audit records.
+  - Corrected stale header in `db/migrations/055_inventory_void_and_ledger_order.sql` to accurately reflect column addition without backfill claims.
+  - Updated `services/api/internal/adapters/postgres/inventory.go`: in `MoveInventory` for `void_receipt`, scans `COALESCE(legacy_unverified, false)` and strictly rejects any receipt where `origSeq <= 0 || origLegacyUnverified` with `domain.ErrConflict` (`409 Conflict`). Fresh post-cutover movements have `legacy_unverified = false` (default) and positive monotonic `ledger_seq`.
+  - Added a dedicated populated upgrade regression test in `inventory_test.go` (`F1`):
+    - Populates 054 schema with out-of-order timestamp data (A: +100 at t0, C: -50 at t20, B: +100 at t10).
+    - Applies original 055 from `8cc47e7` and records `055_inventory_void_and_ledger_order.sql` in `schema_migration`.
+    - Proves receipt A received flawed sequence 1 and balance 100,000 under original 055.
+    - Executes corrective migration `056_inventory_legacy_ledger_cutover.sql` (while runner skips 055) and records 056 in `schema_migration`.
+    - Asserts stock balance (150,000 milli) and all movement rows are preserved, provenance is recorded in `inventory_ledger_cutover`, sequences are reset to 0, and `legacy_unverified = true`.
+    - Proves legacy receipts A and B cannot be voided (`domain.ErrConflict` / 409).
+    - Proves fresh post-repair receipt gets `ledger_seq > 0, legacy_unverified = false` and voids cleanly when unconsumed (`201 Created` / nil error).
+    - Retained the existing fresh test and prior-054 upgrade regression.
+
+---
+
+## 8. UI & Localization Parity
 
 - **Unified 4-Tab Workspace (`inventory-workspace.tsx`)**:
   - `items`: Item register, live balance badges (`In Stock`, `Low Stock`, `Out of Stock`), category filtering, search, view modal with movement history, edit modal, delete protection.
@@ -156,19 +181,19 @@ Following the ledger review (`INVENTORY-LEDGER-REVIEW-2026-10-11.md` on `origin/
 
 ---
 
-## 8. Verification Results
+## 9. Verification Results
 
-### 8.1 Quality Gates
+### 9.1 Quality Gates
 
 | Suite / Gate | Command | Result |
 | :--- | :--- | :--- |
-| **Go Isolated Database Tests** | `go test ./...` in `services/api` | **PASSED** (100% passing across adapters/postgres, adapters/httpapi, delivery, domain, stripe, privatefiles, including F1, F2, F3, G1, G2 regressions) |
+| **Go Isolated Database Tests** | `go test ./...` in `services/api` | **PASSED** (100% passing across adapters/postgres, adapters/httpapi, delivery, domain, stripe, privatefiles, including F1, F2, F3, G1, G2, H1 regressions) |
 | **Frontend Typecheck** | `npm run typecheck` | **PASSED** (0 errors) |
 | **Code Formatting** | `npm run format:check` | **PASSED** (100% clean Prettier) |
 | **Frontend Unit Tests** | `npm test` | **PASSED** (8/8 unit tests passed, including translation completeness) |
 | **Isolated Inventory Browser Suite** | `npm run test:inventory` | **PASSED** (23/23 journeys passed, 0 failures, exit code 0) |
 
-### 8.2 Browser Suite Journeys (23/23 Passed)
+### 9.2 Browser Suite Journeys (23/23 Passed)
 
 1. `Journey 1`: Admin lands on Inventory workspace with clean 4-tab interface.
 2. `Journey 2`: Empty database state verified without hardcoded mocks.
@@ -196,7 +221,7 @@ Following the ledger review (`INVENTORY-LEDGER-REVIEW-2026-10-11.md` on `origin/
 
 ---
 
-## 9. Visual Evidence
+## 10. Visual Evidence
 
 The following authentic screenshots were captured during isolated browser execution:
 
@@ -216,7 +241,7 @@ The following authentic screenshots were captured during isolated browser execut
 
 ---
 
-## 10. Remaining Limitations & Exclusions
+## 11. Remaining Limitations & Exclusions
 
 - **Standalone Purchase Orders Aggregate**: Basic inventory tracks stock receipts (`item-stocks`) and issues (`issued-items`). Multi-step procurement approval hierarchies and purchase order contracts belong to future procurement modules and are not part of the inventory workspace contract.
 - **Lot Number & Supplier-Contact Tracking**: The inspected movement contract does not include separate lot expiration registers or supplier contact books; supplier name and store name are captured as transaction metadata.

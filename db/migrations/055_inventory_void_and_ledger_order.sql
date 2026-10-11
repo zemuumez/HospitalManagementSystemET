@@ -1,8 +1,7 @@
 -- Migration 055: Inventory Void Receipts, Sequence Ordering & Balance History
 -- 1. Updates movement constraints to allow void_receipt
 -- 2. Creates unique partial index for void_receipt reversals
--- 3. Adds deterministic per-item ledger sequence (ledger_seq) and running balance (balance_after_milli)
--- 4. Backfills existing movement records with deterministic sequence and balance
+-- 3. Adds ledger sequence (ledger_seq) and running balance (balance_after_milli) columns (default 0)
 
 ALTER TABLE inventory_movement DROP CONSTRAINT IF EXISTS inventory_movement_kind_check;
 ALTER TABLE inventory_movement ADD CONSTRAINT inventory_movement_kind_check
