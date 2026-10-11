@@ -1021,9 +1021,27 @@ func TestSmartCards_DurableGenerationIdempotency(t *testing.T) {
 		t.Fatalf("new card must be active: valid=%v, status=%s", verifyNew.Valid, verifyNew.Status)
 	}
 }
+func countTemplateFKConstraints(ctx context.Context, db *pgxpool.Pool, schema string) (int, error) {
+	var count int
+	err := db.QueryRow(ctx, `
+		SELECT count(*)
+		FROM pg_constraint c
+		JOIN pg_class t ON c.conrelid = t.oid
+		JOIN pg_namespace n ON t.relnamespace = n.oid
+		WHERE n.nspname = $1
+		  AND t.relname = 'smart_card_generation_request'
+		  AND c.contype = 'f'
+		  AND c.conkey = ARRAY[(
+			  SELECT a.attnum
+			  FROM pg_attribute a
+			  WHERE a.attrelid = t.oid AND a.attname = 'template_id'
+		  )]
+	`, schema).Scan(&count)
+	return count, err
+}
 
-// ─── F1: Database upgrade from prior 057 to 058 ─────────────────────────────
-func TestSmartCards_MigrationUpgrade057To058(t *testing.T) {
+// ─── U1.1: Upgrade from Original 057 to 058 & 059 ────────────────────────────
+func TestSmartCards_MigrationUpgradeOriginal057To059(t *testing.T) {
 	dsn := os.Getenv("HMS_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("set HMS_TEST_DATABASE_URL to run isolated-schema PostgreSQL tests")
@@ -1037,7 +1055,7 @@ func TestSmartCards_MigrationUpgrade057To058(t *testing.T) {
 
 	random := make([]byte, 12)
 	rand.Read(random)
-	schema := "hms_test_upg_" + hex.EncodeToString(random)
+	schema := "hms_test_upg_orig_" + hex.EncodeToString(random)
 	quoted := pgx.Identifier{schema}.Sanitize()
 	if _, err = adminDB.Exec(ctx, "CREATE SCHEMA "+quoted); err != nil {
 		t.Fatal(err)
@@ -1057,7 +1075,7 @@ func TestSmartCards_MigrationUpgrade057To058(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Apply migrations up to 057 only
+	// 1. Apply migrations up to original 057 only
 	migrations, err := filepath.Glob("../../../../../db/migrations/*.sql")
 	if err != nil || len(migrations) < 3 {
 		t.Fatal("migration files unavailable")
@@ -1076,76 +1094,511 @@ func TestSmartCards_MigrationUpgrade057To058(t *testing.T) {
 	}
 
 	// Seed actor
-	admin := domain.Actor{ID: "admin-upg", Role: "admin", Name: "Admin Upgrade"}
-	if _, err = db.Exec(ctx, `INSERT INTO "user"(id, name, email) VALUES($1, $2, 'upg@example.test')`, admin.ID, admin.Name); err != nil {
+	admin := domain.Actor{ID: "admin-upg-orig", Role: "admin", Name: "Admin Upgrade Orig"}
+	if _, err = db.Exec(ctx, `INSERT INTO "user"(id, name, email) VALUES($1, $2, 'upg-orig@example.test')`, admin.ID, admin.Name); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = db.Exec(ctx, `INSERT INTO staff_access(user_id, role) VALUES($1, $2)`, admin.ID, admin.Role); err != nil {
 		t.Fatal(err)
 	}
 
-	// Now apply migration 058 explicitly
+	// 2. Apply migration 058 and 059
 	sql058, err := os.ReadFile("../../../../../db/migrations/058_smart_card_generation_idempotency.sql")
 	if err != nil {
 		t.Fatalf("failed reading 058: %v", err)
 	}
 	if _, err = db.Exec(ctx, string(sql058)); err != nil {
-		t.Fatalf("failed applying 058 upgrade: %v", err)
+		t.Fatalf("failed applying 058: %v", err)
+	}
+	sql059, err := os.ReadFile("../../../../../db/migrations/059_smart_card_generation_request_fk_cleanup.sql")
+	if err != nil {
+		t.Fatalf("failed reading 059: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql059)); err != nil {
+		t.Fatalf("failed applying 059: %v", err)
 	}
 
-	// Verify table exists
-	var tableExists bool
-	err = db.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT FROM information_schema.tables
-			WHERE table_schema = $1 AND table_name = 'smart_card_generation_request'
-		)
-	`, schema).Scan(&tableExists)
-	if err != nil || !tableExists {
-		t.Fatalf("expected smart_card_generation_request to exist after 058, exists=%v err=%v", tableExists, err)
+	// Confirm no FK on template_id
+	fkCount, err := countTemplateFKConstraints(ctx, db, schema)
+	if err != nil || fkCount != 0 {
+		t.Fatalf("expected 0 template foreign keys, got %d (err=%v)", fkCount, err)
 	}
 
-	// Test store operations against upgraded database
+	// Seed patient and template, generate card
 	store := Store{DB: db}
 	hospital := application.Hospital{Store: store, Now: time.Now}
 	app := application.PatientExtensionsService{Store: store}
 
 	p, err := hospital.Register(ctx, admin, domain.PatientInput{
-		GivenName:   "Upgrade",
-		FamilyName:  "Test",
+		GivenName:   "OrigUpgrade",
+		FamilyName:  "Patient",
 		DateOfBirth: "1991-01-01",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	templates, err := app.ListTemplates(ctx, admin)
-	if err != nil || len(templates) == 0 {
-		t.Fatal("templates missing")
+	tmpl, err := app.CreateTemplate(ctx, admin, domain.CreatePatientIDCardTemplateInput{
+		Name:  "Orig Upg Template",
+		Color: "#10b981",
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	// Generation and replay must succeed on upgraded schema
+	key := "orig-upg-key-1"
 	res1, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
-		TemplateID:     templates[0].ID,
+		TemplateID:     tmpl.ID,
 		Mode:           "single",
 		PatientID:      p.ID,
-		IdempotencyKey: "upg-idem-key-1",
+		IdempotencyKey: key,
 	})
 	if err != nil || len(res1.Cards) == 0 {
 		t.Fatalf("generation failed on upgraded schema: %v", err)
 	}
 
+	// Delete template: request history must survive
+	if err := app.DeleteTemplate(ctx, admin, tmpl.ID); err != nil {
+		t.Fatalf("failed deleting template: %v", err)
+	}
+
+	var reqExists bool
+	if err := db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM smart_card_generation_request WHERE idempotency_key=$1)`, key).Scan(&reqExists); err != nil || !reqExists {
+		t.Fatalf("request record must survive template deletion, exists=%v err=%v", reqExists, err)
+	}
+
+	// Replay must return revoked card without issuing new cards
 	res2, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
-		TemplateID:     templates[0].ID,
+		TemplateID:     tmpl.ID,
 		Mode:           "single",
 		PatientID:      p.ID,
-		IdempotencyKey: "upg-idem-key-1",
+		IdempotencyKey: key,
 	})
 	if err != nil || len(res2.Cards) == 0 {
-		t.Fatalf("replay failed on upgraded schema: %v", err)
+		t.Fatalf("replay failed: %v", err)
 	}
-	if res2.Cards[0].ID != res1.Cards[0].ID {
-		t.Fatalf("expected identical card on replay after upgrade, got %s vs %s", res1.Cards[0].ID, res2.Cards[0].ID)
+	if res2.Cards[0].ID != res1.Cards[0].ID || res2.Cards[0].Status != "revoked" {
+		t.Fatalf("expected identical revoked card on replay, got: %v", res2.Cards[0])
+	}
+
+	// Changed payload reuse with different template must return ErrConflict
+	tmplNew, _ := app.CreateTemplate(ctx, admin, domain.CreatePatientIDCardTemplateInput{Name: "Orig New", Color: "#3b82f6"})
+	_, errConflict := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplNew.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: key,
+	})
+	if !errors.Is(errConflict, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict on changed payload, got %v", errConflict)
+	}
+}
+
+// ─── U1.2: Upgrade from Published Intermediate 057 (Removing Cascade FK) ─────
+func TestSmartCards_MigrationUpgradeIntermediate057CascadeRemoval(t *testing.T) {
+	dsn := os.Getenv("HMS_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set HMS_TEST_DATABASE_URL to run isolated-schema PostgreSQL tests")
+	}
+	ctx := context.Background()
+	adminDB, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer adminDB.Close()
+
+	random := make([]byte, 12)
+	rand.Read(random)
+	schema := "hms_test_upg_inter_" + hex.EncodeToString(random)
+	quoted := pgx.Identifier{schema}.Sanitize()
+	if _, err = adminDB.Exec(ctx, "CREATE SCHEMA "+quoted); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = adminDB.Exec(context.Background(), "DROP SCHEMA "+quoted+" CASCADE")
+	}()
+
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.RuntimeParams["search_path"] = schema
+	db, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// 1. Apply migrations 001 through 056
+	migrations, err := filepath.Glob("../../../../../db/migrations/*.sql")
+	if err != nil || len(migrations) < 3 {
+		t.Fatal("migration files unavailable")
+	}
+	for _, file := range migrations {
+		if filepath.Base(file) >= "057_patient_smart_cards_parity.sql" {
+			continue // stop before 057
+		}
+		sql, e := os.ReadFile(file)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = db.Exec(ctx, string(sql)); e != nil {
+			t.Fatalf("failed migration %s: %v", file, e)
+		}
+	}
+
+	// 2. Apply intermediate 057 DDL from commit b65cc98 with ON DELETE CASCADE
+	intermediate057SQL := `
+	CREATE TABLE IF NOT EXISTS patient_id_card_template (
+	  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	  name              text NOT NULL UNIQUE CHECK (length(trim(name)) >= 1 AND length(name) <= 100),
+	  color             text NOT NULL CHECK (length(trim(color)) >= 1 AND length(color) <= 30),
+	  email             boolean NOT NULL DEFAULT true,
+	  phone             boolean NOT NULL DEFAULT true,
+	  dob               boolean NOT NULL DEFAULT true,
+	  blood_group       boolean NOT NULL DEFAULT true,
+	  address           boolean NOT NULL DEFAULT true,
+	  patient_unique_id boolean NOT NULL DEFAULT true,
+	  created_at        timestamptz NOT NULL DEFAULT clock_timestamp(),
+	  updated_at        timestamptz NOT NULL DEFAULT clock_timestamp()
+	);
+	CREATE INDEX IF NOT EXISTS idx_patient_id_card_template_name ON patient_id_card_template(lower(name));
+	CREATE SEQUENCE IF NOT EXISTS patient_unique_id_seq START WITH 1001;
+	ALTER TABLE patient ADD COLUMN IF NOT EXISTS patient_unique_id text UNIQUE CHECK (patient_unique_id IS NULL OR length(trim(patient_unique_id)) >= 3);
+	ALTER TABLE patient ADD COLUMN IF NOT EXISTS smart_card_template_id uuid REFERENCES patient_id_card_template(id) ON DELETE SET NULL;
+	UPDATE patient SET patient_unique_id = 'P-' || lpad(nextval('patient_unique_id_seq')::text, 5, '0') WHERE patient_unique_id IS NULL;
+	ALTER TABLE patient_smart_card ADD COLUMN IF NOT EXISTS template_id uuid REFERENCES patient_id_card_template(id) ON DELETE SET NULL;
+	CREATE INDEX IF NOT EXISTS idx_patient_smart_card_template ON patient_smart_card(template_id);
+	INSERT INTO patient_id_card_template (name, color, email, phone, dob, blood_group, address, patient_unique_id)
+	VALUES
+	  ('Standard', '#f4bf16', true, true, true, true, true, true),
+	  ('VIP', '#6571ff', true, true, false, true, false, true)
+	ON CONFLICT (name) DO NOTHING;
+	CREATE TABLE IF NOT EXISTS smart_card_generation_request (
+	  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	  actor_id        text NOT NULL REFERENCES "user"(id),
+	  idempotency_key text NOT NULL,
+	  template_id     uuid NOT NULL REFERENCES patient_id_card_template(id) ON DELETE CASCADE,
+	  mode            text NOT NULL CHECK (mode IN ('all', 'single', 'unassigned')),
+	  patient_id      uuid REFERENCES patient(id) ON DELETE SET NULL,
+	  response_json   jsonb NOT NULL,
+	  created_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
+	  UNIQUE(actor_id, idempotency_key)
+	);
+	CREATE INDEX IF NOT EXISTS idx_smart_card_gen_req_actor_key ON smart_card_generation_request(actor_id, idempotency_key);
+	`
+	if _, err := db.Exec(ctx, intermediate057SQL); err != nil {
+		t.Fatalf("failed applying intermediate 057: %v", err)
+	}
+
+	// Verify the CASCADE constraint actually exists BEFORE upgrading
+	fkCountBefore, err := countTemplateFKConstraints(ctx, db, schema)
+	if err != nil || fkCountBefore != 1 {
+		t.Fatalf("expected 1 CASCADE foreign key constraint before upgrade, got %d (err=%v)", fkCountBefore, err)
+	}
+
+	// Seed actor and completed request BEFORE upgrading
+	admin := domain.Actor{ID: "admin-upg-inter", Role: "admin", Name: "Admin Upgrade Inter"}
+	if _, err = db.Exec(ctx, `INSERT INTO "user"(id, name, email) VALUES($1, $2, 'upg-inter@example.test')`, admin.ID, admin.Name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, `INSERT INTO staff_access(user_id, role) VALUES($1, $2)`, admin.ID, admin.Role); err != nil {
+		t.Fatal(err)
+	}
+
+	store := Store{DB: db}
+	hospital := application.Hospital{Store: store, Now: time.Now}
+	app := application.PatientExtensionsService{Store: store}
+
+	p, err := hospital.Register(ctx, admin, domain.PatientInput{
+		GivenName:   "InterUpgrade",
+		FamilyName:  "Patient",
+		DateOfBirth: "1992-02-02",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl, err := app.CreateTemplate(ctx, admin, domain.CreatePatientIDCardTemplateInput{
+		Name:  "Inter Pre-Upg Template",
+		Color: "#8b5cf6",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	keyInter := "inter-pre-upg-key-1"
+	res1, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmpl.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyInter,
+	})
+	if err != nil || len(res1.Cards) == 0 {
+		t.Fatalf("pre-upgrade generation failed: %v", err)
+	}
+
+	// 3. Now apply migration 058 and 059 to execute upgrade
+	sql058, err := os.ReadFile("../../../../../db/migrations/058_smart_card_generation_idempotency.sql")
+	if err != nil {
+		t.Fatalf("failed reading 058: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql058)); err != nil {
+		t.Fatalf("failed applying 058: %v", err)
+	}
+	sql059, err := os.ReadFile("../../../../../db/migrations/059_smart_card_generation_request_fk_cleanup.sql")
+	if err != nil {
+		t.Fatalf("failed reading 059: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql059)); err != nil {
+		t.Fatalf("failed applying 059: %v", err)
+	}
+
+	// Verify CASCADE constraint is EXPLICITLY REMOVED
+	fkCountAfter, err := countTemplateFKConstraints(ctx, db, schema)
+	if err != nil || fkCountAfter != 0 {
+		t.Fatalf("expected 0 template foreign keys after upgrade, got %d (err=%v)", fkCountAfter, err)
+	}
+
+	// 4. Delete the template AFTER upgrading: request history must survive!
+	if err := app.DeleteTemplate(ctx, admin, tmpl.ID); err != nil {
+		t.Fatalf("failed deleting template: %v", err)
+	}
+
+	// CRITICAL U1 ASSERTION: The request record must NOT be deleted by CASCADE!
+	var reqExists bool
+	if err := db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM smart_card_generation_request WHERE idempotency_key=$1)`, keyInter).Scan(&reqExists); err != nil || !reqExists {
+		t.Fatalf("U1 FAILURE: request record was erased by template deletion after intermediate upgrade! exists=%v err=%v", reqExists, err)
+	}
+
+	// 5. Identical replay must return revoked card without issuing new cards
+	res2, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmpl.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyInter,
+	})
+	if err != nil || len(res2.Cards) == 0 {
+		t.Fatalf("replay failed after template deletion: %v", err)
+	}
+	if res2.Cards[0].ID != res1.Cards[0].ID || res2.Cards[0].Status != "revoked" {
+		t.Fatalf("expected identical revoked card on replay, got: %v", res2.Cards[0])
+	}
+
+	// 6. Changed payload reuse must conflict
+	tmplNew, _ := app.CreateTemplate(ctx, admin, domain.CreatePatientIDCardTemplateInput{Name: "Inter New", Color: "#ec4899"})
+	_, errConflict := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplNew.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyInter,
+	})
+	if !errors.Is(errConflict, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict on changed payload reuse, got %v", errConflict)
+	}
+}
+
+// ─── U1.3: Upgrade on Already-Applied 058 (Migration 059 Remediation) ────────
+func TestSmartCards_MigrationUpgradeAlreadyApplied058To059(t *testing.T) {
+	dsn := os.Getenv("HMS_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set HMS_TEST_DATABASE_URL to run isolated-schema PostgreSQL tests")
+	}
+	ctx := context.Background()
+	adminDB, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer adminDB.Close()
+
+	random := make([]byte, 12)
+	rand.Read(random)
+	schema := "hms_test_upg_058_" + hex.EncodeToString(random)
+	quoted := pgx.Identifier{schema}.Sanitize()
+	if _, err = adminDB.Exec(ctx, "CREATE SCHEMA "+quoted); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = adminDB.Exec(context.Background(), "DROP SCHEMA "+quoted+" CASCADE")
+	}()
+
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.RuntimeParams["search_path"] = schema
+	db, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// 1. Apply migrations 001 through 056
+	migrations, err := filepath.Glob("../../../../../db/migrations/*.sql")
+	if err != nil || len(migrations) < 3 {
+		t.Fatal("migration files unavailable")
+	}
+	for _, file := range migrations {
+		if filepath.Base(file) >= "057_patient_smart_cards_parity.sql" {
+			continue
+		}
+		sql, e := os.ReadFile(file)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = db.Exec(ctx, string(sql)); e != nil {
+			t.Fatalf("failed migration %s: %v", file, e)
+		}
+	}
+
+	// 2. Apply intermediate 057 (with CASCADE)
+	intermediate057SQL := `
+	CREATE TABLE IF NOT EXISTS patient_id_card_template (
+	  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	  name              text NOT NULL UNIQUE CHECK (length(trim(name)) >= 1 AND length(name) <= 100),
+	  color             text NOT NULL CHECK (length(trim(color)) >= 1 AND length(color) <= 30),
+	  email             boolean NOT NULL DEFAULT true,
+	  phone             boolean NOT NULL DEFAULT true,
+	  dob               boolean NOT NULL DEFAULT true,
+	  blood_group       boolean NOT NULL DEFAULT true,
+	  address           boolean NOT NULL DEFAULT true,
+	  patient_unique_id boolean NOT NULL DEFAULT true,
+	  created_at        timestamptz NOT NULL DEFAULT clock_timestamp(),
+	  updated_at        timestamptz NOT NULL DEFAULT clock_timestamp()
+	);
+	CREATE SEQUENCE IF NOT EXISTS patient_unique_id_seq START WITH 1001;
+	ALTER TABLE patient ADD COLUMN IF NOT EXISTS patient_unique_id text UNIQUE CHECK (patient_unique_id IS NULL OR length(trim(patient_unique_id)) >= 3);
+	ALTER TABLE patient ADD COLUMN IF NOT EXISTS smart_card_template_id uuid REFERENCES patient_id_card_template(id) ON DELETE SET NULL;
+	UPDATE patient SET patient_unique_id = 'P-' || lpad(nextval('patient_unique_id_seq')::text, 5, '0') WHERE patient_unique_id IS NULL;
+	ALTER TABLE patient_smart_card ADD COLUMN IF NOT EXISTS template_id uuid REFERENCES patient_id_card_template(id) ON DELETE SET NULL;
+	CREATE TABLE IF NOT EXISTS smart_card_generation_request (
+	  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	  actor_id        text NOT NULL REFERENCES "user"(id),
+	  idempotency_key text NOT NULL,
+	  template_id     uuid NOT NULL REFERENCES patient_id_card_template(id) ON DELETE CASCADE,
+	  mode            text NOT NULL CHECK (mode IN ('all', 'single', 'unassigned')),
+	  patient_id      uuid REFERENCES patient(id) ON DELETE SET NULL,
+	  response_json   jsonb NOT NULL,
+	  created_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
+	  UNIQUE(actor_id, idempotency_key)
+	);
+	`
+	if _, err := db.Exec(ctx, intermediate057SQL); err != nil {
+		t.Fatalf("failed applying intermediate 057: %v", err)
+	}
+
+	// 3. Simulate initial 058 that ONLY had CREATE TABLE IF NOT EXISTS (leaving CASCADE intact)
+	initial058SQL := `
+	CREATE TABLE IF NOT EXISTS smart_card_generation_request (
+	  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	  actor_id        text NOT NULL REFERENCES "user"(id),
+	  idempotency_key text NOT NULL,
+	  template_id     uuid NOT NULL,
+	  mode            text NOT NULL CHECK (mode IN ('all', 'single', 'unassigned')),
+	  patient_id      uuid REFERENCES patient(id) ON DELETE SET NULL,
+	  response_json   jsonb NOT NULL,
+	  created_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
+	  UNIQUE(actor_id, idempotency_key)
+	);
+	CREATE INDEX IF NOT EXISTS idx_smart_card_gen_req_actor_key ON smart_card_generation_request(actor_id, idempotency_key);
+	`
+	if _, err := db.Exec(ctx, initial058SQL); err != nil {
+		t.Fatalf("failed applying initial 058: %v", err)
+	}
+
+	// Confirm CASCADE constraint is STILL PRESENT after initial 058
+	fkBefore, err := countTemplateFKConstraints(ctx, db, schema)
+	if err != nil || fkBefore != 1 {
+		t.Fatalf("expected 1 cascade constraint before 059, got %d (err=%v)", fkBefore, err)
+	}
+
+	// Seed actor and completed request before applying 059
+	admin := domain.Actor{ID: "admin-upg-058", Role: "admin", Name: "Admin Upgrade 058"}
+	if _, err = db.Exec(ctx, `INSERT INTO "user"(id, name, email) VALUES($1, $2, 'upg-058@example.test')`, admin.ID, admin.Name); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, `INSERT INTO staff_access(user_id, role) VALUES($1, $2)`, admin.ID, admin.Role); err != nil {
+		t.Fatal(err)
+	}
+
+	store := Store{DB: db}
+	hospital := application.Hospital{Store: store, Now: time.Now}
+	app := application.PatientExtensionsService{Store: store}
+
+	p, err := hospital.Register(ctx, admin, domain.PatientInput{
+		GivenName:   "Applied058",
+		FamilyName:  "Patient",
+		DateOfBirth: "1993-03-03",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl, err := app.CreateTemplate(ctx, admin, domain.CreatePatientIDCardTemplateInput{
+		Name:  "058 Pre-Upg Template",
+		Color: "#f59e0b",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key058 := "applied058-key-1"
+	res1, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmpl.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: key058,
+	})
+	if err != nil || len(res1.Cards) == 0 {
+		t.Fatalf("generation failed: %v", err)
+	}
+
+	// 4. Now apply migration 059
+	sql059, err := os.ReadFile("../../../../../db/migrations/059_smart_card_generation_request_fk_cleanup.sql")
+	if err != nil {
+		t.Fatalf("failed reading 059: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql059)); err != nil {
+		t.Fatalf("failed applying 059: %v", err)
+	}
+
+	// Confirm CASCADE constraint is GONE after 059
+	fkAfter, err := countTemplateFKConstraints(ctx, db, schema)
+	if err != nil || fkAfter != 0 {
+		t.Fatalf("expected 0 constraints after 059, got %d (err=%v)", fkAfter, err)
+	}
+
+	// 5. Delete template: request record MUST survive
+	if err := app.DeleteTemplate(ctx, admin, tmpl.ID); err != nil {
+		t.Fatalf("failed deleting template: %v", err)
+	}
+
+	var reqExists bool
+	if err := db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM smart_card_generation_request WHERE idempotency_key=$1)`, key058).Scan(&reqExists); err != nil || !reqExists {
+		t.Fatalf("U1 FAILURE: request record was erased by template deletion after 059! exists=%v err=%v", reqExists, err)
+	}
+
+	// 6. Identical replay succeeds with revoked status
+	res2, err := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmpl.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: key058,
+	})
+	if err != nil || len(res2.Cards) == 0 {
+		t.Fatalf("replay failed: %v", err)
+	}
+	if res2.Cards[0].ID != res1.Cards[0].ID || res2.Cards[0].Status != "revoked" {
+		t.Fatalf("expected identical revoked card on replay, got: %v", res2.Cards[0])
+	}
+
+	// 7. Changed payload reuse conflicts
+	tmplNew, _ := app.CreateTemplate(ctx, admin, domain.CreatePatientIDCardTemplateInput{Name: "058 New", Color: "#6366f1"})
+	_, errConflict := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplNew.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: key058,
+	})
+	if !errors.Is(errConflict, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict on changed payload reuse, got %v", errConflict)
 	}
 }
 
@@ -1364,5 +1817,16 @@ func TestSmartCards_ReplayAfterRevocationAndDeletion(t *testing.T) {
 	}
 	if replayC.Cards[0].ID != cardC.ID || replayC.Cards[0].Status != "revoked" {
 		t.Fatalf("expected card C revoked, got %v", replayC.Cards[0])
+	}
+
+	// Reusing keyC with a changed payload (different template) must return ErrConflict!
+	_, errConflict := app.GenerateSmartCards(ctx, admin, domain.GenerateSmartCardsInput{
+		TemplateID:     tmplA.ID,
+		Mode:           "single",
+		PatientID:      p.ID,
+		IdempotencyKey: keyC,
+	})
+	if !errors.Is(errConflict, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict on changed payload reuse after template deletion, got %v", errConflict)
 	}
 }

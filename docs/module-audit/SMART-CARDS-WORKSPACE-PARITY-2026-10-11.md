@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-11  
 **Branch:** `feat/smart-cards-workspace-parity`  
-**Status:** Accepted & Verified (Corrections Batch R1–R5 & Final Review Findings F1–F3 Complete)  
+**Status:** Accepted & Verified (Corrections Batch R1–R5, F1–F3, & Upgrade U1 Complete)  
 
 ---
 
@@ -45,13 +45,14 @@
 
 ---
 
-## 3. Final Review Findings F1–F3 Resolution Matrix (Commit bf668d5)
+## 3. Review Findings F1–F3 & U1 Resolution Matrix (Commits bf668d5 & 738643d)
 
 | Finding ID & Severity | Issue Description | Root Cause & Resolution | Verification Evidence |
 | :--- | :--- | :--- | :--- |
-| **F1 (High)** | Upgrade: Editing migration 057 left already-upgraded databases without `smart_card_generation_request` table. | Editing existing migration file `057_patient_smart_cards_parity.sql` meant any database that already applied 057 skipped it per `schema_migration` log. Reverted 057 to original template insert contents; created new numbered migration `db/migrations/058_smart_card_generation_idempotency.sql` creating `smart_card_generation_request` safely. Made `template_id` non-cascading UUID so history survives template deletion. | `TestSmartCards_MigrationUpgrade057To058`: Applied migrations strictly up to 057, marked migration history, then executed 058 upgrade. Verified table creation, card generation with idempotency key, and successful replay on the upgraded database. |
-| **F2 (High)** | Revocation: Replaying an old request after card deletion issued a NEW active credential, undoing revocation. | On replay, if any cached card was not active, backend fell through to generate new cards and overwrite the request record. Fixed backend (`patient_extensions.go`): completed request records are strictly immutable. On replay, backend validates payload matching (conflict on mismatch), refreshes each card's current `status` from `patient_smart_card`, and returns the original records without generating new credentials, modifying assignments, or updating the request. | `TestSmartCards_ReplayAfterRevocationAndDeletion`: Verified sequence: generate card A -> delete assignment (revoking card A) -> replay key K returns card A with status `revoked` without creating new credentials; reassignment to card B -> replay key K returns card A without superseding card B; template deletion -> replay key K retains history without resurrecting cards. |
+| **F1 (High)** | Upgrade: Editing migration 057 left already-upgraded databases without `smart_card_generation_request` table. | Editing existing migration file `057_patient_smart_cards_parity.sql` meant any database that already applied 057 skipped it per `schema_migration` log. Reverted 057 to original template insert contents; created new numbered migration `db/migrations/058_smart_card_generation_idempotency.sql` creating `smart_card_generation_request` safely. Made `template_id` non-cascading UUID so history survives template deletion. | `TestSmartCards_MigrationUpgradeOriginal057To059`: Applied migrations strictly up to 057, marked migration history, then executed 058 and 059 upgrades. Verified table creation, card generation with idempotency key, and successful replay on the upgraded database. |
+| **F2 (High)** | Revocation: Replaying an old request after card deletion issued a NEW active credential, undoing revocation. | On replay, if any cached card was not active, backend fell through to generate new cards and overwrite the request record. Fixed backend (`patient_extensions.go`): completed request records are strictly immutable. On replay, backend validates payload matching (conflict on mismatch), refreshes each card's current `status` from `patient_smart_card`, and returns the original records without generating new credentials, modifying assignments, or updating the request. | `TestSmartCards_ReplayAfterRevocationAndDeletion`: Verified sequence: generate card A -> delete assignment (revoking card A) -> replay key K returns card A with status `revoked` without creating new credentials; reassignment to card B -> replay key K returns card A without superseding card B; template deletion -> replay key K retains history without resurrecting cards; changed-payload reuse conflicts. |
 | **F3 (Medium)** | Browser retries: Dialog generated a fresh key on each submission attempt, so retrying after a lost response replaced the card. | `handleGenerateCards` allocated `newGenerationKey()` inside the submit handler. A network timeout or lost response left the dialog open, and clicking Save again generated a fresh key, triggering replacement. Fixed in `smart-cards-workspace.tsx`: allocated `submissionKey` state preserved across uncertain network failures and user retries from the same open dialog. Only clears on success or modal cancel; allocates new key only on deliberate form parameter changes. | `scripts/verify-smart-cards-workspace.mjs` (Journey 2): Intercepted `/api/hms/smart-cards/generate` via Playwright `page.route`; on first attempt executed on server (`route.fetch()`) and aborted response (`route.abort('failed')`); verified error alert notice in open dialog; clicked Save again in same dialog; verified attempt 2 sent exact same idempotency key; response succeeded and PostgreSQL verified Abebe Bikila has exactly 1 active card. |
+| **U1 (High)** | Upgrade: Databases with intermediate migration 057 retained `ON DELETE CASCADE` foreign key on `template_id`. | Migration 058 used `CREATE TABLE IF NOT EXISTS`, leaving existing foreign key constraints intact. When a template was deleted on intermediate databases, request history was cascaded away, allowing key reuse without conflict. Added corrective migration `059_smart_card_generation_request_fk_cleanup.sql` (and updated 058) to dynamically query `pg_constraint` and explicitly drop any foreign key constraint on `smart_card_generation_request.template_id`. | `TestSmartCards_MigrationUpgradeIntermediate057CascadeRemoval` & `TestSmartCards_MigrationUpgradeAlreadyApplied058To059`: Verified both intermediate upgrade paths. In both cases, completed request records survived template deletion, identical replay returned cached cards with `revoked` status, and changed-payload key reuse failed with `domain.ErrConflict` (409). |
 
 ---
 
@@ -87,29 +88,33 @@ During end-to-end integration testing in commit `09563b3`, stock movements with 
 Command: `$env:HMS_TEST_DATABASE_URL="postgresql://..."; go test -v ./internal/adapters/postgres -run "TestSmartCards_"`
 ```text
 === RUN   TestSmartCards_TemplateLifecycleAndIntegrity
---- PASS: TestSmartCards_TemplateLifecycleAndIntegrity (2.61s)
+--- PASS: TestSmartCards_TemplateLifecycleAndIntegrity (3.03s)
 === RUN   TestSmartCards_GenerationModesReassignmentAndDeletion
---- PASS: TestSmartCards_GenerationModesReassignmentAndDeletion (2.16s)
+--- PASS: TestSmartCards_GenerationModesReassignmentAndDeletion (2.49s)
 === RUN   TestSmartCards_AuthorizedQRVerificationAndAccessSeparation
---- PASS: TestSmartCards_AuthorizedQRVerificationAndAccessSeparation (2.19s)
+--- PASS: TestSmartCards_AuthorizedQRVerificationAndAccessSeparation (2.59s)
 === RUN   TestSmartCards_ConcurrentGenerationSafety
---- PASS: TestSmartCards_ConcurrentGenerationSafety (2.39s)
+--- PASS: TestSmartCards_ConcurrentGenerationSafety (2.88s)
 === RUN   TestSmartCards_PatientScopeEnforcement
---- PASS: TestSmartCards_PatientScopeEnforcement (2.24s)
+--- PASS: TestSmartCards_PatientScopeEnforcement (2.19s)
 === RUN   TestSmartCards_StaleDeletionAndReassignmentPreservation
---- PASS: TestSmartCards_StaleDeletionAndReassignmentPreservation (2.33s)
+--- PASS: TestSmartCards_StaleDeletionAndReassignmentPreservation (2.08s)
 === RUN   TestSmartCards_ConservativeLegacyDisclosurePolicy
---- PASS: TestSmartCards_ConservativeLegacyDisclosurePolicy (2.29s)
+--- PASS: TestSmartCards_ConservativeLegacyDisclosurePolicy (2.07s)
 === RUN   TestSmartCards_DurableGenerationIdempotency
---- PASS: TestSmartCards_DurableGenerationIdempotency (2.47s)
-=== RUN   TestSmartCards_MigrationUpgrade057To058
---- PASS: TestSmartCards_MigrationUpgrade057To058 (2.15s)
+--- PASS: TestSmartCards_DurableGenerationIdempotency (2.16s)
+=== RUN   TestSmartCards_MigrationUpgradeOriginal057To059
+--- PASS: TestSmartCards_MigrationUpgradeOriginal057To059 (2.23s)
+=== RUN   TestSmartCards_MigrationUpgradeIntermediate057CascadeRemoval
+--- PASS: TestSmartCards_MigrationUpgradeIntermediate057CascadeRemoval (2.31s)
+=== RUN   TestSmartCards_MigrationUpgradeAlreadyApplied058To059
+--- PASS: TestSmartCards_MigrationUpgradeAlreadyApplied058To059 (2.24s)
 === RUN   TestSmartCards_ReplayAfterRevocationAndDeletion
---- PASS: TestSmartCards_ReplayAfterRevocationAndDeletion (2.19s)
+--- PASS: TestSmartCards_ReplayAfterRevocationAndDeletion (2.64s)
 PASS
-ok  	hms.local/api/internal/adapters/postgres	24.500s
+ok  	hms.local/api/internal/adapters/postgres	30.449s
 ```
-**Result:** 10/10 Go PostgreSQL suites Passed 100%.
+**Result:** 12/12 Go PostgreSQL suites Passed 100%.
 
 ### 6.2 Web Library & QR Tests (`apps/web`)
 Command: `npm run test --workspace @hms/web`
