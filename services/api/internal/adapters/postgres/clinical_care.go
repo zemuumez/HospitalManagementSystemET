@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -1278,8 +1279,62 @@ func (s Store) CreateOdontogramLegend(ctx context.Context, a domain.Actor, input
 }
 
 func (s Store) UpdateOdontogramLegend(ctx context.Context, a domain.Actor, id string, input domain.SaveOdontogramLegendInput) (domain.OdontogramLegend, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.OdontogramLegend{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var existing domain.OdontogramLegend
+	err = tx.QueryRow(ctx, `
+		SELECT id, code, name, color, description, is_default, created_at, updated_at
+		FROM odontogram_legend
+		WHERE id = $1
+		FOR UPDATE
+	`, id).Scan(
+		&existing.ID, &existing.Code, &existing.Name, &existing.Color,
+		&existing.Description, &existing.IsDefault, &existing.CreatedAt, &existing.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.OdontogramLegend{}, domain.ErrNotFound
+		}
+		return domain.OdontogramLegend{}, err
+	}
+
+	// Default clinical legends cannot have their code or name changed
+	if existing.IsDefault {
+		if input.Code != existing.Code || input.Name != existing.Name {
+			return domain.OdontogramLegend{}, domain.ErrForbidden
+		}
+	}
+
+	// Check if this legend is referenced in any clinical records or charts
+	var inUse bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM patient_odontogram_entry WHERE condition = $1
+		) OR EXISTS(
+			SELECT 1 FROM odontogram_chart
+			WHERE odontogram ? $1
+			   OR (legacy_provenance IS NOT NULL AND legacy_provenance::text LIKE '%' || $1 || '%')
+		)
+	`, existing.Code).Scan(&inUse)
+	if err != nil {
+		return domain.OdontogramLegend{}, err
+	}
+
+	if inUse {
+		if input.Code != existing.Code {
+			return domain.OdontogramLegend{}, fmt.Errorf("%w: cannot change code of legend '%s' because it is referenced in clinical charts", domain.ErrConflict, existing.Code)
+		}
+		if input.Name != existing.Name {
+			return domain.OdontogramLegend{}, fmt.Errorf("%w: cannot rename legend '%s' because it is referenced in clinical charts", domain.ErrConflict, existing.Code)
+		}
+	}
+
 	var l domain.OdontogramLegend
-	err := s.DB.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		UPDATE odontogram_legend
 		SET code = $2,
 			name = $3,
@@ -1292,22 +1347,29 @@ func (s Store) UpdateOdontogramLegend(ctx context.Context, a domain.Actor, id st
 		&l.ID, &l.Code, &l.Name, &l.Color, &l.Description, &l.IsDefault, &l.CreatedAt, &l.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.OdontogramLegend{}, domain.ErrNotFound
-		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return domain.OdontogramLegend{}, domain.ErrConflict
 		}
 		return domain.OdontogramLegend{}, err
 	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.OdontogramLegend{}, err
+	}
 	return l, nil
 }
 
 func (s Store) DeleteOdontogramLegend(ctx context.Context, a domain.Actor, id string) error {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
 	var isDefault bool
 	var code string
-	err := s.DB.QueryRow(ctx, `SELECT is_default, code FROM odontogram_legend WHERE id = $1`, id).Scan(&isDefault, &code)
+	err = tx.QueryRow(ctx, `SELECT is_default, code FROM odontogram_legend WHERE id = $1 FOR UPDATE`, id).Scan(&isDefault, &code)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrNotFound
@@ -1319,7 +1381,15 @@ func (s Store) DeleteOdontogramLegend(ctx context.Context, a domain.Actor, id st
 	}
 
 	var inUse bool
-	err = s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM patient_odontogram_entry WHERE condition = $1)`, code).Scan(&inUse)
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM patient_odontogram_entry WHERE condition = $1
+		) OR EXISTS(
+			SELECT 1 FROM odontogram_chart
+			WHERE odontogram ? $1
+			   OR (legacy_provenance IS NOT NULL AND legacy_provenance::text LIKE '%' || $1 || '%')
+		)
+	`, code).Scan(&inUse)
 	if err != nil {
 		return err
 	}
@@ -1327,13 +1397,13 @@ func (s Store) DeleteOdontogramLegend(ctx context.Context, a domain.Actor, id st
 		return domain.ErrInUse
 	}
 
-	cmd, err := s.DB.Exec(ctx, `DELETE FROM odontogram_legend WHERE id = $1`, id)
+	cmd, err := tx.Exec(ctx, `DELETE FROM odontogram_legend WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
 	if cmd.RowsAffected() == 0 {
 		return domain.ErrNotFound
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 

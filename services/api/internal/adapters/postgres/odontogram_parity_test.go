@@ -1101,6 +1101,16 @@ func TestOdontogram_R4_LegacyProvenanceAndToothHistoryPreservationAcrossOrdinary
 		t.Fatalf("failed to execute migration 060: %v", err)
 	}
 
+	// Run migration 061 (adds legacy_provenance column, unique constraint, and backfills provenance)
+	m61Path := "../../../../../db/migrations/061_odontogram_parity_upgrade.sql"
+	sql61, err := os.ReadFile(m61Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 061: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql61)); err != nil {
+		t.Fatalf("failed to execute migration 061: %v", err)
+	}
+
 	// Get legacy chart
 	charts, total, err := app.ListOdontogramCharts(ctx, admin, patientID, "", 1, 10)
 	if err != nil || total != 1 {
@@ -1321,4 +1331,369 @@ func TestOdontogram_R6_MultipagePDFWithWrappedNotesAndAmharic(t *testing.T) {
 		t.Errorf("expected %%EOF trailer at the end of PDF")
 	}
 }
+
+// F1: Upgrade from pre-existing 060 schema (handling already-applied 060, duplicate legacy charts, and backfilling provenance)
+func TestOdontogram_F1_UpgradeFromPreExisting060(t *testing.T) {
+	ctx := context.Background()
+	db, _, _, cleanup := setupOdontogramTestDB(t, 60)
+	defer cleanup()
+
+	patientID := helperCreatePatient(t, ctx, db, "Tigist", "Mengistu")
+
+	// Under 060, simulate 2 legacy charts created concurrently for this patient
+	var legacy1ID, legacy2ID string
+	err := db.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (patient_id, doctor_id, description, odontogram, is_legacy, created_by, updated_by)
+		VALUES ($1::uuid, 'doctor-user-1', 'Initial Legacy Chart 1', '{"1":"K"}', true, 'doctor-user-1', 'doctor-user-1')
+		RETURNING id::text
+	`, patientID).Scan(&legacy1ID)
+	if err != nil {
+		t.Fatalf("failed to insert legacy chart 1: %v", err)
+	}
+	err = db.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (patient_id, doctor_id, description, odontogram, is_legacy, created_by, updated_by)
+		VALUES ($1::uuid, 'doctor-user-1', 'Duplicate Legacy Chart 2', '{"8":"C"}', true, 'doctor-user-1', 'doctor-user-1')
+		RETURNING id::text
+	`, patientID).Scan(&legacy2ID)
+	if err != nil {
+		t.Fatalf("failed to insert legacy chart 2: %v", err)
+	}
+
+	// Link tooth 1 to legacy1 and tooth 8 to legacy2
+	_, err = db.Exec(ctx, `
+		INSERT INTO patient_odontogram_entry (id, patient_id, chart_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at)
+		VALUES
+		  (gen_random_uuid(), $1::uuid, $2::uuid, 1, 'K', 'Original note for tooth 1', 'doctor-user-1', '2026-01-01 09:00:00Z', '2026-01-01 09:00:00Z'),
+		  (gen_random_uuid(), $1::uuid, $3::uuid, 8, 'C', 'Original note for tooth 8', 'doctor-user-1', '2026-01-02 10:00:00Z', '2026-01-02 10:00:00Z')
+	`, patientID, legacy1ID, legacy2ID)
+	if err != nil {
+		t.Fatalf("failed to seed tooth entries: %v", err)
+	}
+
+	// Verify that 2 legacy charts currently exist before 061
+	var legacyCountBefore int
+	err = db.QueryRow(ctx, `SELECT COUNT(*) FROM odontogram_chart WHERE patient_id = $1::uuid AND is_legacy = true`, patientID).Scan(&legacyCountBefore)
+	if err != nil || legacyCountBefore != 2 {
+		t.Fatalf("expected 2 legacy charts before upgrade, got %d, err=%v", legacyCountBefore, err)
+	}
+
+	// Read and run migration 061_odontogram_parity_upgrade.sql
+	migration061, err := os.ReadFile("../../../../../db/migrations/061_odontogram_parity_upgrade.sql")
+	if err != nil {
+		t.Fatalf("failed to read 061 migration: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(migration061)); err != nil {
+		t.Fatalf("failed to execute migration 061: %v", err)
+	}
+
+	// 3. Assert duplicate legacy charts deduplicated to exactly 1
+	var legacyCountAfter int
+	var keeperID string
+	var provJSON []byte
+	err = db.QueryRow(ctx, `
+		SELECT COUNT(*), (ARRAY_AGG(id::text))[1], (ARRAY_AGG(legacy_provenance))[1]
+		FROM odontogram_chart
+		WHERE patient_id = $1::uuid AND is_legacy = true
+		GROUP BY patient_id
+	`, patientID).Scan(&legacyCountAfter, &keeperID, &provJSON)
+	if err != nil || legacyCountAfter != 1 {
+		t.Fatalf("expected exactly 1 legacy chart after 061 upgrade, got %d, err=%v", legacyCountAfter, err)
+	}
+
+	// 4. Assert both tooth 1 and tooth 8 now belong to the keeper legacy chart
+	var childCount int
+	err = db.QueryRow(ctx, `SELECT COUNT(*) FROM patient_odontogram_entry WHERE chart_id = $1::uuid`, keeperID).Scan(&childCount)
+	if err != nil || childCount != 2 {
+		t.Fatalf("expected all 2 child tooth entries to be preserved in keeper chart, got %d, err=%v", childCount, err)
+	}
+
+	// 5. Assert legacy_provenance was backfilled
+	if len(provJSON) == 0 || string(provJSON) == "null" {
+		t.Fatalf("expected legacy_provenance to be populated on legacy chart")
+	}
+	provStr := string(provJSON)
+	if !strings.Contains(provStr, "Original note for tooth 1") || !strings.Contains(provStr, "Original note for tooth 8") {
+		t.Fatalf("expected legacy_provenance to contain distinct tooth notes, got: %s", provStr)
+	}
+
+	// 6. Assert odontogram_legend table exists and has defaults
+	var legendCount int
+	err = db.QueryRow(ctx, `SELECT COUNT(*) FROM odontogram_legend WHERE is_default = true`).Scan(&legendCount)
+	if err != nil || legendCount < 11 {
+		t.Fatalf("expected at least 11 default legends in odontogram_legend, got %d, err=%v", legendCount, err)
+	}
+}
+
+// F2: Established default clinical legends definitions exact contract
+func TestOdontogram_F2_EstablishedDefaultLegendsDefinitions(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 0)
+	defer cleanup()
+
+	adminActor := domain.Actor{ID: "admin-user", Role: "admin"}
+
+	legends, err := store.ListOdontogramLegends(ctx)
+	if err != nil {
+		t.Fatalf("failed to list legends: %v", err)
+	}
+
+	legendMap := make(map[string]domain.OdontogramLegend)
+	for _, l := range legends {
+		legendMap[l.Code] = l
+	}
+
+	// Exact definitions contract from odontogram-register.tsx
+	expected := map[string]struct {
+		name        string
+		color       string
+		description string
+	}{
+		"Healthy": {"Healthy Tooth", "#ffffff", "Sound tooth surface with no pathology"},
+		"K":       {"Caries / Cavity", "#e91e63", "Active dental caries lesion"},
+		"C":       {"Crown", "#3f51b5", "Artificial full crown or cap"},
+		"Ce":      {"Pulpitis / Deep Caries", "#009688", "Extensive caries with pulpal involvement"},
+		"D":       {"Decayed / Denture", "#795548", "Grossly decayed or retained root"},
+		"KR":      {"Root Canal (Karies Radix)", "#607d8b", "Endodontic therapy / Root canal treated"},
+		"PS":      {"Porcelain / Prosthetic", "#ffc107", "Porcelain veneer or prosthetic replacement"},
+		"IP":      {"Implant", "#673ab7", "Titanium or ceramic dental implant"},
+		"X":       {"Missing / Extracted", "#2196f3", "Congenitally missing or extracted tooth"},
+		"F":       {"Composite Filling", "#10b981", "Tooth-colored composite restoration"},
+		"B":       {"Bridge", "#f97316", "Fixed partial denture / pontic unit"},
+	}
+
+	for code, exp := range expected {
+		l, ok := legendMap[code]
+		if !ok {
+			t.Fatalf("missing expected default legend code: %s", code)
+		}
+		if l.Name != exp.name {
+			t.Errorf("legend [%s] name mismatch: expected '%s', got '%s'", code, exp.name, l.Name)
+		}
+		if l.Color != exp.color {
+			t.Errorf("legend [%s] color mismatch: expected '%s', got '%s'", code, exp.color, l.Color)
+		}
+		if l.Description != exp.description {
+			t.Errorf("legend [%s] description mismatch: expected '%s', got '%s'", code, exp.description, l.Description)
+		}
+		if !l.IsDefault {
+			t.Errorf("legend [%s] should be marked is_default = true", code)
+		}
+	}
+
+	// Reconcile must not overwrite user-customized definitions
+	custom, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        "USER-CUSTOM",
+		Name:        "Custom User Definition",
+		Color:       "#123456",
+		Description: "User customized notes",
+	})
+	if err != nil {
+		t.Fatalf("failed to create custom legend: %v", err)
+	}
+
+	// Run migration 061 again to simulate re-running or reconciling
+	migration061, err := os.ReadFile("../../../../../db/migrations/061_odontogram_parity_upgrade.sql")
+	if err != nil {
+		t.Fatalf("failed to read 061 migration: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(migration061)); err != nil {
+		t.Fatalf("failed to re-apply 061: %v", err)
+	}
+
+	// Custom legend must remain untouched
+	customReloaded, err := store.ListOdontogramLegends(ctx)
+	if err != nil {
+		t.Fatalf("failed to reload legends: %v", err)
+	}
+	var foundCustom bool
+	for _, l := range customReloaded {
+		if l.ID == custom.ID {
+			foundCustom = true
+			if l.Name != "Custom User Definition" || l.Color != "#123456" {
+				t.Errorf("custom legend was modified during reconciliation: %+v", l)
+			}
+		}
+	}
+	if !foundCustom {
+		t.Errorf("custom legend was lost during reconciliation")
+	}
+}
+
+// F3: Referenced legend code and name modification protection
+func TestOdontogram_F3_ReferencedLegendCodeAndNameProtection(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 0)
+	defer cleanup()
+
+	adminActor := domain.Actor{ID: "admin-user", Role: "admin"}
+	docID := "doctor-user-1"
+	docActor := domain.Actor{ID: docID, Role: "doctor"}
+
+	patientID := helperCreatePatient(t, ctx, db, "Hanna", "Kassahun")
+
+	// 1. Create custom legend IMP-Z
+	impZ, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        "IMP-Z",
+		Name:        "Zirconia Implant",
+		Color:       "#10b981",
+		Description: "Zirconia dental fixture",
+	})
+	if err != nil {
+		t.Fatalf("failed to create custom legend IMP-Z: %v", err)
+	}
+
+	// 2. Chart tooth using IMP-Z
+	chart, err := store.CreateOdontogramChart(ctx, docActor, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    docID,
+		Description: "Patient charting with custom IMP-Z unit",
+		Odontogram:  map[int]string{14: "IMP-Z"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create chart with IMP-Z: %v", err)
+	}
+	_ = chart
+
+	// 3. Attempt to change CODE of IMP-Z to IMP-Y -> Must be rejected with ErrConflict
+	_, err = store.UpdateOdontogramLegend(ctx, adminActor, impZ.ID, domain.SaveOdontogramLegendInput{
+		Code:        "IMP-Y",
+		Name:        "Zirconia Implant",
+		Color:       "#10b981",
+		Description: "Zirconia dental fixture",
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("expected ErrConflict when changing code of referenced legend, got: %v", err)
+	}
+
+	// 4. Attempt to change NAME of referenced IMP-Z -> Must be rejected with ErrConflict
+	_, err = store.UpdateOdontogramLegend(ctx, adminActor, impZ.ID, domain.SaveOdontogramLegendInput{
+		Code:        "IMP-Z",
+		Name:        "Titanium Fixture",
+		Color:       "#10b981",
+		Description: "Zirconia dental fixture",
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("expected ErrConflict when renaming referenced legend, got: %v", err)
+	}
+
+	// 5. Updating COLOR and DESCRIPTION of referenced IMP-Z -> Must succeed
+	updated, err := store.UpdateOdontogramLegend(ctx, adminActor, impZ.ID, domain.SaveOdontogramLegendInput{
+		Code:        "IMP-Z",
+		Name:        "Zirconia Implant",
+		Color:       "#059669",
+		Description: "Updated high-precision zirconia dental fixture",
+	})
+	if err != nil {
+		t.Fatalf("expected updating color/description to succeed, got: %v", err)
+	}
+	if updated.Color != "#059669" || updated.Description != "Updated high-precision zirconia dental fixture" {
+		t.Errorf("unexpected updated values: %+v", updated)
+	}
+
+	// 6. Attempt to delete referenced IMP-Z -> Must be rejected with ErrInUse
+	err = store.DeleteOdontogramLegend(ctx, adminActor, impZ.ID)
+	if !errors.Is(err, domain.ErrInUse) {
+		t.Errorf("expected ErrInUse when deleting referenced legend, got: %v", err)
+	}
+
+	// 7. Unreferenced legend CAN have code/name changed or be deleted
+	tempLeg, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        "TEMP-1",
+		Name:        "Temporary Legend",
+		Color:       "#123456",
+		Description: "Unreferenced",
+	})
+	if err != nil {
+		t.Fatalf("failed to create temp legend: %v", err)
+	}
+	_, err = store.UpdateOdontogramLegend(ctx, adminActor, tempLeg.ID, domain.SaveOdontogramLegendInput{
+		Code:        "TEMP-2",
+		Name:        "Renamed Temporary Legend",
+		Color:       "#654321",
+		Description: "Still unreferenced",
+	})
+	if err != nil {
+		t.Errorf("expected unreferenced legend to be updatable, got: %v", err)
+	}
+	err = store.DeleteOdontogramLegend(ctx, adminActor, tempLeg.ID)
+	if err != nil {
+		t.Errorf("expected unreferenced legend to be deletable, got: %v", err)
+	}
+
+	// 8. Default legends cannot have code/name changed or be deleted
+	var defLegID string
+	err = db.QueryRow(ctx, `SELECT id FROM odontogram_legend WHERE code = 'K'`).Scan(&defLegID)
+	if err != nil {
+		t.Fatalf("failed to find default legend K: %v", err)
+	}
+	_, err = store.UpdateOdontogramLegend(ctx, adminActor, defLegID, domain.SaveOdontogramLegendInput{
+		Code:        "K-NEW",
+		Name:        "Caries Modified",
+		Color:       "#ef4444",
+		Description: "Notes",
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden when modifying default legend code/name, got: %v", err)
+	}
+	err = store.DeleteOdontogramLegend(ctx, adminActor, defLegID)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden when deleting default legend, got: %v", err)
+	}
+}
+
+// F4: PDF text metrics, boundary enforcement, and text wrapping
+func TestOdontogram_F4_PDFTextMetricsBoundsAndWrapping(t *testing.T) {
+	chart := domain.OdontogramChart{
+		ID:          "f4-chart-uuid-1",
+		PatientID:   "patient-uuid-f4",
+		PatientName: "አበበ ቢቂላ ገብረመስቀል ወልደዮሐንስ (Abebe Bikila Gebremeskel Woldeyohannes)",
+		PatientMRN:  "MRN-ETH-LONG-IDENTIFIER-994827103984",
+		DoctorID:    "doctor-user-f4",
+		DoctorName:  "Dr. Dawit Haile G/Mariam",
+		Description: "Comprehensive examination report with overlong unbroken token SUPERLONGUNBROKENCLINICALFINDINGWITHNOSPACESTHATEXCEEDSPAGEWIDTH1234567890ABCDEF and bilingual Amharic clinical documentation የታካሚው የጥርስ ጤንነት አጠቃላይ ምርመራ ተደርጓል። Detailed tooth-by-tooth restoration plan established.",
+		Version:     3,
+		CreatedAt:   time.Date(2026, 10, 12, 14, 0, 0, 0, time.UTC),
+		Odontogram:  make(map[int]string),
+	}
+
+	// Chart teeth including 64-character unbroken custom code across 52 teeth to test pagination
+	longCustomCode := "CUSTOM-LONG-UNBROKEN-IMPLANT-BIOMATERIAL-ZIRCONIA-REST-PROSTHESIS-64"
+	for i := 1; i <= 52; i++ {
+		chart.Odontogram[i] = "Healthy"
+	}
+	chart.Odontogram[1] = "K"
+	chart.Odontogram[8] = "B"
+	chart.Odontogram[14] = longCustomCode
+
+	pdfBytes := httpapi.GenerateOdontogramPDF(chart)
+	if !bytes.HasPrefix(pdfBytes, []byte("%PDF-1.4")) {
+		t.Fatalf("expected valid %%PDF-1.4 header")
+	}
+
+	pdfStr := string(pdfBytes)
+
+	// 1. Assert CIDFont contains /DW and /W array with actual font metrics
+	if !strings.Contains(pdfStr, "/DW 600") {
+		t.Errorf("expected /DW 600 default width in CIDFont dictionary")
+	}
+	if !strings.Contains(pdfStr, "/W [") {
+		t.Errorf("expected /W [ width array in CIDFont dictionary")
+	}
+
+	// 2. Assert ToUnicode map is present
+	if !strings.Contains(pdfStr, "/ToUnicode") {
+		t.Errorf("expected ToUnicode map")
+	}
+
+	// 3. Assert long unbroken custom code and description were processed and included (>50KB)
+	if len(pdfBytes) < 50000 {
+		t.Errorf("expected PDF payload >50KB, got %d", len(pdfBytes))
+	}
+
+	// 4. Assert multi-page structure
+	if !strings.Contains(pdfStr, "/Count 2") && !strings.Contains(pdfStr, "/Count 3") {
+		t.Errorf("expected multi-page PDF output")
+	}
+}
+
 

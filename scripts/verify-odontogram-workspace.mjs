@@ -119,6 +119,11 @@ async function main() {
 
   console.log(`Verified Doctor ID: ${doctorId}, Patient ID: ${patientId} (${patientName})`);
 
+  // Clean up any test artifacts from prior runs to ensure idempotency
+  await db.query("DELETE FROM patient_odontogram_entry WHERE chart_id IN (SELECT id FROM odontogram_chart WHERE is_legacy = false)");
+  await db.query("DELETE FROM odontogram_chart WHERE is_legacy = false");
+  await db.query("DELETE FROM odontogram_legend WHERE code = 'IMP-Z'");
+
   const browser = await chromium.launch({
     headless: true,
     executablePath:
@@ -297,22 +302,23 @@ async function main() {
     assert.ok(freshKeyStrip.includes("IMP-Z"), "Custom legend 'IMP-Z' must be visible in key strip in fresh session");
 
     // Open Edit modal to verify exact teeth markings loaded from backend
-    await page2.click(`button[aria-label*="Edit odontogram"] >> nth=0`);
+    const targetEditBtn = page2.locator('table.legacy-table tbody tr').filter({ hasNotText: 'Legacy Chart' }).locator('button[aria-label*="Edit odontogram"]').first();
+    await targetEditBtn.click();
     await page2.waitForSelector("#odontogram-title", { timeout: 8000 });
 
     // Select Tooth 1 -> verify badge shows 'K'
     await page2.selectOption('label:has-text("Tooth Selector") select', "1");
-    const tooth1Badge = await page2.textContent(".badge-available-stock");
+    const tooth1Badge = await page2.textContent("dialog .dental-editor-grid .badge-available-stock");
     assert.ok(tooth1Badge.includes("K"), `Tooth 1 badge in fresh session must show K, got: ${tooth1Badge}`);
 
     // Select Tooth 8 -> verify badge shows 'B'
     await page2.selectOption('label:has-text("Tooth Selector") select', "8");
-    const tooth8Badge = await page2.textContent(".badge-available-stock");
+    const tooth8Badge = await page2.textContent("dialog .dental-editor-grid .badge-available-stock");
     assert.ok(tooth8Badge.includes("B"), `Tooth 8 badge in fresh session must show B, got: ${tooth8Badge}`);
 
     // Select Tooth 14 -> verify badge shows 'IMP-Z'
     await page2.selectOption('label:has-text("Tooth Selector") select', "14");
-    const tooth14Badge = await page2.textContent(".badge-available-stock");
+    const tooth14Badge = await page2.textContent("dialog .dental-editor-grid .badge-available-stock");
     assert.ok(tooth14Badge.includes("IMP-Z"), `Tooth 14 badge in fresh session must show IMP-Z, got: ${tooth14Badge}`);
 
     // Verify custom legend button exists in the palette in fresh session
@@ -374,22 +380,23 @@ async function main() {
     // -------------------------------------------------------------
     console.log("\n--- Journey 6: Chart Deletion ---");
     page2.on("dialog", (dialog) => dialog.accept());
-    await page2.click(`button[aria-label*="Delete odontogram"] >> nth=0`);
+    const targetDeleteBtn = page2.locator('table.legacy-table tbody tr').filter({ hasText: 'Tooth 14 zirconia implant' }).locator('button[aria-label*="Delete odontogram"]').first();
+    await targetDeleteBtn.click();
     await page2.waitForSelector(".alert-notice:has-text('deleted successfully')", { timeout: 10000 });
 
     await page2.waitForFunction(
-      () => {
+      (needle) => {
         const tbody = document.querySelector("table.legacy-table tbody");
         if (!tbody) return false;
         const text = tbody.textContent || "";
-        return text.includes("No dental charts found") || !text.includes("3 teeth charted");
+        return !text.includes(needle);
       },
-      null,
+      "Tooth 14 zirconia implant",
       { timeout: 10000 }
     );
 
     const afterDeleteTable = await page2.textContent("table.legacy-table tbody");
-    assert.ok(afterDeleteTable.includes("No dental charts found") || !afterDeleteTable.includes(chartId),
+    assert.ok(!afterDeleteTable.includes("Tooth 14 zirconia implant"),
       "Table must update to reflect chart deletion");
 
     const deletedScreenshot = resolve(screenshotsDir, "05_odontogram_deleted_state.png");
