@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bytes"
+	_ "embed"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +12,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"unicode/utf8"
 
 	"hms.local/api/internal/domain"
 )
+
+//go:embed fonts/ebrima.ttf
+var ebrimaFontData []byte
 
 func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Actor) bool {
 	switch {
@@ -269,6 +276,55 @@ func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Ac
 			}
 		}
 
+	// ─── Odontogram Legends ───────────────────────────────────────────────────────
+	case r.URL.Path == "/v1/odontograms/legends":
+		if r.Method == "GET" {
+			legends, err := s.ClinicalCare.ListOdontogramLegends(r.Context())
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, map[string]any{"legends": legends})
+			return true
+		}
+		if r.Method == "POST" {
+			var input domain.SaveOdontogramLegendInput
+			if !decode(w, r, &input) {
+				return true
+			}
+			legend, err := s.ClinicalCare.CreateOdontogramLegend(r.Context(), a, input)
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 201, legend)
+			return true
+		}
+
+	case strings.HasPrefix(r.URL.Path, "/v1/odontograms/legends/"):
+		legendID := strings.TrimPrefix(r.URL.Path, "/v1/odontograms/legends/")
+		if r.Method == "PUT" || r.Method == "PATCH" {
+			var input domain.SaveOdontogramLegendInput
+			if !decode(w, r, &input) {
+				return true
+			}
+			legend, err := s.ClinicalCare.UpdateOdontogramLegend(r.Context(), a, legendID, input)
+			if err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, legend)
+			return true
+		}
+		if r.Method == "DELETE" {
+			if err := s.ClinicalCare.DeleteOdontogramLegend(r.Context(), a, legendID); err != nil {
+				fail(w, err)
+				return true
+			}
+			write(w, 200, map[string]bool{"deleted": true})
+			return true
+		}
+
 	// ─── Odontogram Charts ───────────────────────────────────────────────────────
 	case r.URL.Path == "/v1/odontograms":
 		if r.Method == "GET" {
@@ -311,8 +367,8 @@ func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Ac
 
 	case strings.HasPrefix(r.URL.Path, "/v1/odontograms/"):
 		chartID := strings.TrimPrefix(r.URL.Path, "/v1/odontograms/")
-		if strings.HasSuffix(chartID, "/pdf") {
-			chartID = strings.TrimSuffix(chartID, "/pdf")
+		if strings.HasSuffix(chartID, "/pdf") || strings.HasSuffix(chartID, "/export.pdf") {
+			chartID = strings.TrimSuffix(strings.TrimSuffix(chartID, "/export.pdf"), "/pdf")
 			if r.Method == "GET" {
 				chart, err := s.ClinicalCare.GetOdontogramChart(r.Context(), a, chartID)
 				if err != nil {
@@ -475,36 +531,203 @@ func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Ac
 	return false
 }
 
-func escapePDFText(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "(", "\\(")
-	s = strings.ReplaceAll(s, ")", "\\)")
-	return s
+type ttfCMap struct {
+	segCount      int
+	endCode       []uint16
+	startCode     []uint16
+	idDelta       []int16
+	idRangeOffset []uint16
+	glyphIdArray  []byte
+}
+
+func parseFormat4CMap(buf []byte) (*ttfCMap, error) {
+	if len(buf) < 12 {
+		return nil, fmt.Errorf("ttf data too short")
+	}
+	numTables := int(binary.BigEndian.Uint16(buf[4:6]))
+	var cmapOffset int
+	for i := 0; i < numTables; i++ {
+		off := 12 + i*16
+		if off+16 > len(buf) {
+			break
+		}
+		if string(buf[off:off+4]) == "cmap" {
+			cmapOffset = int(binary.BigEndian.Uint32(buf[off+8 : off+12]))
+			break
+		}
+	}
+	if cmapOffset == 0 || cmapOffset+4 > len(buf) {
+		return nil, fmt.Errorf("cmap table not found")
+	}
+
+	numSubtables := int(binary.BigEndian.Uint16(buf[cmapOffset+2 : cmapOffset+4]))
+	for i := 0; i < numSubtables; i++ {
+		subHeader := cmapOffset + 4 + i*8
+		if subHeader+8 > len(buf) {
+			break
+		}
+		platformID := binary.BigEndian.Uint16(buf[subHeader : subHeader+2])
+		subOffset := cmapOffset + int(binary.BigEndian.Uint32(buf[subHeader+4:subHeader+8]))
+		if subOffset+6 > len(buf) {
+			continue
+		}
+		format := binary.BigEndian.Uint16(buf[subOffset : subOffset+2])
+		if (platformID == 3 || platformID == 0) && format == 4 {
+			length := int(binary.BigEndian.Uint16(buf[subOffset+2 : subOffset+4]))
+			if subOffset+length > len(buf) {
+				continue
+			}
+			segCount := int(binary.BigEndian.Uint16(buf[subOffset+6:subOffset+8])) / 2
+			endCountOffset := subOffset + 14
+			startCountOffset := endCountOffset + segCount*2 + 2
+			idDeltaOffset := startCountOffset + segCount*2
+			idRangeOffset := idDeltaOffset + segCount*2
+
+			cmap := &ttfCMap{
+				segCount:      segCount,
+				endCode:       make([]uint16, segCount),
+				startCode:     make([]uint16, segCount),
+				idDelta:       make([]int16, segCount),
+				idRangeOffset: make([]uint16, segCount),
+			}
+			for s := 0; s < segCount; s++ {
+				cmap.endCode[s] = binary.BigEndian.Uint16(buf[endCountOffset+s*2 : endCountOffset+s*2+2])
+				cmap.startCode[s] = binary.BigEndian.Uint16(buf[startCountOffset+s*2 : startCountOffset+s*2+2])
+				cmap.idDelta[s] = int16(binary.BigEndian.Uint16(buf[idDeltaOffset+s*2 : idDeltaOffset+s*2+2]))
+				cmap.idRangeOffset[s] = binary.BigEndian.Uint16(buf[idRangeOffset+s*2 : idRangeOffset+s*2+2])
+			}
+			cmap.glyphIdArray = buf[idRangeOffset:]
+			return cmap, nil
+		}
+	}
+	return nil, fmt.Errorf("format 4 cmap not found")
+}
+
+func (c *ttfCMap) lookup(r rune) uint16 {
+	if r > 0xFFFF {
+		return 0
+	}
+	code := uint16(r)
+	for s := 0; s < c.segCount; s++ {
+		if code <= c.endCode[s] {
+			if code < c.startCode[s] {
+				return 0
+			}
+			if c.idRangeOffset[s] == 0 {
+				return uint16((int(code) + int(c.idDelta[s])) & 0xFFFF)
+			}
+			offset := int(c.idRangeOffset[s]) + (s * 2) + int(code-c.startCode[s])*2
+			if offset+2 <= len(c.glyphIdArray) {
+				return binary.BigEndian.Uint16(c.glyphIdArray[offset : offset+2])
+			}
+			return 0
+		}
+	}
+	return 0
+}
+
+var (
+	ebrimaOnce sync.Once
+	ebrimaCMap *ttfCMap
+)
+
+func getEbrimaCMap() *ttfCMap {
+	ebrimaOnce.Do(func() {
+		if len(ebrimaFontData) > 0 {
+			cmap, _ := parseFormat4CMap(ebrimaFontData)
+			ebrimaCMap = cmap
+		}
+	})
+	return ebrimaCMap
+}
+
+func wrapPDFText(text string, maxRunes int) []string {
+	var lines []string
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return []string{""}
+	}
+	var current strings.Builder
+	currentLen := 0
+	for _, w := range words {
+		wLen := utf8.RuneCountInString(w)
+		if currentLen == 0 {
+			current.WriteString(w)
+			currentLen = wLen
+		} else if currentLen+1+wLen <= maxRunes {
+			current.WriteString(" ")
+			current.WriteString(w)
+			currentLen += 1 + wLen
+		} else {
+			lines = append(lines, current.String())
+			current.Reset()
+			current.WriteString(w)
+			currentLen = wLen
+		}
+	}
+	if currentLen > 0 {
+		lines = append(lines, current.String())
+	}
+	return lines
 }
 
 func generateOdontogramPDF(chart domain.OdontogramChart) []byte {
-	var stream bytes.Buffer
-	stream.WriteString("BT\n")
-	stream.WriteString("/F1 18 Tf\n")
-	stream.WriteString("50 740 Td\n")
-	stream.WriteString("(Hospital Odontogram Examination Report) Tj\n")
-	stream.WriteString("/F1 11 Tf\n")
-	stream.WriteString("0 -28 Td\n")
-	stream.WriteString(fmt.Sprintf("(Patient: %s) Tj\n", escapePDFText(chart.PatientName)))
-	stream.WriteString("0 -18 Td\n")
-	stream.WriteString(fmt.Sprintf("(Patient MRN: %s) Tj\n", escapePDFText(chart.PatientMRN)))
-	stream.WriteString("0 -18 Td\n")
-	stream.WriteString(fmt.Sprintf("(Attending Doctor: %s) Tj\n", escapePDFText(chart.DoctorName)))
-	stream.WriteString("0 -18 Td\n")
-	stream.WriteString(fmt.Sprintf("(Chart ID: %s    Version: %d) Tj\n", escapePDFText(chart.ID), chart.Version))
-	stream.WriteString("0 -18 Td\n")
-	stream.WriteString(fmt.Sprintf("(Date: %s) Tj\n", escapePDFText(chart.CreatedAt.Format("2006-01-02 15:04:05"))))
-	stream.WriteString("0 -24 Td\n")
-	stream.WriteString(fmt.Sprintf("(Clinical Notes: %s) Tj\n", escapePDFText(chart.Description)))
-	stream.WriteString("0 -28 Td\n")
-	stream.WriteString("/F1 13 Tf\n")
-	stream.WriteString("(Dental Condition Findings:) Tj\n")
-	stream.WriteString("/F1 10 Tf\n")
+	cmap := getEbrimaCMap()
+	if cmap == nil || len(ebrimaFontData) == 0 {
+		return []byte("%PDF-1.4\n% Odontogram Report\n")
+	}
+
+	type pdfLine struct {
+		x, y int
+		size int
+		text string
+	}
+
+	var pages [][]pdfLine
+	var currentPage []pdfLine
+	curY := 740
+
+	pushLine := func(x int, size int, text string) {
+		if curY < 70 {
+			pages = append(pages, currentPage)
+			currentPage = nil
+			curY = 740
+		}
+		currentPage = append(currentPage, pdfLine{x: x, y: curY, size: size, text: text})
+		curY -= (size + 5)
+	}
+
+	// Header
+	pushLine(50, 16, "Hospital Odontogram Examination Report / የጥርስ ምርመራ ሪፖርት")
+	patName := chart.PatientName
+	if patName == "" {
+		patName = "Patient " + chart.PatientID
+	}
+	mrn := chart.PatientMRN
+	if mrn == "" {
+		mrn = "N/A"
+	}
+	pushLine(50, 10, fmt.Sprintf("Patient / ታካሚ: %s  |  MRN: %s", patName, mrn))
+	docName := chart.DoctorName
+	if docName == "" {
+		docName = "Doctor"
+	}
+	pushLine(50, 10, fmt.Sprintf("Attending Doctor: %s  |  Date: %s", docName, chart.CreatedAt.Format("2006-01-02 15:04:05")))
+	pushLine(50, 10, fmt.Sprintf("Chart ID: %s  |  Version: %d", chart.ID, chart.Version))
+	curY -= 8
+
+	pushLine(50, 12, "Clinical Notes / ክሊኒካዊ ማስታወሻ:")
+	desc := chart.Description
+	if desc == "" {
+		desc = "Dental Examination Chart"
+	}
+	wrappedNotes := wrapPDFText(desc, 65)
+	for _, l := range wrappedNotes {
+		pushLine(65, 10, l)
+	}
+	curY -= 8
+
+	pushLine(50, 12, "Dental Condition Findings:")
 
 	var toothNums []int
 	for tNum := range chart.Odontogram {
@@ -513,56 +736,158 @@ func generateOdontogramPDF(chart domain.OdontogramChart) []byte {
 	sort.Ints(toothNums)
 
 	if len(toothNums) == 0 {
-		stream.WriteString("0 -18 Td\n")
-		stream.WriteString("(All 32 teeth healthy / No active conditions charted) Tj\n")
+		pushLine(65, 10, "All teeth healthy / No active conditions charted")
 	} else {
 		for _, tNum := range toothNums {
 			cond := chart.Odontogram[tNum]
-			stream.WriteString("0 -16 Td\n")
-			stream.WriteString(fmt.Sprintf("(  * Tooth #%d: Condition Code [%s]) Tj\n", tNum, escapePDFText(cond)))
+			pushLine(65, 10, fmt.Sprintf("Tooth #%d: Condition Code [%s]", tNum, cond))
 		}
 	}
-	stream.WriteString("\nET\n")
 
-	streamBytes := stream.Bytes()
-	streamLen := len(streamBytes)
+	if len(currentPage) > 0 {
+		pages = append(pages, currentPage)
+	}
+	numPages := len(pages)
+	if numPages == 0 {
+		numPages = 1
+		pages = [][]pdfLine{{{x: 50, y: 740, size: 12, text: "Hospital Odontogram Report"}}}
+	}
+
+	usedGIDs := make(map[uint16]rune)
+	usedGIDs[cmap.lookup(' ')] = ' '
+
+	encodeHex := func(s string) string {
+		var b bytes.Buffer
+		for _, r := range s {
+			gid := cmap.lookup(r)
+			usedGIDs[gid] = r
+			fmt.Fprintf(&b, "%04X", gid)
+		}
+		return b.String()
+	}
+
+	contentBytes := make([][]byte, numPages)
+	for pIdx, p := range pages {
+		var st bytes.Buffer
+		for _, line := range p {
+			hexStr := encodeHex(line.text)
+			st.WriteString("BT\n")
+			st.WriteString(fmt.Sprintf("/F1 %d Tf\n", line.size))
+			st.WriteString(fmt.Sprintf("%d %d Td\n", line.x, line.y))
+			st.WriteString(fmt.Sprintf("<%s> Tj\n", hexStr))
+			st.WriteString("ET\n")
+		}
+		// Footer
+		st.WriteString("BT\n/F1 9 Tf\n50 40 Td\n")
+		footerHex := encodeHex(fmt.Sprintf("Page %d of %d  •  Official Hospital Record  •  HospitalManagementSystemET", pIdx+1, numPages))
+		st.WriteString(fmt.Sprintf("<%s> Tj\nET\n", footerHex))
+		contentBytes[pIdx] = st.Bytes()
+	}
 
 	var doc bytes.Buffer
 	doc.WriteString("%PDF-1.4\n")
 
-	offsets := make([]int, 6)
+	catalogObj := 1
+	pagesObj := 2
+	fontType0Obj := 3 + 2*numPages
+	cidFontObj := fontType0Obj + 1
+	fontDescObj := fontType0Obj + 2
+	fontFileObj := fontType0Obj + 3
+	toUnicodeObj := fontType0Obj + 4
+	totalObjs := toUnicodeObj
 
-	// Object 1: Catalog
-	offsets[1] = doc.Len()
-	doc.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	offsets := make([]int, totalObjs+1)
 
-	// Object 2: Pages
-	offsets[2] = doc.Len()
-	doc.WriteString("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+	// 1. Catalog
+	offsets[catalogObj] = doc.Len()
+	doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Catalog /Pages %d 0 R >>\nendobj\n", catalogObj, pagesObj))
 
-	// Object 3: Page
-	offsets[3] = doc.Len()
-	doc.WriteString("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n")
+	// 2. Pages
+	offsets[pagesObj] = doc.Len()
+	var kids bytes.Buffer
+	for i := 0; i < numPages; i++ {
+		fmt.Fprintf(&kids, "%d 0 R ", 3+i)
+	}
+	doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Pages /Kids [%s] /Count %d >>\nendobj\n", pagesObj, kids.String(), numPages))
 
-	// Object 4: Stream Content
-	offsets[4] = doc.Len()
-	doc.WriteString(fmt.Sprintf("4 0 obj\n<< /Length %d >>\nstream\n", streamLen))
-	doc.Write(streamBytes)
+	// Page objects: 3 to 2+numPages
+	for i := 0; i < numPages; i++ {
+		pageID := 3 + i
+		contentID := 3 + numPages + i
+		offsets[pageID] = doc.Len()
+		doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] /Contents %d 0 R /Resources << /Font << /F1 %d 0 R >> >> >>\nendobj\n", pageID, pagesObj, contentID, fontType0Obj))
+	}
+
+	// Content streams: 3+numPages to 2+2*numPages
+	for i := 0; i < numPages; i++ {
+		contentID := 3 + numPages + i
+		offsets[contentID] = doc.Len()
+		doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Length %d >>\nstream\n", contentID, len(contentBytes[i])))
+		doc.Write(contentBytes[i])
+		doc.WriteString("\nendstream\nendobj\n")
+	}
+
+	// Font Type0
+	offsets[fontType0Obj] = doc.Len()
+	doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Font /Subtype /Type0 /BaseFont /Ebrima /Encoding /Identity-H /DescendantFonts [%d 0 R] /ToUnicode %d 0 R >>\nendobj\n", fontType0Obj, cidFontObj, toUnicodeObj))
+
+	// CIDFont
+	offsets[cidFontObj] = doc.Len()
+	doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Ebrima /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor %d 0 R /CIDToGIDMap /Identity >>\nendobj\n", cidFontObj, fontDescObj))
+
+	// FontDescriptor
+	offsets[fontDescObj] = doc.Len()
+	doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Type /FontDescriptor /FontName /Ebrima /Flags 32 /FontBBox [-500 -300 1200 1000] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 %d 0 R >>\nendobj\n", fontDescObj, fontFileObj))
+
+	// FontFile2 stream (embedded TTF)
+	offsets[fontFileObj] = doc.Len()
+	doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Length %d /Length1 %d >>\nstream\n", fontFileObj, len(ebrimaFontData), len(ebrimaFontData)))
+	doc.Write(ebrimaFontData)
 	doc.WriteString("\nendstream\nendobj\n")
 
-	// Object 5: Font
-	offsets[5] = doc.Len()
-	doc.WriteString("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n")
+	// ToUnicode CMap
+	var cmapBuf bytes.Buffer
+	cmapBuf.WriteString("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Custom-ToUnicode def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n")
 
-	// XREF
+	var sortedGIDs []int
+	for gid := range usedGIDs {
+		sortedGIDs = append(sortedGIDs, int(gid))
+	}
+	sort.Ints(sortedGIDs)
+
+	for i := 0; i < len(sortedGIDs); i += 100 {
+		end := i + 100
+		if end > len(sortedGIDs) {
+			end = len(sortedGIDs)
+		}
+		fmt.Fprintf(&cmapBuf, "%d beginbfchar\n", end-i)
+		for _, gid := range sortedGIDs[i:end] {
+			r := usedGIDs[uint16(gid)]
+			fmt.Fprintf(&cmapBuf, "<%04X> <%04X>\n", gid, r)
+		}
+		cmapBuf.WriteString("endbfchar\n")
+	}
+	cmapBuf.WriteString("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n")
+	cmapBytes := cmapBuf.Bytes()
+
+	offsets[toUnicodeObj] = doc.Len()
+	doc.WriteString(fmt.Sprintf("%d 0 obj\n<< /Length %d >>\nstream\n", toUnicodeObj, len(cmapBytes)))
+	doc.Write(cmapBytes)
+	doc.WriteString("\nendstream\nendobj\n")
+
+	// XREF Table
 	xrefOffset := doc.Len()
-	doc.WriteString("xref\n0 6\n")
+	doc.WriteString(fmt.Sprintf("xref\n0 %d\n", totalObjs+1))
 	doc.WriteString("0000000000 65535 f \n")
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= totalObjs; i++ {
 		doc.WriteString(fmt.Sprintf("%010d 00000 n \n", offsets[i]))
 	}
 
-	doc.WriteString(fmt.Sprintf("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefOffset))
+	doc.WriteString(fmt.Sprintf("trailer\n<< /Size %d /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n", totalObjs+1, catalogObj, xrefOffset))
 
 	return doc.Bytes()
+}
+
+func GenerateOdontogramPDF(chart domain.OdontogramChart) []byte {
+	return generateOdontogramPDF(chart)
 }

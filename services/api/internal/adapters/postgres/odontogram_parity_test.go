@@ -1,20 +1,25 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"hms.local/api/internal/adapters/httpapi"
 	"hms.local/api/internal/application"
 	"hms.local/api/internal/domain"
 )
@@ -512,6 +517,9 @@ func TestOdontogram_RoleBoundariesAndScoping(t *testing.T) {
 	}
 
 	patientID := helperCreatePatient(t, ctx, db, "Ada", "Lovelace")
+	if _, err := db.Exec(ctx, "UPDATE patient SET clinician_user_id = 'doctor-user-1' WHERE id = $1::uuid", patientID); err != nil {
+		t.Fatal(err)
+	}
 
 	// Receptionist cannot create charts
 	_, err := service.CreateOdontogramChart(ctx, receptionist, domain.SaveOdontogramChartInput{
@@ -766,3 +774,551 @@ func TestOdontogram_SingleToothCompatibilityEndpoint(t *testing.T) {
 		t.Errorf("chart JSONB divergence: %+v", chartReloaded.Odontogram)
 	}
 }
+
+// ─── REGRESSION SUITES FOR REVIEW AUDIT FINDINGS (R1 - R6) ───────────────────
+
+// R1: Doctor clinical scope isolation
+func TestOdontogram_R1_DoctorClinicalScopeIsolation(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 0)
+	defer cleanup()
+
+	app := application.ClinicalCareService{Store: store}
+
+	alice := domain.Actor{ID: "doctor-user-1", Role: "doctor", Name: "Dr. Alice"}
+	bob := domain.Actor{ID: "doctor-user-2", Role: "doctor", Name: "Dr. Bob"}
+
+	// Patient P is assigned to Dr. Alice (clinician_user_id = doctor-user-1)
+	var patientID string
+	err := db.QueryRow(ctx, `
+		INSERT INTO patient (given_name, family_name, date_of_birth, clinician_user_id)
+		VALUES ('Patient', 'Protected', '1995-05-05', 'doctor-user-1')
+		RETURNING id::text
+	`).Scan(&patientID)
+	if err != nil {
+		t.Fatalf("failed to insert patient: %v", err)
+	}
+
+	// Alice creates an odontogram chart for Patient P
+	chartInput := domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Alice examination",
+		Odontogram:  map[int]string{1: "K", 2: "C"},
+	}
+	chart, err := app.CreateOdontogramChart(ctx, alice, chartInput)
+	if err != nil {
+		t.Fatalf("Alice failed to create chart: %v", err)
+	}
+
+	// Bob is an unrelated doctor (not assigned, no encounter, not on care team)
+	// 1. Bob must be forbidden from GetOdontogramChart
+	_, err = app.GetOdontogramChart(ctx, bob, chart.ID)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden for Bob on GetOdontogramChart, got: %v", err)
+	}
+
+	// 2. Bob must be forbidden from UpdateOdontogramChart
+	_, err = app.UpdateOdontogramChart(ctx, bob, chart.ID, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-2",
+		Description: "Bob unauthorized update",
+		Odontogram:  map[int]string{1: "Healthy"},
+		Version:     1,
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden for Bob on UpdateOdontogramChart, got: %v", err)
+	}
+
+	// 3. Bob must be forbidden from DeleteOdontogramChart
+	err = app.DeleteOdontogramChart(ctx, bob, chart.ID)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden for Bob on DeleteOdontogramChart, got: %v", err)
+	}
+
+	// 4. Bob must be forbidden from CreateOdontogramChart for Patient P
+	_, err = app.CreateOdontogramChart(ctx, bob, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-2",
+		Description: "Bob unauthorized create",
+		Odontogram:  map[int]string{3: "B"},
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden for Bob on CreateOdontogramChart, got: %v", err)
+	}
+
+	// 5. Bob must be forbidden from ListOdontogramCharts for Patient P specifically
+	_, _, err = app.ListOdontogramCharts(ctx, bob, patientID, "", 1, 10)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden for Bob on ListOdontogramCharts with patientID, got: %v", err)
+	}
+
+	// In general list, Bob must see 0 charts for Patient P
+	chartsBob, _, err := app.ListOdontogramCharts(ctx, bob, "", "", 1, 10)
+	if err != nil {
+		t.Fatalf("Bob ListOdontogramCharts error: %v", err)
+	}
+	for _, c := range chartsBob {
+		if c.PatientID == patientID {
+			t.Errorf("unrelated doctor Bob saw Patient P's chart in general list!")
+		}
+	}
+
+	// 6. Non-dental clinical endpoint check: Bob must be forbidden from clinical access
+	err = store.AuthorizeClinicalRecord(ctx, bob, patientID, "", "clinical")
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected AuthorizeClinicalRecord to return ErrForbidden for unrelated Bob, got: %v", err)
+	}
+
+	// 7. Alice CAN view and list Patient P's charts
+	chartAlice, err := app.GetOdontogramChart(ctx, alice, chart.ID)
+	if err != nil {
+		t.Fatalf("Alice GetOdontogramChart failed: %v", err)
+	}
+	if chartAlice.ID != chart.ID {
+		t.Errorf("expected chart ID %s, got %s", chart.ID, chartAlice.ID)
+	}
+
+	chartsAlice, totalAlice, err := app.ListOdontogramCharts(ctx, alice, patientID, "", 1, 10)
+	if err != nil || totalAlice != 1 || len(chartsAlice) != 1 {
+		t.Errorf("expected Alice to see 1 chart, got total=%d err=%v", totalAlice, err)
+	}
+}
+
+// R2: Omission of version bypasses optimistic concurrency
+func TestOdontogram_R2_OptimisticConcurrencyStaleAndZeroVersion(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 0)
+	defer cleanup()
+
+	admin := domain.Actor{ID: "admin-user", Role: "admin"}
+	app := application.ClinicalCareService{Store: store}
+	patientID := helperCreatePatient(t, ctx, db, "Grace", "Hopper")
+
+	chart, err := app.CreateOdontogramChart(ctx, admin, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Initial check",
+		Odontogram:  map[int]string{1: "K"},
+	})
+	if err != nil {
+		t.Fatalf("CreateOdontogramChart failed: %v", err)
+	}
+	if chart.Version != 1 {
+		t.Fatalf("expected version 1, got %d", chart.Version)
+	}
+
+	// 1. Update with Version = 0 must be rejected with ErrValidation
+	_, err = app.UpdateOdontogramChart(ctx, admin, chart.ID, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Zero version update",
+		Odontogram:  map[int]string{1: "Healthy"},
+		Version:     0,
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("expected ErrValidation for Version 0, got: %v", err)
+	}
+
+	// 2. Update with negative Version must be rejected with ErrValidation
+	_, err = app.UpdateOdontogramChart(ctx, admin, chart.ID, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Negative version update",
+		Odontogram:  map[int]string{1: "Healthy"},
+		Version:     -1,
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("expected ErrValidation for Version -1, got: %v", err)
+	}
+
+	// Verify chart was not modified
+	current, err := app.GetOdontogramChart(ctx, admin, chart.ID)
+	if err != nil || current.Version != 1 || current.Odontogram[1] != "K" {
+		t.Fatalf("chart modified despite validation failure: version=%d odonto=%v", current.Version, current.Odontogram)
+	}
+
+	// 3. Valid update with matching Version = 1 succeeds
+	updated, err := app.UpdateOdontogramChart(ctx, admin, chart.ID, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Legitimate update",
+		Odontogram:  map[int]string{1: "C"},
+		Version:     1,
+	})
+	if err != nil {
+		t.Fatalf("UpdateOdontogramChart failed: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Errorf("expected updated version 2, got %d", updated.Version)
+	}
+
+	// 4. Stale update with Version = 1 must be rejected with ErrConflict (409)
+	_, err = app.UpdateOdontogramChart(ctx, admin, chart.ID, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Concurrent edit",
+		Odontogram:  map[int]string{1: "X"},
+		Version:     1,
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("expected ErrConflict for stale Version 1, got: %v", err)
+	}
+
+	// Verify chart version remains 2 and edits preserved
+	reloaded, _ := app.GetOdontogramChart(ctx, admin, chart.ID)
+	if reloaded.Version != 2 || reloaded.Odontogram[1] != "C" {
+		t.Errorf("chart corrupted by stale write: version=%d odonto=%v", reloaded.Version, reloaded.Odontogram)
+	}
+}
+
+// R3: Compatibility writes target only legacy chart and serialize concurrent creation
+func TestOdontogram_R3_CompatibilityTargetsOnlyLegacyAndParentFirstLocking(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 0)
+	defer cleanup()
+
+	admin := domain.Actor{ID: "admin-user", Role: "admin"}
+	app := application.ClinicalCareService{Store: store}
+	patientID := helperCreatePatient(t, ctx, db, "Alan", "Turing")
+
+	// Create a modern chart for patient (is_legacy = false)
+	modernChart, err := app.CreateOdontogramChart(ctx, admin, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Modern routine dental checkup",
+		Odontogram:  map[int]string{10: "Healthy", 11: "Healthy"},
+	})
+	if err != nil {
+		t.Fatalf("CreateOdontogramChart failed: %v", err)
+	}
+	if modernChart.IsLegacy {
+		t.Fatalf("expected is_legacy = false for modern chart")
+	}
+
+	// Calling SetToothCondition without chart_id must NOT target the modern chart!
+	// It must create or target an explicitly designated legacy chart (is_legacy = true).
+	entry, err := store.SetToothCondition(ctx, admin, patientID, domain.SetToothConditionInput{
+		ToothNumber:    14,
+		Condition:      "K",
+		ProcedureNotes: "Legacy single-tooth compatibility call",
+	})
+	if err != nil {
+		t.Fatalf("SetToothCondition failed: %v", err)
+	}
+
+	if entry.ChartID == modernChart.ID {
+		t.Fatalf("CRITICAL: SetToothCondition silently targeted modern chart %s!", modernChart.ID)
+	}
+
+	// Verify legacy chart was created with is_legacy = true
+	legacyChart, err := store.GetOdontogramChart(ctx, entry.ChartID)
+	if err != nil {
+		t.Fatalf("failed to get legacy chart: %v", err)
+	}
+	if !legacyChart.IsLegacy {
+		t.Errorf("expected legacyChart.IsLegacy = true")
+	}
+	if legacyChart.Odontogram[14] != "K" {
+		t.Errorf("expected tooth 14 = 'K' on legacy chart, got: %s", legacyChart.Odontogram[14])
+	}
+
+	// Verify modern chart was completely untouched
+	reloadedModern, err := store.GetOdontogramChart(ctx, modernChart.ID)
+	if err != nil {
+		t.Fatalf("failed to reload modern chart: %v", err)
+	}
+	if reloadedModern.Version != modernChart.Version || len(reloadedModern.Odontogram) != 2 {
+		t.Errorf("modern chart was mutated by compatibility call: version=%d odonto=%v", reloadedModern.Version, reloadedModern.Odontogram)
+	}
+
+	// Concurrent creation test: 5 concurrent callers calling SetToothCondition without chart_id
+	patientID2 := helperCreatePatient(t, ctx, db, "Ada", "Lovelace")
+	var wg sync.WaitGroup
+	errCh := make(chan error, 5)
+
+	for i := 1; i <= 5; i++ {
+		wg.Add(1)
+		go func(toothNum int) {
+			defer wg.Done()
+			_, e := store.SetToothCondition(ctx, admin, patientID2, domain.SetToothConditionInput{
+				ToothNumber:    toothNum,
+				Condition:      "Ce",
+				ProcedureNotes: fmt.Sprintf("Concurrent tooth %d", toothNum),
+			})
+			if e != nil {
+				errCh <- e
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+
+	for e := range errCh {
+		t.Fatalf("concurrent SetToothCondition failed: %v", e)
+	}
+
+	// Exactly 1 legacy chart must exist for patientID2
+	var legacyCount int
+	err = db.QueryRow(ctx, `SELECT COUNT(*) FROM odontogram_chart WHERE patient_id = $1::uuid AND is_legacy = true`, patientID2).Scan(&legacyCount)
+	if err != nil || legacyCount != 1 {
+		t.Errorf("expected exactly 1 legacy chart created, got count=%d err=%v", legacyCount, err)
+	}
+}
+
+// R4: Legacy provenance and tooth notes/author preservation across ordinary edits
+func TestOdontogram_R4_LegacyProvenanceAndToothHistoryPreservationAcrossOrdinaryEdits(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 59)
+	defer cleanup()
+
+	admin := domain.Actor{ID: "admin-user", Role: "admin"}
+	app := application.ClinicalCareService{Store: store}
+	patientID := helperCreatePatient(t, ctx, db, "Marie", "Curie")
+
+	// Seed multiple distinct pre-060 teeth with different notes, authors, and timestamps
+	t1 := time.Date(2026, 1, 10, 8, 30, 0, 0, time.UTC)
+	t2 := time.Date(2026, 2, 14, 11, 15, 0, 0, time.UTC)
+
+	_, err := db.Exec(ctx, `
+		INSERT INTO patient_odontogram_entry (
+			patient_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES
+		($1, 1, 'caries', 'Deep distal caries with pulpal involvement', 'doctor-user-1', $2, $2),
+		($1, 2, 'crown', 'Porcelain fused to metal crown seated well', 'doctor-user-2', $3, $3)
+	`, patientID, t1, t2)
+	if err != nil {
+		t.Fatalf("failed to seed pre-060 teeth: %v", err)
+	}
+
+	// Run migration 060
+	m60Path := "../../../../../db/migrations/060_odontogram_chart_parity.sql"
+	sql60, err := os.ReadFile(m60Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 060: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql60)); err != nil {
+		t.Fatalf("failed to execute migration 060: %v", err)
+	}
+
+	// Get legacy chart
+	charts, total, err := app.ListOdontogramCharts(ctx, admin, patientID, "", 1, 10)
+	if err != nil || total != 1 {
+		t.Fatalf("failed to list legacy chart: total=%d err=%v", total, err)
+	}
+	legacyChart := charts[0]
+
+	// 1. Verify immutable legacy_provenance snapshot is populated
+	if len(legacyChart.LegacyProvenance) == 0 {
+		t.Fatalf("expected legacy_provenance to be populated on legacy chart")
+	}
+
+	var provItems []map[string]any
+	if err = json.Unmarshal(legacyChart.LegacyProvenance, &provItems); err != nil {
+		t.Fatalf("failed to unmarshal legacy_provenance: %v", err)
+	}
+	if len(provItems) != 2 {
+		t.Fatalf("expected 2 items in legacy_provenance, got %d", len(provItems))
+	}
+
+	// 2. Perform an ordinary edit: add Tooth 3 ("B"), keep Tooth 1 ("caries")
+	updatedChart, err := app.UpdateOdontogramChart(ctx, admin, legacyChart.ID, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Updated examination notes after follow-up",
+		Odontogram:  map[int]string{1: "caries", 3: "B"},
+		Version:     legacyChart.Version,
+	})
+	if err != nil {
+		t.Fatalf("UpdateOdontogramChart failed: %v", err)
+	}
+
+	// 3. Verify legacy_provenance remains untouched and intact
+	if len(updatedChart.LegacyProvenance) == 0 {
+		t.Fatalf("legacy_provenance was lost after ordinary edit!")
+	}
+
+	// 4. Verify in patient_odontogram_entry that Tooth 1 still preserved original notes and author!
+	var notes1, author1 string
+	var created1 time.Time
+	err = db.QueryRow(ctx, `
+		SELECT procedure_notes, diagnosed_by, created_at
+		FROM patient_odontogram_entry
+		WHERE chart_id = $1::uuid AND tooth_number = 1
+	`, legacyChart.ID).Scan(&notes1, &author1, &created1)
+	if err != nil {
+		t.Fatalf("failed to query tooth 1 entry: %v", err)
+	}
+
+	if notes1 != "Deep distal caries with pulpal involvement" {
+		t.Errorf("Tooth 1 procedure_notes was overwritten! Got: '%s'", notes1)
+	}
+	if author1 != "doctor-user-1" {
+		t.Errorf("Tooth 1 author was overwritten! Got: '%s'", author1)
+	}
+	if !created1.Equal(t1) {
+		t.Errorf("Tooth 1 created_at timestamp was overwritten! Expected %v, got %v", t1, created1)
+	}
+}
+
+// R5: Durable custom legend definitions CRUD and reference protection
+func TestOdontogram_R5_DurableCustomLegendsCRUD(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 0)
+	defer cleanup()
+
+	admin := domain.Actor{ID: "admin-user", Role: "admin"}
+	app := application.ClinicalCareService{Store: store}
+	patientID := helperCreatePatient(t, ctx, db, "Rosalind", "Franklin")
+
+	// 1. Initial list: all 11 default clinical legends must be present
+	legends, err := app.ListOdontogramLegends(ctx)
+	if err != nil {
+		t.Fatalf("ListOdontogramLegends failed: %v", err)
+	}
+	if len(legends) < 11 {
+		t.Errorf("expected at least 11 default legends, got %d", len(legends))
+	}
+
+	// 2. Create durable custom legend IMP-Z
+	created, err := app.CreateOdontogramLegend(ctx, admin, domain.SaveOdontogramLegendInput{
+		Code:        "IMP-Z",
+		Name:        "Zirconia Implant",
+		Color:       "#06b6d4",
+		Description: "Biocompatible zirconia endosseous implant fixture",
+	})
+	if err != nil {
+		t.Fatalf("CreateOdontogramLegend failed: %v", err)
+	}
+	if created.Code != "IMP-Z" || created.IsDefault {
+		t.Errorf("invalid created legend: %+v", created)
+	}
+
+	// Duplicate code must conflict
+	_, err = app.CreateOdontogramLegend(ctx, admin, domain.SaveOdontogramLegendInput{
+		Code:  "IMP-Z",
+		Name:  "Duplicate",
+		Color: "#000000",
+	})
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Errorf("expected ErrConflict for duplicate legend code, got: %v", err)
+	}
+
+	// 3. Deleting a default legend must be forbidden
+	defaultLeg := legends[0]
+	err = app.DeleteOdontogramLegend(ctx, admin, defaultLeg.ID)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Errorf("expected ErrForbidden when deleting default legend %s, got: %v", defaultLeg.Code, err)
+	}
+
+	// 4. Create chart using custom condition IMP-Z
+	chart, err := app.CreateOdontogramChart(ctx, admin, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Patient with custom zirconia implant",
+		Odontogram:  map[int]string{14: "IMP-Z"},
+	})
+	if err != nil {
+		t.Fatalf("CreateOdontogramChart with custom legend failed: %v", err)
+	}
+
+	// 5. Deleting custom legend currently in use by clinical records must return ErrInUse
+	err = app.DeleteOdontogramLegend(ctx, admin, created.ID)
+	if !errors.Is(err, domain.ErrInUse) {
+		t.Errorf("expected ErrInUse when deleting legend in use, got: %v", err)
+	}
+
+	// 6. Delete chart, then delete legend succeeds
+	err = app.DeleteOdontogramChart(ctx, admin, chart.ID)
+	if err != nil {
+		t.Fatalf("failed to delete chart: %v", err)
+	}
+
+	err = app.DeleteOdontogramLegend(ctx, admin, created.ID)
+	if err != nil {
+		t.Errorf("failed to delete unused custom legend: %v", err)
+	}
+
+	// Reload legends: IMP-Z must be gone
+	legendsAfter, _ := app.ListOdontogramLegends(ctx)
+	for _, l := range legendsAfter {
+		if l.Code == "IMP-Z" {
+			t.Errorf("custom legend IMP-Z still exists after deletion!")
+		}
+	}
+}
+
+// R6: PDF generation with multi-page pagination, word-wrapped notes, and Amharic Unicode
+func TestOdontogram_R6_MultipagePDFWithWrappedNotesAndAmharic(t *testing.T) {
+	// Build chart with Amharic patient name, long wrapped clinical description, and all 52 teeth
+	chart := domain.OdontogramChart{
+		ID:          "4fd15e13-b280-48e9-b2b3-58f232590834",
+		PatientID:   "patient-uuid-1",
+		PatientName: "አበበ ቢቂላ (Abebe Bikila)",
+		PatientMRN:  "MRN-1004829",
+		DoctorID:    "doctor-user-1",
+		DoctorName:  "Dr. Dawit Haile",
+		Description: "Comprehensive full-mouth periodontal and restorative dental examination. የታካሚው ጥርስ ምርመራ እና ህክምና። Patient presents with multiple lesions, restorations, and bridges requiring multi-disciplinary dental intervention. Tooth 14 restored with custom biocompatible zirconia implant unit.",
+		Version:     2,
+		CreatedAt:   time.Date(2026, 10, 12, 10, 30, 0, 0, time.UTC),
+		Odontogram:  make(map[int]string),
+	}
+
+	// Chart all 52 supported teeth (1-32 adult + 33-52 pediatric/deciduous)
+	for i := 1; i <= 52; i++ {
+		cond := "Healthy"
+		switch i {
+		case 1:
+			cond = "K"
+		case 8:
+			cond = "B"
+		case 14:
+			cond = "IMP-Z"
+		case 20:
+			cond = "C"
+		case 32:
+			cond = "X"
+		case 45:
+			cond = "Ce"
+		}
+		chart.Odontogram[i] = cond
+	}
+
+	pdfBytes := httpapi.GenerateOdontogramPDF(chart)
+
+	// 1. Must start with standard PDF header
+	if !bytes.HasPrefix(pdfBytes, []byte("%PDF-1.4")) {
+		t.Fatalf("expected %%PDF-1.4 header, got: %s", string(pdfBytes[:8]))
+	}
+
+	// 2. Must be substantial in size (embedded TrueType font)
+	if len(pdfBytes) < 50000 {
+		t.Errorf("expected PDF to include embedded font (>50KB), got %d bytes", len(pdfBytes))
+	}
+
+	pdfStr := string(pdfBytes)
+
+	// 3. Must be multi-page (at least 2 pages) because 52 teeth + long notes exceed a single page
+	if !strings.Contains(pdfStr, "/Count 2") && !strings.Contains(pdfStr, "/Count 3") {
+		t.Errorf("expected multi-page PDF (/Count 2 or /Count 3), got pages object definition in PDF")
+	}
+
+	// 4. Must include Type 0 font and embedded CIDFont with Identity-H
+	if !strings.Contains(pdfStr, "/Subtype /Type0") {
+		t.Errorf("expected Type 0 font definition in PDF")
+	}
+	if !strings.Contains(pdfStr, "/Encoding /Identity-H") {
+		t.Errorf("expected /Identity-H encoding for Unicode support")
+	}
+
+	// 5. Must include ToUnicode CMap for selectable text
+	if !strings.Contains(pdfStr, "/ToUnicode") {
+		t.Errorf("expected /ToUnicode CMap stream in PDF")
+	}
+
+	// 6. Must terminate cleanly with %%EOF
+	if !strings.HasSuffix(strings.TrimSpace(pdfStr), "%%EOF") {
+		t.Errorf("expected %%EOF trailer at the end of PDF")
+	}
+}
+

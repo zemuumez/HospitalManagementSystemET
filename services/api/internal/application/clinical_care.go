@@ -56,6 +56,12 @@ type ClinicalCareRepository interface {
 	ListOdontogramCharts(ctx context.Context, a domain.Actor, patientID, search string, page, limit int) ([]domain.OdontogramChart, int, error)
 	DeleteOdontogramChart(ctx context.Context, id string) error
 	ValidatePatientEncounter(ctx context.Context, patientID, encounterID string) error
+
+	// Odontogram Legends
+	ListOdontogramLegends(ctx context.Context) ([]domain.OdontogramLegend, error)
+	CreateOdontogramLegend(ctx context.Context, a domain.Actor, input domain.SaveOdontogramLegendInput) (domain.OdontogramLegend, error)
+	UpdateOdontogramLegend(ctx context.Context, a domain.Actor, id string, input domain.SaveOdontogramLegendInput) (domain.OdontogramLegend, error)
+	DeleteOdontogramLegend(ctx context.Context, a domain.Actor, id string) error
 }
 
 type ClinicalCareService struct {
@@ -414,15 +420,17 @@ func (s ClinicalCareService) UpdateOdontogramChart(ctx context.Context, a domain
 	if !domain.UUIDPattern.MatchString(id) {
 		return domain.OdontogramChart{}, domain.ErrValidation
 	}
-	if err := input.Validate(); err != nil {
+	if err := input.ValidateUpdate(); err != nil {
 		return domain.OdontogramChart{}, err
 	}
 	existing, err := s.Store.GetOdontogramChart(ctx, id)
 	if err != nil {
 		return domain.OdontogramChart{}, err
 	}
-	if err := s.Store.AuthorizeClinicalRecord(ctx, a, existing.PatientID, pointerValue(input.EncounterID), "clinical"); err != nil {
-		return domain.OdontogramChart{}, err
+	if a.Role == "doctor" && existing.CreatedBy != a.ID && existing.DoctorID != a.ID {
+		if err := s.Store.AuthorizeClinicalRecord(ctx, a, existing.PatientID, pointerValue(input.EncounterID), "clinical"); err != nil {
+			return domain.OdontogramChart{}, err
+		}
 	}
 	return s.Store.UpdateOdontogramChart(ctx, a, id, input)
 }
@@ -435,11 +443,18 @@ func (s ClinicalCareService) GetOdontogramChart(ctx context.Context, a domain.Ac
 	if err != nil {
 		return domain.OdontogramChart{}, err
 	}
-	if a.Role != "admin" && a.Role != "doctor" && a.Role != "patient" {
+	if a.Role == "patient" {
+		if err := s.Store.AuthorizeClinicalRecord(ctx, a, chart.PatientID, pointerValue(chart.EncounterID), "odontogram_read"); err != nil {
+			return domain.OdontogramChart{}, err
+		}
+	} else if a.Role == "doctor" {
+		if chart.CreatedBy != a.ID && chart.DoctorID != a.ID {
+			if err := s.Store.AuthorizeClinicalRecord(ctx, a, chart.PatientID, pointerValue(chart.EncounterID), "odontogram_read"); err != nil {
+				return domain.OdontogramChart{}, err
+			}
+		}
+	} else if a.Role != "admin" {
 		return domain.OdontogramChart{}, domain.ErrForbidden
-	}
-	if err := s.Store.AuthorizeClinicalRecord(ctx, a, chart.PatientID, pointerValue(chart.EncounterID), "odontogram_read"); err != nil {
-		return domain.OdontogramChart{}, err
 	}
 	return chart, nil
 }
@@ -470,10 +485,49 @@ func (s ClinicalCareService) DeleteOdontogramChart(ctx context.Context, a domain
 	if err != nil {
 		return err
 	}
-	if err := s.Store.AuthorizeClinicalRecord(ctx, a, chart.PatientID, pointerValue(chart.EncounterID), "clinical"); err != nil {
-		return err
+	if a.Role == "doctor" && chart.CreatedBy != a.ID && chart.DoctorID != a.ID {
+		if err := s.Store.AuthorizeClinicalRecord(ctx, a, chart.PatientID, pointerValue(chart.EncounterID), "clinical"); err != nil {
+			return err
+		}
 	}
 	return s.Store.DeleteOdontogramChart(ctx, id)
+}
+
+func (s ClinicalCareService) ListOdontogramLegends(ctx context.Context) ([]domain.OdontogramLegend, error) {
+	return s.Store.ListOdontogramLegends(ctx)
+}
+
+func (s ClinicalCareService) CreateOdontogramLegend(ctx context.Context, a domain.Actor, input domain.SaveOdontogramLegendInput) (domain.OdontogramLegend, error) {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.OdontogramLegend{}, domain.ErrForbidden
+	}
+	if err := input.Validate(); err != nil {
+		return domain.OdontogramLegend{}, err
+	}
+	return s.Store.CreateOdontogramLegend(ctx, a, input)
+}
+
+func (s ClinicalCareService) UpdateOdontogramLegend(ctx context.Context, a domain.Actor, id string, input domain.SaveOdontogramLegendInput) (domain.OdontogramLegend, error) {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.OdontogramLegend{}, domain.ErrForbidden
+	}
+	if id == "" {
+		return domain.OdontogramLegend{}, domain.ErrValidation
+	}
+	if err := input.Validate(); err != nil {
+		return domain.OdontogramLegend{}, err
+	}
+	return s.Store.UpdateOdontogramLegend(ctx, a, id, input)
+}
+
+func (s ClinicalCareService) DeleteOdontogramLegend(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.ErrForbidden
+	}
+	if id == "" {
+		return domain.ErrValidation
+	}
+	return s.Store.DeleteOdontogramLegend(ctx, a, id)
 }
 
 func pointerValue(value *string) string {

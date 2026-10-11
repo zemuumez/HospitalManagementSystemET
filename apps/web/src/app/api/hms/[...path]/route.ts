@@ -181,7 +181,7 @@ function isAllowedPath(path: string[]): boolean {
     if (path[0] === "medication-orders" && path[2] === "cancel") {
       return true;
     }
-    if (path[0] === "odontograms" && path[2] === "pdf") {
+    if (path[0] === "odontograms" && (path[2] === "pdf" || path[1] === "legends")) {
       return true;
     }
     if (

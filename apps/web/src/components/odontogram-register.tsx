@@ -295,29 +295,28 @@ export function OdontogramRegister() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successBanner, setSuccessBanner] = useState("");
 
-  // Load legends from session
-  useEffect(() => {
+  const [patientSearch, setPatientSearch] = useState("");
+  const [isSearchingPatients, setIsSearchingPatients] = useState(false);
+
+  // Load legends from server (durable clinical definitions)
+  const loadLegends = useCallback(async () => {
     try {
-      const storedLegends = sessionStorage.getItem(legendsStorageKey);
-      if (storedLegends) {
-        setLegends(JSON.parse(storedLegends));
-      } else {
-        setLegends(defaultLegends);
+      const res = await api<{ legends: OdontogramLegend[] }>(
+        "odontograms/legends",
+      );
+      if (res?.legends && Array.isArray(res.legends)) {
+        setLegends(res.legends);
       }
     } catch {
-      setLegends(defaultLegends);
+      // Non-blocking fallback
     }
   }, []);
 
-  // Save legends to session
-  const saveLegends = useCallback((newLegends: OdontogramLegend[]) => {
-    setLegends(newLegends);
-    try {
-      sessionStorage.setItem(legendsStorageKey, JSON.stringify(newLegends));
-    } catch {}
-  }, []);
+  useEffect(() => {
+    loadLegends();
+  }, [loadLegends]);
 
-  // Load clinical doctors & patients
+  // Load clinical doctors & initial patients
   const loadClinicalMetadata = useCallback(async () => {
     try {
       const [patRes, docRes] = await Promise.allSettled([
@@ -334,6 +333,50 @@ export function OdontogramRegister() {
       // Non-blocking
     }
   }, []);
+
+  // Server-backed patient search across all records beyond first 100
+  const searchPatients = useCallback(async (q: string) => {
+    if (!q.trim()) return;
+    setIsSearchingPatients(true);
+    try {
+      const res = await api<{ patients: Patient[] }>(
+        `patients?search=${encodeURIComponent(q.trim())}&limit=50`,
+      );
+      if (res?.patients && Array.isArray(res.patients)) {
+        setPatients((prev) => {
+          const map = new Map<string, Patient>();
+          for (const p of prev) map.set(p.id, p);
+          for (const p of res.patients) map.set(p.id, p);
+          return Array.from(map.values());
+        });
+      }
+    } catch {
+    } finally {
+      setIsSearchingPatients(false);
+    }
+  }, []);
+
+  // When editing an existing chart whose patient is not yet in the list, load them independently
+  useEffect(() => {
+    if (editing?.patientId) {
+      const exists = patients.some((p) => p.id === editing.patientId);
+      if (!exists) {
+        api<{ patient?: Patient; id?: string; givenName?: string; familyName?: string; mrn?: string }>(
+          `patients/${editing.patientId}`,
+        )
+          .then((res: any) => {
+            const pat: Patient = res.patient || res;
+            if (pat && pat.id) {
+              setPatients((prev) => [
+                pat,
+                ...prev.filter((p) => p.id !== pat.id),
+              ]);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [editing?.patientId, patients]);
 
   // Load odontogram charts from backend
   const loadCharts = useCallback(async () => {
@@ -419,8 +462,8 @@ export function OdontogramRegister() {
     </span>
   );
 
-  // Save new or edited legend
-  function handleSaveLegend(e: React.FormEvent) {
+  // Save new or edited legend to database
+  async function handleSaveLegend(e: React.FormEvent) {
     e.preventDefault();
     if (!editingLegend) return;
 
@@ -436,69 +479,45 @@ export function OdontogramRegister() {
       return;
     }
 
-    const duplicate = legends.some(
-      (l) =>
-        l.id !== editingLegend.id &&
-        l.code.toLowerCase() === trimmedCode.toLowerCase(),
+    const isExisting = legends.some(
+      (l) => l.id === editingLegend.id && !l.id.startsWith("leg-new-"),
     );
-    if (duplicate) {
-      setLegendFormError(
-        t(
-          "A legend with this code already exists. Please choose another code.",
-        ),
-      );
-      return;
-    }
 
-    const isExisting = legends.some((l) => l.id === editingLegend.id);
-    let oldCode = "";
-
-    if (isExisting) {
-      const existing = legends.find((l) => l.id === editingLegend.id);
-      oldCode = existing?.code || "";
-    }
-
-    const updatedLegend: OdontogramLegend = {
-      ...editingLegend,
-      code: trimmedCode,
-      name: trimmedName,
-      color: editingLegend.color || "#10b981",
-    };
-
-    let updatedLegends: OdontogramLegend[];
-    if (isExisting) {
-      updatedLegends = legends.map((l) =>
-        l.id === updatedLegend.id ? updatedLegend : l,
-      );
-    } else {
-      updatedLegends = [...legends, updatedLegend];
-    }
-
-    saveLegends(updatedLegends);
-
-    if (oldCode && oldCode !== trimmedCode && editing) {
-      const nextConditions = { ...editing.conditions };
-      let changed = false;
-      for (const [tNum, cCode] of Object.entries(nextConditions)) {
-        if (cCode === oldCode) {
-          nextConditions[Number(tNum)] = trimmedCode;
-          changed = true;
-        }
+    try {
+      if (isExisting) {
+        await api(`odontograms/legends/${editingLegend.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            code: trimmedCode,
+            name: trimmedName,
+            color: editingLegend.color || "#10b981",
+            description: editingLegend.description || "",
+          }),
+        });
+      } else {
+        await api("odontograms/legends", {
+          method: "POST",
+          body: JSON.stringify({
+            code: trimmedCode,
+            name: trimmedName,
+            color: editingLegend.color || "#10b981",
+            description: editingLegend.description || "",
+          }),
+        });
       }
-      if (changed) {
-        setEditing({ ...editing, conditions: nextConditions });
-      }
+      await loadLegends();
+      setEditingLegend(null);
+      setLegendFormError("");
+    } catch (err: any) {
+      setLegendFormError(err?.message || t("Failed to save legend to server"));
     }
-
-    setEditingLegend(null);
-    setLegendFormError("");
   }
 
-  function handleDeleteLegend(legendId: string) {
+  async function handleDeleteLegend(legendId: string) {
     const target = legends.find((l) => l.id === legendId);
     if (!target) return;
-    if (target.code === "Healthy") {
-      alert(t("The Healthy condition legend cannot be removed."));
+    if (target.isDefault || target.code === "Healthy") {
+      alert(t("Standard clinical condition legends cannot be removed."));
       return;
     }
     if (
@@ -506,18 +525,22 @@ export function OdontogramRegister() {
         t("Are you sure you want to delete this odontogram legend?"),
       )
     ) {
-      saveLegends(legends.filter((l) => l.id !== legendId));
+      try {
+        await api(`odontograms/legends/${legendId}`, { method: "DELETE" });
+        await loadLegends();
+      } catch (err: any) {
+        alert(
+          err?.message ||
+            t(
+              "Failed to delete legend (it may be in use by active dental records).",
+            ),
+        );
+      }
     }
   }
 
-  function handleResetLegends() {
-    if (
-      window.confirm(
-        t("Reset all odontogram legends to the 11 default clinical labels?"),
-      )
-    ) {
-      saveLegends(defaultLegends);
-    }
+  async function handleResetLegends() {
+    await loadLegends();
   }
 
   // Delete Chart
@@ -1046,6 +1069,22 @@ export function OdontogramRegister() {
                   <span className="label">
                     {t("Patient")}: <b className="text-red-500">*</b>
                   </span>
+                  <div className="d-flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      className="field fs-7"
+                      placeholder={t("Search patient by name or MRN...")}
+                      value={patientSearch}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPatientSearch(val);
+                        searchPatients(val);
+                      }}
+                    />
+                    {isSearchingPatients && (
+                      <span className="spinner-border spinner-border-sm align-self-center text-primary" />
+                    )}
+                  </div>
                   <select
                     required
                     className="field"

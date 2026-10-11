@@ -197,6 +197,10 @@ async function main() {
     await page1.click('button:has-text("Add Odontogram")');
     await page1.waitForSelector("#odontogram-title", { timeout: 8000 });
 
+    // Test server-backed patient search input
+    await page1.fill('input[placeholder*="Search patient by name or MRN"]', patientName.slice(0, 5));
+    await page1.waitForTimeout(400);
+
     // Select Patient and Doctor
     await page1.selectOption('select.field:has(option[value=""]) >> nth=0', patientId);
     await page1.selectOption('select.field:has(option[value=""]) >> nth=1', doctorId);
@@ -288,6 +292,10 @@ async function main() {
     assert.ok(freshTable.includes(patientName) || freshTable.includes("Abebe"),
       "Fresh session without sessionStorage must load chart from PostgreSQL database");
 
+    // Verify custom legend IMP-Z persisted and appears in the key strip in fresh session
+    const freshKeyStrip = await page2.textContent(".form-card-container");
+    assert.ok(freshKeyStrip.includes("IMP-Z"), "Custom legend 'IMP-Z' must be visible in key strip in fresh session");
+
     // Open Edit modal to verify exact teeth markings loaded from backend
     await page2.click(`button[aria-label*="Edit odontogram"] >> nth=0`);
     await page2.waitForSelector("#odontogram-title", { timeout: 8000 });
@@ -301,6 +309,15 @@ async function main() {
     await page2.selectOption('label:has-text("Tooth Selector") select', "8");
     const tooth8Badge = await page2.textContent(".badge-available-stock");
     assert.ok(tooth8Badge.includes("B"), `Tooth 8 badge in fresh session must show B, got: ${tooth8Badge}`);
+
+    // Select Tooth 14 -> verify badge shows 'IMP-Z'
+    await page2.selectOption('label:has-text("Tooth Selector") select', "14");
+    const tooth14Badge = await page2.textContent(".badge-available-stock");
+    assert.ok(tooth14Badge.includes("IMP-Z"), `Tooth 14 badge in fresh session must show IMP-Z, got: ${tooth14Badge}`);
+
+    // Verify custom legend button exists in the palette in fresh session
+    const impZPaletteBtn = page2.locator('.dental-palette button:has-text("IMP-Z")');
+    assert.ok((await impZPaletteBtn.count()) > 0, "Custom legend 'IMP-Z' must be available in dental palette");
 
     const freshScreenshot = resolve(screenshotsDir, "03_odontogram_fresh_session_persistence.png");
     await page2.screenshot({ path: freshScreenshot, fullPage: true });
@@ -343,9 +360,14 @@ async function main() {
     const contentType = pdfResponse.headers()["content-type"];
     assert.ok(contentType?.includes("application/pdf"), `Expected application/pdf, got ${contentType}`);
     const pdfBytes = await pdfResponse.body();
-    assert.ok(pdfBytes.length > 200, "PDF payload must contain valid bytes");
+    assert.ok(pdfBytes.length > 50000, `PDF payload must be >50KB with embedded TrueType font, got ${pdfBytes.length}`);
     assert.equal(pdfBytes.subarray(0, 4).toString(), "%PDF", "Must begin with %PDF header");
-    console.log(`PASS: Journey 5 PDF endpoint returned valid %PDF payload (${pdfBytes.length} bytes).`);
+    const pdfStr = pdfBytes.toString("binary");
+    assert.ok(
+      pdfStr.includes("/CIDFontType2") || pdfStr.includes("/Type0") || pdfStr.includes("/Identity-H"),
+      "PDF must embed Type 0 / CIDFontType2 font",
+    );
+    console.log(`PASS: Journey 5 PDF endpoint returned valid %PDF payload (${pdfBytes.length} bytes) with Type 0 / CIDFont.`);
 
     // -------------------------------------------------------------
     // Journey 6: Clean Deletion & Real-Time Sync

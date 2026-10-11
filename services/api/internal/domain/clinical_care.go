@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -388,7 +389,8 @@ type OdontogramChart struct {
 	UpdatedBy   string         `json:"updatedBy"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
-	IsLegacy    bool           `json:"isLegacy"`
+	IsLegacy         bool            `json:"isLegacy"`
+	LegacyProvenance json.RawMessage `json:"legacyProvenance,omitempty"`
 }
 
 type SaveOdontogramChartInput struct {
@@ -436,6 +438,16 @@ func (i *SaveOdontogramChartInput) Validate() error {
 	return nil
 }
 
+func (i *SaveOdontogramChartInput) ValidateUpdate() error {
+	if err := i.Validate(); err != nil {
+		return err
+	}
+	if i.Version <= 0 {
+		return ErrValidation
+	}
+	return nil
+}
+
 type OdontogramEntry struct {
 	ID             string    `json:"id"`
 	PatientID      string    `json:"patientId"`
@@ -473,6 +485,45 @@ func (i *SetToothConditionInput) Validate() error {
 		return ErrValidation
 	}
 	if len(i.ProcedureNotes) > 1000 {
+		return ErrValidation
+	}
+	return nil
+}
+
+type OdontogramLegend struct {
+	ID          string    `json:"id"`
+	Code        string    `json:"code"`
+	Name        string    `json:"name"`
+	Color       string    `json:"color"`
+	Description string    `json:"description"`
+	IsDefault   bool      `json:"isDefault"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type SaveOdontogramLegendInput struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
+}
+
+func (i *SaveOdontogramLegendInput) Validate() error {
+	i.Code = strings.TrimSpace(i.Code)
+	i.Name = strings.TrimSpace(i.Name)
+	i.Color = strings.TrimSpace(i.Color)
+	i.Description = strings.TrimSpace(i.Description)
+
+	if len(i.Code) < 1 || len(i.Code) > 16 {
+		return ErrValidation
+	}
+	if len(i.Name) < 1 || len(i.Name) > 100 {
+		return ErrValidation
+	}
+	if len(i.Color) < 1 || len(i.Color) > 32 {
+		return ErrValidation
+	}
+	if len(i.Description) > 1000 {
 		return ErrValidation
 	}
 	return nil
