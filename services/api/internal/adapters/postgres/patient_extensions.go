@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -354,15 +355,74 @@ func (s Store) PatientSmartCards(ctx context.Context, patientID string) ([]domai
 }
 
 func (s Store) IssueSmartCard(ctx context.Context, a domain.Actor, card domain.PatientSmartCard) (domain.PatientSmartCard, error) {
-	err := s.DB.QueryRow(ctx, `
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.PatientSmartCard{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	// Lock patient and ensure persistent patient_unique_id exists
+	var uniqueID *string
+	err = tx.QueryRow(ctx, `SELECT patient_unique_id FROM patient WHERE id = $1 FOR UPDATE`, card.PatientID).Scan(&uniqueID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.PatientSmartCard{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.PatientSmartCard{}, err
+	}
+
+	if uniqueID == nil || *uniqueID == "" {
+		var newUID string
+		err = tx.QueryRow(ctx, `SELECT 'P-' || lpad(nextval('patient_unique_id_seq')::text, 5, '0')`).Scan(&newUID)
+		if err != nil {
+			return domain.PatientSmartCard{}, err
+		}
+		_, err = tx.Exec(ctx, `UPDATE patient SET patient_unique_id = $1 WHERE id = $2`, newUID, card.PatientID)
+		if err != nil {
+			return domain.PatientSmartCard{}, err
+		}
+		card.PatientUniqueID = newUID
+	} else {
+		card.PatientUniqueID = *uniqueID
+	}
+
+	// Match template if specified
+	var tmplID *string
+	if card.TemplateName != "" {
+		var tid string
+		err = tx.QueryRow(ctx, `SELECT id::text FROM patient_id_card_template WHERE lower(name) = lower($1) OR id::text = $1`, card.TemplateName).Scan(&tid)
+		if err == nil {
+			tmplID = &tid
+			_, _ = tx.Exec(ctx, `UPDATE patient SET smart_card_template_id = $1::uuid WHERE id = $2`, tid, card.PatientID)
+		}
+	}
+
+	// Revoke prior active cards atomically
+	_, err = tx.Exec(ctx, `
+		UPDATE patient_smart_card
+		SET status = 'revoked', revoked_reason = 'superceded'
+		WHERE patient_id = $1 AND status = 'active'
+	`, card.PatientID)
+	if err != nil {
+		return domain.PatientSmartCard{}, err
+	}
+
+	err = tx.QueryRow(ctx, `
 		INSERT INTO patient_smart_card (
-			patient_id, card_number, qr_token, template_name, status, expires_at, issued_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+			patient_id, card_number, qr_token, template_name, template_id, status, expires_at, issued_by
+		) VALUES ($1, $2, $3, $4, $5::uuid, $6, $7, $8)
 		RETURNING id, issued_at
-	`, card.PatientID, card.CardNumber, card.QRToken, card.TemplateName, card.Status, card.ExpiresAt, card.IssuedBy,
+	`, card.PatientID, card.CardNumber, card.QRToken, card.TemplateName, tmplID, card.Status, card.ExpiresAt, card.IssuedBy,
 	).Scan(&card.ID, &card.IssuedAt)
 	if err != nil {
 		return domain.PatientSmartCard{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.PatientSmartCard{}, err
+	}
+	if tmplID != nil {
+		card.TemplateID = *tmplID
 	}
 	return card, nil
 }
@@ -388,6 +448,49 @@ func (s Store) GenerateSmartCards(ctx context.Context, a domain.Actor, in domain
 		return domain.GenerateSmartCardsResult{}, err
 	}
 	defer tx.Rollback(ctx)
+
+	if in.IdempotencyKey != "" {
+		// Advisory transaction lock to serialize concurrent requests with the same key
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "smart_cards_gen:"+a.ID+":"+in.IdempotencyKey); err != nil {
+			return domain.GenerateSmartCardsResult{}, err
+		}
+
+		var existingTmplID, existingMode string
+		var existingPatientID *string
+		var rawResp []byte
+		err := tx.QueryRow(ctx, `
+			SELECT template_id::text, mode, patient_id::text, response_json
+			FROM smart_card_generation_request
+			WHERE actor_id = $1 AND idempotency_key = $2
+			FOR UPDATE
+		`, a.ID, in.IdempotencyKey).Scan(&existingTmplID, &existingMode, &existingPatientID, &rawResp)
+		if err == nil {
+			// Row exists - verify payload matching
+			pMatch := (existingPatientID == nil && in.PatientID == "") || (existingPatientID != nil && *existingPatientID == in.PatientID)
+			if existingTmplID != in.TemplateID || existingMode != in.Mode || !pMatch {
+				return domain.GenerateSmartCardsResult{}, domain.ErrConflict
+			}
+			var cached domain.GenerateSmartCardsResult
+			if err := json.Unmarshal(rawResp, &cached); err != nil {
+				return domain.GenerateSmartCardsResult{}, err
+			}
+			if len(cached.Cards) > 0 {
+				var activeCount int
+				cardIDs := make([]string, len(cached.Cards))
+				for i, c := range cached.Cards {
+					cardIDs[i] = c.ID
+				}
+				err := tx.QueryRow(ctx, `SELECT count(*) FROM patient_smart_card WHERE id = ANY($1::uuid[]) AND status = 'active'`, cardIDs).Scan(&activeCount)
+				if err == nil && activeCount == len(cached.Cards) {
+					return cached, tx.Commit(ctx)
+				}
+			} else {
+				return cached, tx.Commit(ctx)
+			}
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return domain.GenerateSmartCardsResult{}, err
+		}
+	}
 
 	// Fetch template
 	var tmpl domain.PatientIDCardTemplate
@@ -572,20 +675,54 @@ func (s Store) GenerateSmartCards(ctx context.Context, a domain.Actor, in domain
 		})
 	}
 
+	result := domain.GenerateSmartCardsResult{
+		GeneratedCount: len(issuedList),
+		Cards:          issuedList,
+	}
+
+	if in.IdempotencyKey != "" {
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return domain.GenerateSmartCardsResult{}, err
+		}
+		var pIDArg *string
+		if in.PatientID != "" {
+			pIDArg = &in.PatientID
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO smart_card_generation_request (
+				actor_id, idempotency_key, template_id, mode, patient_id, response_json
+			) VALUES ($1, $2, $3::uuid, $4, $5::uuid, $6)
+			ON CONFLICT (actor_id, idempotency_key) DO UPDATE
+			SET response_json = EXCLUDED.response_json
+		`, a.ID, in.IdempotencyKey, in.TemplateID, in.Mode, pIDArg, encoded)
+		if err != nil {
+			return domain.GenerateSmartCardsResult{}, err
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.GenerateSmartCardsResult{}, err
 	}
 
-	return domain.GenerateSmartCardsResult{
-		GeneratedCount: len(issuedList),
-		Cards:          issuedList,
-	}, nil
+	return result, nil
 }
 
 func (s Store) ListIssuedCards(ctx context.Context, a domain.Actor, filter domain.ListIssuedCardsFilter) (domain.IssuedCardsPage, error) {
 	where := []string{"sc.status = 'active'"}
 	args := []any{}
 	argIdx := 1
+
+	// Enforce patient access scope:
+	// - admin and receptionist see all cards.
+	// - doctor sees only cards for patients assigned to them (clinician_user_id = a.ID).
+	// - patient sees only cards for their own portal account (patient_portal_owner(p.id) = a.ID).
+	where = append(where, fmt.Sprintf(
+		`($%d IN ('admin', 'receptionist') OR ($%d = 'doctor' AND p.clinician_user_id = $%d) OR ($%d = 'patient' AND patient_portal_owner(p.id) = $%d))`,
+		argIdx, argIdx, argIdx+1, argIdx, argIdx+1,
+	))
+	args = append(args, a.Role, a.ID)
+	argIdx += 2
 
 	if filter.TemplateID != "" {
 		where = append(where, fmt.Sprintf("sc.template_id = $%d::uuid", argIdx))
@@ -682,14 +819,10 @@ func (s Store) DeleteCardAssignment(ctx context.Context, a domain.Actor, cardID 
 	}
 	defer tx.Rollback(ctx)
 
+	// Consistent lock order: first resolve patient_id for the target card
 	var patientID string
-	var status string
-	err = tx.QueryRow(ctx, `
-		SELECT patient_id, status
-		FROM patient_smart_card
-		WHERE id = $1
-		FOR UPDATE
-	`, cardID).Scan(&patientID, &status)
+	var cardStatus string
+	err = tx.QueryRow(ctx, `SELECT patient_id, status FROM patient_smart_card WHERE id = $1`, cardID).Scan(&patientID, &cardStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrNotFound
 	}
@@ -697,22 +830,45 @@ func (s Store) DeleteCardAssignment(ctx context.Context, a domain.Actor, cardID 
 		return err
 	}
 
-	// Preserve patient and patient_unique_id, but clear template assignment
-	_, err = tx.Exec(ctx, `
-		UPDATE patient
-		SET smart_card_template_id = NULL
-		WHERE id = $1
-	`, patientID)
+	// Lock patient row FIRST (consistent with GenerateSmartCards patient-then-card lock order)
+	var currentTmplID *string
+	err = tx.QueryRow(ctx, `SELECT smart_card_template_id::text FROM patient WHERE id = $1 FOR UPDATE`, patientID).Scan(&currentTmplID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrNotFound
+	}
 	if err != nil {
 		return err
 	}
 
-	// Revoke the card so its QR credential can no longer be verified
+	// Lock card row
+	err = tx.QueryRow(ctx, `SELECT status FROM patient_smart_card WHERE id = $1 FOR UPDATE`, cardID).Scan(&cardStatus)
+	if err != nil {
+		return err
+	}
+
+	// Stale deletion check:
+	// If the card is already inactive or revoked (e.g. from an earlier reassignment),
+	// deleting it is a safe no-op that preserves the current active assignment and card.
+	if cardStatus != "active" {
+		return tx.Commit(ctx)
+	}
+
+	// Revoke this active card
 	_, err = tx.Exec(ctx, `
 		UPDATE patient_smart_card
 		SET status = 'revoked', revoked_reason = 'Card assignment removed'
 		WHERE id = $1
 	`, cardID)
+	if err != nil {
+		return err
+	}
+
+	// Clear patient's template assignment while preserving patient record and unique ID
+	_, err = tx.Exec(ctx, `
+		UPDATE patient
+		SET smart_card_template_id = NULL
+		WHERE id = $1
+	`, patientID)
 	if err != nil {
 		return err
 	}
@@ -781,13 +937,17 @@ func (s Store) VerifySmartCardQR(ctx context.Context, qrToken string) (domain.Sm
 		PatientName: patientName,
 	}
 
-	// Expose only authorized fields based on template toggles
-	allowUnique := tPatientUniqueID == nil || *tPatientUniqueID
-	allowEmail := tEmail == nil || *tEmail
-	allowPhone := tPhone == nil || *tPhone
-	allowDOB := tDOB == nil || *tDOB
-	allowBlood := tBloodGroup == nil || *tBloodGroup
-	allowAddress := tAddress == nil || *tAddress
+	// Conservative legacy / missing-template disclosure policy:
+	// If a card has no template (sc.template_id is NULL), do NOT interpret a missing template
+	// as permission for every field. Demographics are strictly omitted unless an explicit template policy allows them.
+	hasTemplate := tEmail != nil || tPhone != nil || tDOB != nil || tBloodGroup != nil || tAddress != nil || tPatientUniqueID != nil
+
+	allowUnique := (hasTemplate && (tPatientUniqueID == nil || *tPatientUniqueID)) || (!hasTemplate && patientUniqueID != "")
+	allowEmail := hasTemplate && tEmail != nil && *tEmail
+	allowPhone := hasTemplate && tPhone != nil && *tPhone
+	allowDOB := hasTemplate && tDOB != nil && *tDOB
+	allowBlood := hasTemplate && tBloodGroup != nil && *tBloodGroup
+	allowAddress := hasTemplate && tAddress != nil && *tAddress
 
 	if allowUnique {
 		res.PatientUniqueID = patientUniqueID

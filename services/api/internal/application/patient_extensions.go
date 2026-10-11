@@ -195,7 +195,7 @@ func (s PatientExtensionsService) GenerateSmartCards(ctx context.Context, a doma
 }
 
 func (s PatientExtensionsService) ListIssuedCards(ctx context.Context, a domain.Actor, filter domain.ListIssuedCardsFilter) (domain.IssuedCardsPage, error) {
-	if !a.Can("patients.read") && a.Role != "admin" && a.Role != "receptionist" && a.Role != "doctor" {
+	if !a.Can("patients.read") && a.Role != "admin" && a.Role != "receptionist" && a.Role != "doctor" && a.Role != "patient" {
 		return domain.IssuedCardsPage{}, domain.ErrForbidden
 	}
 	if filter.Page <= 0 {

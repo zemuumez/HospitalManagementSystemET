@@ -144,13 +144,18 @@ func (i *IssueSmartCardInput) Validate() error {
 }
 
 type GenerateSmartCardsInput struct {
-	TemplateID string `json:"templateId"`
-	Mode       string `json:"mode"` // "all", "single", "unassigned"
-	PatientID  string `json:"patientId,omitempty"`
+	TemplateID     string `json:"templateId"`
+	Mode           string `json:"mode"` // "all", "single", "unassigned"
+	PatientID      string `json:"patientId,omitempty"`
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
 }
 
 func (g *GenerateSmartCardsInput) Validate() error {
 	g.Mode = strings.ToLower(strings.TrimSpace(g.Mode))
+	g.IdempotencyKey = strings.TrimSpace(g.IdempotencyKey)
+	if len(g.IdempotencyKey) > 128 {
+		return ErrValidation
+	}
 	if !UUIDPattern.MatchString(g.TemplateID) {
 		return ErrValidation
 	}

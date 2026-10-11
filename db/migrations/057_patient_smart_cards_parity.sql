@@ -35,3 +35,16 @@ VALUES
   ('Standard', '#f4bf16', true, true, true, true, true, true),
   ('VIP', '#6571ff', true, true, false, true, false, true)
 ON CONFLICT (name) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS smart_card_generation_request (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id        text NOT NULL REFERENCES "user"(id),
+  idempotency_key text NOT NULL,
+  template_id     uuid NOT NULL REFERENCES patient_id_card_template(id) ON DELETE CASCADE,
+  mode            text NOT NULL CHECK (mode IN ('all', 'single', 'unassigned')),
+  patient_id      uuid REFERENCES patient(id) ON DELETE SET NULL,
+  response_json   jsonb NOT NULL,
+  created_at      timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE(actor_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_smart_card_gen_req_actor_key ON smart_card_generation_request(actor_id, idempotency_key);

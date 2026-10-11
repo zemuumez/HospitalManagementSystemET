@@ -86,6 +86,9 @@ func (s Server) patientExtensions(w http.ResponseWriter, r *http.Request, a doma
 		if !decode(w, r, &input) {
 			return true
 		}
+		if key := strings.TrimSpace(r.Header.Get("Idempotency-Key")); key != "" && input.IdempotencyKey == "" {
+			input.IdempotencyKey = key
+		}
 		res, err := s.PatientExt.GenerateSmartCards(r.Context(), a, input)
 		if err != nil {
 			fail(w, err)

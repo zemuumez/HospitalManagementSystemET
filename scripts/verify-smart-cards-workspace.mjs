@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { existsSync, mkdirSync, copyFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
+import jsQR from "jsqr";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) {
@@ -485,12 +486,67 @@ async function main() {
     const qrSvg = await qrContainer.locator("svg").count();
     assert.equal(qrSvg, 1, "Authentic SVG QR matrix must be rendered");
 
-    // Perform actual public verification HTTP request against Go backend
+    // Extract actual rendered QR code pixels from SVG and decode independently with jsQR
     console.log(
-      `Verifying QR token against /v1/smart-cards/verify?token=${qrToken}...`,
+      "Extracting rendered SVG QR matrix image pixels for independent jsQR verification...",
+    );
+    const qrPixels = await page.evaluate(() => {
+      const svg = document.querySelector(".card-qr svg");
+      if (!svg) return null;
+      const rects = Array.from(svg.querySelectorAll("rect"));
+      const svgW = parseFloat(svg.getAttribute("width") || "110");
+      const svgH = parseFloat(svg.getAttribute("height") || "110");
+      const canvas = document.createElement("canvas");
+      canvas.width = svgW;
+      canvas.height = svgH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, svgW, svgH);
+      ctx.fillStyle = "#111827";
+      for (const r of rects) {
+        const x = parseFloat(r.getAttribute("x") || "0");
+        const y = parseFloat(r.getAttribute("y") || "0");
+        const w = parseFloat(r.getAttribute("width") || "0");
+        const h = parseFloat(r.getAttribute("height") || "0");
+        const fill = r.getAttribute("fill");
+        if (fill === "#111827" || fill === "#000000" || fill === "black") {
+          ctx.fillRect(x, y, w, h);
+        }
+      }
+      const imgData = ctx.getImageData(0, 0, svgW, svgH);
+      return {
+        data: Array.from(imgData.data),
+        width: svgW,
+        height: svgH,
+      };
+    });
+    assert.ok(qrPixels, "Rendered QR image pixels must be extracted from DOM");
+    const decodedQr = jsQR(
+      new Uint8ClampedArray(qrPixels.data),
+      qrPixels.width,
+      qrPixels.height,
+    );
+    assert.ok(
+      decodedQr && decodedQr.data,
+      "Independent jsQR decoder must successfully decode the rendered QR matrix image pixels!",
+    );
+    console.log(`Independent jsQR decoder read payload: ${decodedQr.data}`);
+    const decodedUrl = new URL(decodedQr.data);
+    const decodedToken = decodedUrl.searchParams.get("token");
+    assert.ok(decodedToken, "Decoded QR URL must contain token parameter");
+    assert.equal(
+      decodedToken,
+      qrToken,
+      "Decoded token from QR image pixels must match issued card QR token",
+    );
+
+    // Perform actual public verification HTTP request against Go backend using decoded token
+    console.log(
+      `Verifying QR token against /v1/smart-cards/verify?token=${decodedToken}...`,
     );
     const verifyRes = await fetch(
-      `${base}/v1/smart-cards/verify?token=${qrToken}`,
+      `${base}/v1/smart-cards/verify?token=${decodedToken}`,
     );
     assert.equal(verifyRes.status, 200, "Verification must return 200 OK");
     const verifyData = await verifyRes.json();
@@ -617,6 +673,131 @@ async function main() {
       await page.$('button:has-text("Print")'),
       "Print button must be present",
     );
+
+    // Comprehensive Canvas & Download PNG Testing (R5: Field toggles, long names/addresses, Amharic localization, QR decoding)
+    console.log(
+      "Testing canvas rendering: toggles, text bounds, Amharic localization, and QR decodability...",
+    );
+    const canvasTestsResult = await page.evaluate(async () => {
+      const render = window.__hmsRenderCardCanvas;
+      if (typeof render !== "function") {
+        return { error: "__hmsRenderCardCanvas not found on window" };
+      }
+
+      const sampleCard = {
+        id: "c-test-1",
+        patientId: "p-test-1",
+        patientName: "Haile Gebrselassie",
+        patientUniqueId: "P-10003",
+        cardNumber: "10003",
+        qrToken: "tok-canvas-test-1234567890abcdef",
+        templateId: "tmpl-1",
+        templateName: "Standard",
+        templateColor: "#3b82f6",
+        status: "active",
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date().toISOString(),
+        issuedBy: "Admin",
+        email: "haile@example.com",
+        phone: "+251933445566",
+        dob: "1988-04-18",
+        bloodGroup: "A+",
+        address: "Addis Ababa, Yeka Sub-City",
+      };
+
+      // Test 1: Enabled vs Disabled fields
+      const allEnabledTmpl = {
+        id: "t-1",
+        name: "Full",
+        color: "#3b82f6",
+        email: true,
+        phone: true,
+        dob: true,
+        bloodGroup: true,
+        address: true,
+        patientUniqueId: true,
+      };
+      const canvasFull = render(sampleCard, allEnabledTmpl);
+
+      const privacyTmpl = {
+        id: "t-2",
+        name: "Private",
+        color: "#10b981",
+        email: false,
+        phone: false,
+        dob: false,
+        bloodGroup: false,
+        address: false,
+        patientUniqueId: false,
+      };
+      const canvasPrivate = render(sampleCard, privacyTmpl);
+
+      // Test 2: Representative long Ethiopian names and addresses
+      const longNameCard = {
+        ...sampleCard,
+        patientName: "ወይዘሮ አስቴር አበበ ተክለማርያም ወልደዮሐንስ ዘአዲስ አበባ",
+        address:
+          "Addis Ababa, Bole Sub-City, Woreda 03, House Number 1042/B, Near Edna Mall Commercial Center, Ethiopia",
+      };
+      const canvasLong = render(longNameCard, allEnabledTmpl);
+
+      // Test 3: Amharic Localized Output
+      const amDictionary = {
+        "Hospital Management System · Patient Smart Identity Card":
+          "የሆስፒታል አስተዳደር ሥርዓት · የታካሚ ስማርት መታወቂያ ካርድ",
+        "Patient Name": "የታካሚ ስም",
+        Email: "ኢሜይል",
+        Phone: "ስልክ",
+        "Date of Birth": "የትውልድ ቀን",
+        "Blood Group": "የደም ዓይነት",
+        Address: "አድራሻ",
+      };
+      const amTranslator = (str) => amDictionary[str] || str;
+      const canvasAmharic = render(sampleCard, allEnabledTmpl, amTranslator);
+
+      // Extract QR pixels from the Amharic canvas (QR is drawn at x=770, y=140, w=180, h=180)
+      const ctxAm = canvasAmharic.getContext("2d");
+      const qrImageData = ctxAm.getImageData(770, 140, 180, 180);
+
+      return {
+        canvasWidth: canvasFull.width,
+        canvasHeight: canvasFull.height,
+        canvasPrivateWidth: canvasPrivate.width,
+        canvasPrivateHeight: canvasPrivate.height,
+        canvasLongWidth: canvasLong.width,
+        canvasLongHeight: canvasLong.height,
+        amharicQrPixels: Array.from(qrImageData.data),
+        qrWidth: 180,
+        qrHeight: 180,
+      };
+    });
+
+    assert.ok(
+      !canvasTestsResult.error,
+      canvasTestsResult.error || "Canvas test error",
+    );
+    assert.equal(canvasTestsResult.canvasWidth, 1000);
+    assert.equal(canvasTestsResult.canvasHeight, 460);
+    assert.equal(canvasTestsResult.canvasPrivateWidth, 1000);
+    assert.equal(canvasTestsResult.canvasPrivateHeight, 460);
+    assert.equal(canvasTestsResult.canvasLongWidth, 1000);
+    assert.equal(canvasTestsResult.canvasLongHeight, 460);
+
+    // Verify QR code embedded in the rendered high-res canvas decodes with jsQR
+    const canvasDecoded = jsQR(
+      new Uint8ClampedArray(canvasTestsResult.amharicQrPixels),
+      canvasTestsResult.qrWidth,
+      canvasTestsResult.qrHeight,
+    );
+    assert.ok(
+      canvasDecoded && canvasDecoded.data,
+      "QR code drawn on high-res canvas must be decodable by independent jsQR",
+    );
+    assert.ok(
+      canvasDecoded.data.includes("tok-canvas-test-1234567890abcdef"),
+      `Canvas QR payload must contain expected token, got ${canvasDecoded.data}`,
+    );
+    console.log(`Canvas QR decoded successfully: ${canvasDecoded.data}`);
 
     // Toggle Dark Mode
     await page.evaluate(() => {

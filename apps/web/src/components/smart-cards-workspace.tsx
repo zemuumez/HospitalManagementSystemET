@@ -313,14 +313,22 @@ export function SmartCardsWorkspace({
 
     setGenerating(true);
     setGenerateError("");
+    const idempotencyKey =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `card-gen-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     try {
       const res = await fetch("/api/hms/smart-cards/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify({
           templateId: generateTemplateId,
           mode: generateMode,
           patientId: generateMode === "single" ? generatePatientId : undefined,
+          idempotencyKey,
         }),
       });
 
@@ -714,7 +722,9 @@ export function SmartCardsWorkspace({
                         </button>
                         <button
                           aria-label={`Download card ${card.patientName}`}
-                          onClick={() => downloadCardPng(card, activeTemplate)}
+                          onClick={() =>
+                            downloadCardPng(card, activeTemplate, t)
+                          }
                         >
                           <Download size={18} />
                         </button>
@@ -1043,7 +1053,7 @@ export function SmartCardsWorkspace({
             <div className="modal-footer flex gap-3 justify-end mt-4">
               <button
                 className="secondary flex items-center gap-2"
-                onClick={() => downloadCardPng(selectedCard, activeTemplate)}
+                onClick={() => downloadCardPng(selectedCard, activeTemplate, t)}
               >
                 <Download size={16} />
                 {t("Download")}
@@ -1172,12 +1182,17 @@ export function SmartCardView({
 
 // ─── HIGH-RES PNG DOWNLOAD CANVAS BUILDER ─────────────────────────────────────
 
-async function downloadCardPng(card: IssuedCard, template: CardTemplate) {
+export function renderCardCanvas(
+  card: IssuedCard,
+  template: CardTemplate,
+  t?: (s: string) => string,
+): HTMLCanvasElement {
+  const tr = t || ((s: string) => s);
   const canvas = document.createElement("canvas");
   canvas.width = 1000;
   canvas.height = 460;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return canvas;
 
   // Background
   ctx.fillStyle = "#ffffff";
@@ -1193,8 +1208,8 @@ async function downloadCardPng(card: IssuedCard, template: CardTemplate) {
   ctx.fillText("ULSHMS", 35, 62);
   ctx.font = "18px Arial, sans-serif";
   ctx.fillText(
-    "Hospital Management System · Patient Smart Identity Card",
-    220,
+    tr("Hospital Management System · Patient Smart Identity Card"),
+    200,
     62,
   );
 
@@ -1208,10 +1223,12 @@ async function downloadCardPng(card: IssuedCard, template: CardTemplate) {
   ctx.font = "bold 34px Arial, sans-serif";
   ctx.textAlign = "center";
   const initials = card.patientName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2);
+    ? card.patientName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+    : "PT";
   ctx.fillText(initials, 85, 242);
   ctx.textAlign = "left";
 
@@ -1219,19 +1236,32 @@ async function downloadCardPng(card: IssuedCard, template: CardTemplate) {
   ctx.fillStyle = "#1e293b";
   ctx.font = "20px Arial, sans-serif";
 
-  const rows: [string, string][] = [["Patient Name", card.patientName]];
-  if (template.email && card.email) rows.push(["Email", card.email]);
-  if (template.phone && card.phone) rows.push(["Phone", card.phone]);
-  if (template.dob && card.dob) rows.push(["Date of Birth", card.dob]);
+  const rows: [string, string][] = [[tr("Patient Name"), card.patientName]];
+  if (template.email && card.email) rows.push([tr("Email"), card.email]);
+  if (template.phone && card.phone) rows.push([tr("Phone"), card.phone]);
+  if (template.dob && card.dob) rows.push([tr("Date of Birth"), card.dob]);
   if (template.bloodGroup && card.bloodGroup)
-    rows.push(["Blood Group", card.bloodGroup]);
-  if (template.address && card.address) rows.push(["Address", card.address]);
+    rows.push([tr("Blood Group"), card.bloodGroup]);
+  if (template.address && card.address)
+    rows.push([tr("Address"), card.address]);
 
   rows.forEach(([label, value], i) => {
     ctx.fillStyle = "#64748b";
     ctx.fillText(`${label}:`, 170, 150 + i * 40);
     ctx.fillStyle = "#0f172a";
-    ctx.fillText(value, 320, 150 + i * 40);
+    // Check text bounds; truncate long values if necessary to preserve card margin
+    let displayVal = value;
+    const maxValWidth = 420;
+    if (ctx.measureText(displayVal).width > maxValWidth) {
+      while (
+        displayVal.length > 0 &&
+        ctx.measureText(displayVal + "…").width > maxValWidth
+      ) {
+        displayVal = displayVal.slice(0, -1);
+      }
+      displayVal += "…";
+    }
+    ctx.fillText(displayVal, 330, 150 + i * 40);
   });
 
   // QR Code offscreen canvas render
@@ -1252,9 +1282,25 @@ async function downloadCardPng(card: IssuedCard, template: CardTemplate) {
     ctx.fillText(card.patientUniqueId, 860, 355);
   }
 
-  // Trigger download
+  return canvas;
+}
+
+export async function downloadCardPng(
+  card: IssuedCard,
+  template: CardTemplate,
+  t?: (s: string) => string,
+) {
+  const canvas = renderCardCanvas(card, template, t);
   const a = document.createElement("a");
   a.href = canvas.toDataURL("image/png");
   a.download = `patient-card-${card.patientUniqueId || card.cardNumber}.png`;
   a.click();
+}
+
+if (typeof window !== "undefined") {
+  (
+    window as unknown as {
+      __hmsRenderCardCanvas?: typeof renderCardCanvas;
+    }
+  ).__hmsRenderCardCanvas = renderCardCanvas;
 }
