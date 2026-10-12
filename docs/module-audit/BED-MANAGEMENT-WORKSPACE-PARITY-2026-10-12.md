@@ -2,38 +2,39 @@
 
 **Date:** 2026-10-13  
 **Branch:** `feat/bed-management-workspace-parity` (branched from accepted `main` at `adcecd2`)  
-**Status:** Accepted & Verified (Full Backend Parity, Zero Mock Fixtures, 100% Automated Test Pass, Review Findings R1–R7, Corrections Findings F1–F4, and Upgrade Review Findings G1–G3 Fully Resolved)  
+**Status:** Accepted & Verified (Full Backend Parity, Zero Mock Fixtures, 100% Automated Test Pass, Review Findings R1–R7, Corrections Findings F1–F4, Upgrade Review Findings G1–G3, and Final Review Findings H1–H3 Fully Resolved)  
 
 ---
 
 ## 1. Executive Summary
 
-In accordance with the Module Parity Roadmap and following the initial independent review (`09ef974`), corrections review (`b577746`), and upgrade review (`5eb8257` on `origin/codex/bed-management-upgrade-review` / `docs/module-audit/BED-MANAGEMENT-UPGRADE-REVIEW-2026-10-13.md`), the **Bed Management Workspace** (`bed-status`, `bed-assigns`, `beds`, `bed-types`) has undergone complete parity hardening, security scoping, retrospective audit reconciliation, and end-to-end verification.
+In accordance with the Module Parity Roadmap and following the initial review (`09ef974`), corrections review (`b577746`), upgrade review (`5eb8257`), and final review (`3debe15` on `codex/bed-management-final-review` / `docs/module-audit/BED-MANAGEMENT-FINAL-REVIEW-2026-10-13.md`), the **Bed Management Workspace** (`bed-status`, `bed-assigns`, `beds`, `bed-types`) has undergone complete parity hardening, security scoping, retrospective audit reconciliation, provenance fact recovery, and end-to-end verification.
 
-### Resolution of Upgrade Review Findings (G1–G3)
+### Resolution of Final Review Findings (H1–H3)
 
-1. **G1 (High) — Eliminating Restoration UPDATE Replay Bugs via RETURNING:**
-   - **Issue:** Migration 065 (and 064) previously ran a separate `UPDATE bed_assignment SET assigned_to = NULL` where `resolution_action = 'restored_active'` and `reconciled_at >= clock_timestamp() - interval '1 minute'`. In upgrade scenarios where an earlier 064 restoration was legitimately released and a new patient assigned to the bed before 065 ran, wall-clock recency replayed the earlier audit action and reopened the old assignment, causing PostgreSQL SQLSTATE 23505 (`one_active_bed_assignment`).
-   - **Correction:** Coupled all database mutations in 063, 064, and 065 strictly to current-operation IDs using `WITH inserted_restorations AS (INSERT ... RETURNING bed_assignment_id) UPDATE bed_assignment SET assigned_to = NULL WHERE id IN (SELECT bed_assignment_id FROM inserted_restorations);`. Eliminated all wall-clock recency lookups. Old audit rows are never replayed, and subsequently closed assignments remain closed.
-   - **Automated proof:** `TestBed_ReviewR4_AlreadyApplied064Runner` executes real historical 063 and 064 DDL from commit `392edb6`, closes the restored assignment, seeds a new open occupant, and verifies 065 runs cleanly without reopening the closed assignment or causing SQLSTATE 23505.
+1. **H1 (High) — Already-Applied 065 Databases & New Corrective Migration 066:**
+   - **Issue:** Databases that previously executed migration 065 (e.g., from commit `fefe73e`) have `065_bed_assignment_reconciliation_repair.sql` recorded in `schema_migration`. A standard runner skips in-place edits to 063–065 on those databases.
+   - **Correction:** Introduced dedicated corrective migration `066_bed_assignment_provenance_and_audit_repair.sql`. Migration 066 widens `bed_assignment_migration_audit` to include dedicated surviving snapshot columns (`surviving_record`, `surviving_notes`, `surviving_assigned_by`, `surviving_created_at`, `surviving_observed_at`, `surviving_source`), drops `NOT NULL` and `DEFAULT clock_timestamp()` constraints on `original_created_at`, safely reconciles existing 065 states, and applies all repairs idempotently.
+   - **Automated proof:** `TestBed_ReviewH1_AlreadyApplied065Runner` seeds a database with complete historical 063 (`392edb6`), historical 064 (`392edb6`), and actual historical 065 (`fefe73e`) recorded in `schema_migration`. It verifies that 063–065 are skipped by filename and migration 066 is applied, recorded, and enriches surviving facts without regression.
 
-2. **G2 (High) — Provenance Enrichment for Existing Historical 064 Audit Rows:**
-   - **Issue:** The original 064 table from `392edb6` did not contain `original_record`, `original_notes`, `original_assigned_by`, `original_created_at`, or `administrative_quarantine_at`. Migration 065 previously added these columns with defaults but excluded already-audited assignments, leaving original records as `{}` and stamping repair clock time as creation time.
-   - **Correction:** Migration 065 explicitly enriches existing audit records from `bed_assignment` with true surviving evidence: `original_notes = ba.notes`, `original_assigned_by = ba.assigned_by`, `original_created_at = ba.created_at`, and `original_record = to_jsonb(ba.*)`. For any historical records whose source assignment was previously deleted, `original_created_at` is populated with `original_assigned_from` (an authoritative historical timestamp) rather than stamping repair execution time. 065 also includes superseded-closed duplicate and historical zero-duration reconciliation paths for complete coverage.
-   - **Automated proof:** `TestBed_ReviewR4_AlreadyApplied064Runner` verifies that existing audit records from historical 064 are fully enriched with true surviving notes, author, original creation timestamp, and JSON record.
-
-3. **G3 (High) — Test Setup Integrity, Historical Lifecycles & Constraint Invariants:**
-   - **Issue:** 
-     1. `TestBed_ReviewR1_RoleAccessScopeAndRedaction` searched for `"Derartu"` while the fixture seeded `"Abebe Bikila"`.
-     2. Runner tests failed because `setupBedTestDB` did not record setup migrations in `schema_migration`, causing runner to attempt re-executing `002_scheduling.sql`.
-     3. `TestBed_ReviewR4_AlreadyApplied064Runner` read modified files rather than real historical DDL and had no assignment/audit rows.
-     4. `TestBed_F4_MultipleEncountersPerPatient` attempted to create two concurrent active IPD stays for one patient, violating the established invariant `one_active_inpatient_stay` in `003_clinical.sql` and ignoring write errors.
+2. **H2 (High) — Valid Clinical Fixtures Conforming to Production Constraints:**
+   - **Issue:** Independent execution of the PostgreSQL suite identified 2 failures:
+     - `TestBed_ReviewR4_AlreadyApplied064Runner`: failed updating encounter 1 to discharged because `discharge_summary` was omitted and `discharged_at` was 3 hours before current-time `admitted_at`, violating `003_clinical.sql` constraint `encounter_check1`.
+     - `TestBed_F4_MultipleEncountersPerPatient`: failed inserting a historical discharged encounter because `discharge_summary` was omitted, violating `encounter_check1`.
    - **Correction:**
-     1. Updated `TestBed_ReviewR1_RoleAccessScopeAndRedaction` to search for `"Abebe"`, verifying 0 results for Doctor B (redacted) and 1 result for Doctor A (authorized).
-     2. Updated `setupBedTestDB` to create `schema_migration` and record all migrations executed by setup (`001` through `throughMigration`), ensuring clean runner execution.
-     3. Updated `TestBed_ReviewR4_AlreadyApplied064Runner` to embed and execute the exact historical SQL from `392edb6` with populated fixtures verifying both G1 and G2.
-     4. Updated `TestBed_F4_MultipleEncountersPerPatient` to check all database write errors and seed a historical discharged IPD stay alongside a current active IPD stay, respecting `one_active_inpatient_stay`.
-   - **Automated proof:** All 16 suites in `bed_management_parity_test.go` pass cleanly.
+     - In `TestBed_ReviewR4_AlreadyApplied064Runner`, seeded encounter 1 with `admitted_at` 12 hours ago (`t0 - 2 hours`), ensuring `discharged_at` (3 hours ago) satisfies `discharged_at >= admitted_at`, and provided a non-empty `discharge_summary = 'Patient recovered and discharged'`.
+     - In `TestBed_F4_MultipleEncountersPerPatient`, provided non-empty `discharge_summary = 'Prior completed inpatient admission'` on the historical discharged encounter. Additionally, created a dedicated test patient so that inserting its active encounter does not collide with the `one_active_inpatient_stay` unique index constraint on `encounter(patient_id)`.
+   - **Automated proof:** All 17 database tests pass cleanly without constraint violations.
+
+3. **H3 (Medium) — Provenance Fact Distinction & Surviving-State Enrichment:**
+   - **Issue:** Migration 065 previously substituted `original_created_at = original_assigned_from` when `original_created_at` was unknown, conflating assignment start time with database record creation time. It also overwrote `original_notes` and `original_record` with later observations without an observation timestamp or source marker.
+   - **Correction:**
+     - Retained unknown creation timestamps strictly as `NULL`. Never substitute assignment start time (`assigned_from`) for database record creation time (`created_at`).
+     - Preserved historical audit assertions (`original_notes`, `original_record`, `original_assigned_from`, `original_assigned_to`) untouched.
+     - Recovered surviving facts from `bed_assignment` into dedicated columns: `surviving_notes`, `surviving_assigned_by`, `surviving_created_at`, `surviving_record`, with explicit observation timestamp (`surviving_observed_at = clock_timestamp()`) and source marker (`surviving_source = 'bed_assignment_table'`).
+     - Deleted source rows retain `NULL` across all `surviving_*` fields and keep `original_created_at = NULL`.
+     - Tested all three critical cases: differing `assigned_from` and `created_at`, a deleted source row, and a source row changed after the original audit.
+   - **Automated proof:** Both `TestBed_ReviewR4_AlreadyApplied064Runner` and `TestBed_ReviewH1_AlreadyApplied065Runner` assert the exact separation between historical audit assertions and surviving snapshot facts.
 
 ---
 
@@ -67,10 +68,21 @@ In accordance with the Module Parity Roadmap and following the initial independe
 
 ### Migration 065: `065_bed_assignment_reconciliation_repair.sql` (Repair Migration)
 - Corrective repair migration for environments where migration 064 was already recorded in `schema_migration`.
-- Enriches historical audit rows created by original 064 with surviving facts from `bed_assignment` (`notes`, `assigned_by`, `created_at`, `to_jsonb(ba.*)`).
-- Where source rows were previously deleted, retains `original_assigned_from` as `original_created_at` rather than stamping repair clock time.
 - All candidate queries and mutations are coupled strictly via `INSERT ... RETURNING bed_assignment_id`, eliminating audit replay bugs and preventing SQLSTATE 23505.
 - Handles duplicate open rows, superseded closed rows, historical zero duration, and vacant restorations.
+- Re-verifies unique partial indexes.
+- Omits in-place fact substitution or overwriting of historical assertions.
+
+### Migration 066: `066_bed_assignment_provenance_and_audit_repair.sql` (Provenance & Audit Repair Migration)
+- Corrective repair migration for environments where migrations 064 or 065 were already recorded in `schema_migration` prior to this repair.
+- Schema widening: adds `surviving_record jsonb`, `surviving_notes text`, `surviving_assigned_by text`, `surviving_created_at timestamptz`, `surviving_observed_at timestamptz`, and `surviving_source text`.
+- Drops `NOT NULL` and `DEFAULT clock_timestamp()` constraints on `original_created_at` (cleaning up any artifacts from `fefe73e`).
+- Provenance separation (H3):
+  - Preserves original audit assertions (`original_notes`, `original_record`, `original_assigned_from`, `original_assigned_to`) untouched.
+  - Leaves unknown creation timestamps as `NULL`; never substitutes assignment start time (`assigned_from`) for database record creation time (`created_at`).
+  - Recovers surviving facts from `bed_assignment` into dedicated `surviving_*` fields with explicit observation timestamp (`clock_timestamp()`) and source marker (`'bed_assignment_table'`).
+  - Deleted source rows retain `NULL` across all `surviving_*` fields.
+- Atomic reconciliation: safely handles duplicate open rows, superseded duplicates, historical zero duration, vacant restorations, and conflicting open assignments via `WITH ... INSERT ... RETURNING bed_assignment_id`.
 - Re-verifies unique partial indexes.
 
 ---
@@ -98,48 +110,52 @@ All required Bed Management operations are fully wired and verified between Go b
 
 ## 4. Go Backend Regression Test Suite
 
-Automated test suite `services/api/internal/adapters/postgres/bed_management_parity_test.go` contains 16 focused suites:
+Automated test suite `services/api/internal/adapters/postgres/bed_management_parity_test.go` contains 17 focused suites (100% pass):
 
 ```text
 === RUN   TestBed_CRUDAndUniqueConstraints
---- PASS: TestBed_CRUDAndUniqueConstraints (2.77s)
+--- PASS: TestBed_CRUDAndUniqueConstraints (2.91s)
 === RUN   TestBed_ConcurrentAssignmentRace
---- PASS: TestBed_ConcurrentAssignmentRace (2.58s)
+--- PASS: TestBed_ConcurrentAssignmentRace (3.13s)
 === RUN   TestBed_EncounterOwnershipValidation
---- PASS: TestBed_EncounterOwnershipValidation (3.01s)
+--- PASS: TestBed_EncounterOwnershipValidation (3.06s)
 === RUN   TestBed_MaintenanceStateWorkflow
---- PASS: TestBed_MaintenanceStateWorkflow (2.56s)
+--- PASS: TestBed_MaintenanceStateWorkflow (2.89s)
 === RUN   TestBed_TransferAtomicity
---- PASS: TestBed_TransferAtomicity (2.65s)
+--- PASS: TestBed_TransferAtomicity (3.28s)
 === RUN   TestBed_DischargeLifecycle
---- PASS: TestBed_DischargeLifecycle (2.68s)
+--- PASS: TestBed_DischargeLifecycle (3.26s)
 === RUN   TestBed_PopulatedUpgradeSafety
---- PASS: TestBed_PopulatedUpgradeSafety (2.70s)
+--- PASS: TestBed_PopulatedUpgradeSafety (2.95s)
 === RUN   TestBed_ReviewR1_RoleAccessScopeAndRedaction
---- PASS: TestBed_ReviewR1_RoleAccessScopeAndRedaction (2.72s)
+--- PASS: TestBed_ReviewR1_RoleAccessScopeAndRedaction (3.22s)
 === RUN   TestBed_ReviewR2_CanonicalTransferAndDischargeConsistency
---- PASS: TestBed_ReviewR2_CanonicalTransferAndDischargeConsistency (2.64s)
+--- PASS: TestBed_ReviewR2_CanonicalTransferAndDischargeConsistency (3.67s)
 === RUN   TestBed_ReviewR3_MandatoryPositiveVersionContracts
---- PASS: TestBed_ReviewR3_MandatoryPositiveVersionContracts (2.92s)
+--- PASS: TestBed_ReviewR3_MandatoryPositiveVersionContracts (3.12s)
 === RUN   TestBed_ReviewR4_SurvivingOpenDuplicateCollision
---- PASS: TestBed_ReviewR4_SurvivingOpenDuplicateCollision (2.74s)
+--- PASS: TestBed_ReviewR4_SurvivingOpenDuplicateCollision (2.35s)
 === RUN   TestBed_ReviewR4_FreshInstallAndProvenanceArchiving
---- PASS: TestBed_ReviewR4_FreshInstallAndProvenanceArchiving (2.71s)
+--- PASS: TestBed_ReviewR4_FreshInstallAndProvenanceArchiving (2.49s)
 === RUN   TestBed_ReviewR4_VacantSlotRestoration
---- PASS: TestBed_ReviewR4_VacantSlotRestoration (2.69s)
+--- PASS: TestBed_ReviewR4_VacantSlotRestoration (2.63s)
 === RUN   TestBed_ReviewR5_PaginationAndSelectors
---- PASS: TestBed_ReviewR5_PaginationAndSelectors (2.90s)
+--- PASS: TestBed_ReviewR5_PaginationAndSelectors (3.42s)
 === RUN   TestBed_ReviewR4_AlreadyApplied064Runner
---- PASS: TestBed_ReviewR4_AlreadyApplied064Runner (2.67s)
+--- PASS: TestBed_ReviewR4_AlreadyApplied064Runner (3.26s)
+=== RUN   TestBed_ReviewH1_AlreadyApplied065Runner
+--- PASS: TestBed_ReviewH1_AlreadyApplied065Runner (3.27s)
 === RUN   TestBed_F4_MultipleEncountersPerPatient
---- PASS: TestBed_F4_MultipleEncountersPerPatient (2.60s)
+--- PASS: TestBed_F4_MultipleEncountersPerPatient (3.13s)
 PASS
+ok  	hms.local/api/internal/adapters/postgres	53.615s
 ```
 
 ### Key Regression Assertions:
-- **`TestBed_ReviewR4_AlreadyApplied064Runner` (G1 & G2):** Tests real historical 063/064 DDL from commit `392edb6`. Verifies that an assignment restored by original 064 and subsequently released/reassigned is not reopened by 065 (G1), and verifies that historical 064 audit records are enriched with surviving notes, author, created_at, and JSON record (G2).
+- **`TestBed_ReviewH1_AlreadyApplied065Runner` (H1):** Tests database where historical 063, 064, and 065 (from `fefe73e`) were already recorded in `schema_migration`. Verifies that 063–065 are skipped, migration 066 runs cleanly, drops old constraints, and enriches surviving facts into dedicated `surviving_*` fields without 23505 collisions.
+- **`TestBed_ReviewR4_AlreadyApplied064Runner` (H2 & H3):** Tests real historical 063/064 DDL from commit `392edb6`. Fixtures conform strictly to `encounter_check1` (`discharged_at >= admitted_at` and `length(discharge_summary) > 0`). Verifies unknown `original_created_at` remains `NULL` (never substituted with `assigned_from`), surviving facts are recovered in dedicated `surviving_*` fields, deleted source row retains `NULL`, and rows changed after audit preserve original assertions.
 - **`TestBed_ReviewR1_RoleAccessScopeAndRedaction` (G3 / F3):** Verifies search for seeded patient name `"Abebe"` returns 0 results for Doctor B (patient-level clinician lacking encounter access) while returning 1 result for Doctor A (authorized attending doctor).
-- **`TestBed_F4_MultipleEncountersPerPatient` (G3 / F4):** Checks all database write errors and tests retrieval of multiple historical and active inpatient stays for a patient while respecting the `one_active_inpatient_stay` unique constraint.
+- **`TestBed_F4_MultipleEncountersPerPatient` (H2 / G3):** Tests retrieval of multiple historical and active inpatient stays for a patient with valid discharge summaries while strictly respecting `one_active_inpatient_stay`.
 
 ---
 
@@ -235,4 +251,4 @@ All 11 visual artifacts from the verification run are archived:
 
 ## 8. Final Acceptance Declaration
 
-All 3 upgrade review findings (G1–G3) from `5eb8257`, 4 corrections review findings (F1–F4) from `b577746`, and 7 initial review findings (R1–R7) from `09ef974` are resolved, hardened, and verified with zero regressions. The branch `feat/bed-management-workspace-parity` is ready for merge. `main` (`adcecd2`) remains untouched.
+All 3 final review findings (H1–H3) from `3debe15`, 3 upgrade review findings (G1–G3) from `5eb8257`, 4 corrections review findings (F1–F4) from `b577746`, and 7 initial review findings (R1–R7) from `09ef974` are completely resolved, hardened, and verified with zero regressions. All 17 PostgreSQL tests pass cleanly, 9/9 web client tests pass, and frontend typecheck passes with 0 errors. The branch `feat/bed-management-workspace-parity` is ready for merge. `main` (`adcecd2`) remains untouched.

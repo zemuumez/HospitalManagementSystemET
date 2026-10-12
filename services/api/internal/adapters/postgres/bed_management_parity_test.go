@@ -1508,8 +1508,11 @@ func TestBed_ReviewR5_PaginationAndSelectors(t *testing.T) {
 
 // R4 / G1 / G2: Corrective migration 065 executes on databases where original 064 was already recorded in schema_migration.
 // Verifies:
-// 1. G1: No replay bug! An assignment restored by original 064 and subsequently released/reassigned is NOT reopened by 065.
-// 2. G2: Surviving assignment provenance (notes, author, created_at, to_jsonb(ba.*)) is enriched into existing audit records.
+// 1. G1: No replay bug! An assignment restored by original 064 and subsequently released/reassigned is NOT reopened by 065/066.
+// 2. H2: Valid clinical fixtures conforming strictly to encounter_check1 (discharged_at >= admitted_at and length(discharge_summary) > 0).
+// 3. H3: Provenance distinction - unknown creation times remain NULL (never substituted with assigned_from);
+//        surviving facts are enriched into dedicated surviving_* fields; deleted source rows retain NULL;
+//        rows modified after audit preserve original audit assertions and capture changed surviving state.
 func TestBed_ReviewR4_AlreadyApplied064Runner(t *testing.T) {
 	db, _, _, cleanup := setupBedTestDB(t, 62)
 	defer cleanup()
@@ -1552,28 +1555,72 @@ func TestBed_ReviewR4_AlreadyApplied064Runner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed inserting hospital bed: %v", err)
 	}
-	err = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Symptoms 1', $5, 'req-rep-1') RETURNING id::text`, case1ID, patient1ID, doctor.ID, bedID, admin.ID).Scan(&enc1ID)
+
+	// Encounter 1 admitted 12 hours ago (H2 fixture constraint compliance)
+	t0 := time.Now().Add(-10 * time.Hour).UTC().Truncate(time.Microsecond)
+	enc1AdmittedAt := t0.Add(-2 * time.Hour)
+	err = db.QueryRow(ctx, `
+		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key)
+		VALUES ('ipd', $1, $2, $3, $4, $5, 'active', 'Symptoms 1', $6, 'req-rep-1')
+		RETURNING id::text
+	`, case1ID, patient1ID, doctor.ID, bedID, enc1AdmittedAt, admin.ID).Scan(&enc1ID)
 	if err != nil {
 		t.Fatalf("failed inserting encounter 1: %v", err)
 	}
 
-	// 1. Seed closed assignment 1 before running historical 063/064
+	// 1. Seed assignment 1 with differing assigned_from and created_at (H3 fact distinction)
 	var assign1ID string
-	t0 := time.Now().Add(-10 * time.Hour).UTC().Truncate(time.Microsecond)
+	tAssignedFrom := t0.Add(1 * time.Hour) // assigned_from differs from created_at
 	err = db.QueryRow(ctx, `
 		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
-		VALUES ($1, $2, $3, 'Historical assignment notes before 064', $4, $5, $5, $5)
+		VALUES ($1, $2, $3, 'Historical assignment notes before 064', $4, $5, $6, $6)
 		RETURNING id::text
-	`, bedID, enc1ID, patient1ID, doctor.ID, t0).Scan(&assign1ID)
+	`, bedID, enc1ID, patient1ID, doctor.ID, tAssignedFrom, t0).Scan(&assign1ID)
 	if err != nil {
 		t.Fatalf("failed inserting assignment 1: %v", err)
 	}
 
-	// 2. Apply historical 063 (from 392edb6)
+	// 2. Apply complete historical 063 (from 392edb6)
 	const hist063 = `
 ALTER TABLE hospital_bed ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '' CHECK (length(description) <= 2000);
 CREATE INDEX IF NOT EXISTS idx_hospital_bed_active_state ON hospital_bed(active, state);
 CREATE INDEX IF NOT EXISTS idx_hospital_bed_type ON hospital_bed(type_id, active);
+WITH duplicate_bed_open AS (
+  SELECT ba.id, ROW_NUMBER() OVER (
+    PARTITION BY ba.bed_id 
+    ORDER BY 
+      CASE WHEN e.status = 'active' AND e.bed_id = ba.bed_id THEN 0 ELSE 1 END,
+      ba.created_at DESC, 
+      ba.id
+  ) AS rn,
+  COALESCE(e.discharged_at, ba.assigned_from + interval '1 hour', ba.created_at) AS resolved_end
+  FROM bed_assignment ba
+  LEFT JOIN encounter e ON e.id = ba.encounter_id
+  WHERE ba.assigned_to IS NULL
+)
+UPDATE bed_assignment ba
+SET assigned_to = d.resolved_end
+FROM duplicate_bed_open d
+WHERE ba.id = d.id AND d.rn > 1;
+
+WITH duplicate_enc_open AS (
+  SELECT ba.id, ROW_NUMBER() OVER (
+    PARTITION BY ba.encounter_id 
+    ORDER BY 
+      CASE WHEN e.status = 'active' AND e.bed_id = ba.bed_id THEN 0 ELSE 1 END,
+      ba.created_at DESC, 
+      ba.id
+  ) AS rn,
+  COALESCE(e.discharged_at, ba.assigned_from + interval '1 hour', ba.created_at) AS resolved_end
+  FROM bed_assignment ba
+  LEFT JOIN encounter e ON e.id = ba.encounter_id
+  WHERE ba.assigned_to IS NULL
+)
+UPDATE bed_assignment ba
+SET assigned_to = d.resolved_end
+FROM duplicate_enc_open d
+WHERE ba.id = d.id AND d.rn > 1;
+
 CREATE UNIQUE INDEX IF NOT EXISTS one_active_bed_assignment ON bed_assignment(bed_id) WHERE assigned_to IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS one_active_encounter_bed_assignment ON bed_assignment(encounter_id) WHERE assigned_to IS NULL;
 CREATE INDEX IF NOT EXISTS idx_bed_type_active ON bed_type(active, name);
@@ -1581,13 +1628,13 @@ ALTER TABLE encounter DROP CONSTRAINT IF EXISTS encounter_check;
 ALTER TABLE encounter ADD CONSTRAINT encounter_check CHECK((kind='ipd') OR (kind='opd' AND bed_id IS NULL));
 `
 	if _, err = db.Exec(ctx, hist063); err != nil {
-		t.Fatalf("failed applying historical 063: %v", err)
+		t.Fatalf("failed applying complete historical 063: %v", err)
 	}
 	if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES ('063_bed_management_parity.sql') ON CONFLICT DO NOTHING`); err != nil {
 		t.Fatalf("failed recording 063: %v", err)
 	}
 
-	// 3. Apply historical 064 (from 392edb6)
+	// 3. Apply complete historical 064 (from 392edb6)
 	const hist064 = `
 CREATE TABLE IF NOT EXISTS bed_assignment_migration_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1632,7 +1679,7 @@ WHERE id IN (
 );
 `
 	if _, err = db.Exec(ctx, hist064); err != nil {
-		t.Fatalf("failed applying historical 064: %v", err)
+		t.Fatalf("failed applying complete historical 064: %v", err)
 	}
 	if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES ('064_bed_assignment_reconciliation_audit.sql') ON CONFLICT DO NOTHING`); err != nil {
 		t.Fatalf("failed recording 064: %v", err)
@@ -1645,12 +1692,34 @@ WHERE id IN (
 		t.Fatalf("expected 1 audit row from historical 064, got %d, err: %v", audit1Count, err)
 	}
 
+	// Seed a deleted source assignment (H3: audit row exists, but source row was deleted before repair)
+	var delAssignID string
+	tDel := time.Now().Add(-8 * time.Hour).UTC().Truncate(time.Microsecond)
+	err = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Deleted source notes', $4, $5, $5, $5)
+		RETURNING id::text
+	`, bedID, enc1ID, patient1ID, doctor.ID, tDel).Scan(&delAssignID)
+	if err != nil {
+		t.Fatalf("failed inserting deleted assignment: %v", err)
+	}
+	if _, err = db.Exec(ctx, `
+		INSERT INTO bed_assignment_migration_audit(bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to, resolution_action, reason)
+		VALUES ($1, $2, $3, $4, $5, $5, 'quarantined_duplicate', 'Simulated 064 audit for deleted assignment')
+	`, delAssignID, enc1ID, bedID, patient1ID, tDel); err != nil {
+		t.Fatalf("failed inserting audit row for deleted assignment: %v", err)
+	}
+	if _, err = db.Exec(ctx, `DELETE FROM bed_assignment WHERE id = $1`, delAssignID); err != nil {
+		t.Fatalf("failed deleting source assignment: %v", err)
+	}
+
 	// 4. G1 setup: After 064 ran, assignment 1 was legitimately discharged/closed, and a NEW assignment 2 was created!
+	// H2: discharge encounter 1 with valid discharged_at >= admitted_at AND non-empty discharge_summary!
 	relTime := time.Now().Add(-3 * time.Hour).UTC()
-	if _, err = db.Exec(ctx, `UPDATE bed_assignment SET assigned_to = $1 WHERE id = $2`, relTime, assign1ID); err != nil {
+	if _, err = db.Exec(ctx, `UPDATE bed_assignment SET assigned_to = $1, notes = 'Surviving notes after discharge' WHERE id = $2`, relTime, assign1ID); err != nil {
 		t.Fatalf("failed updating assignment 1 to closed: %v", err)
 	}
-	if _, err = db.Exec(ctx, `UPDATE encounter SET status = 'discharged', discharged_at = $1, bed_id = NULL WHERE id = $2`, relTime, enc1ID); err != nil {
+	if _, err = db.Exec(ctx, `UPDATE encounter SET status = 'discharged', discharged_at = $1, discharge_summary = 'Patient recovered and discharged', bed_id = NULL WHERE id = $2`, relTime, enc1ID); err != nil {
 		t.Fatalf("failed discharging encounter 1: %v", err)
 	}
 
@@ -1679,13 +1748,14 @@ WHERE id IN (
 	}
 
 	// 5. Normal migration runner executes: 063 & 064 are skipped because they are in schema_migration.
-	// 065_bed_assignment_reconciliation_repair.sql MUST execute cleanly!
+	// 065 and 066 execute cleanly!
 	runBedMigrationRunner(t, db, ctx)
 
-	var count065 int
+	var count065, count066 int
 	_ = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='065_bed_assignment_reconciliation_repair.sql'`).Scan(&count065)
-	if count065 != 1 {
-		t.Fatalf("expected 065 recorded in schema_migration, got: %d", count065)
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='066_bed_assignment_provenance_and_audit_repair.sql'`).Scan(&count066)
+	if count065 != 1 || count066 != 1 {
+		t.Fatalf("expected 065 and 066 recorded in schema_migration, got: 065=%d, 066=%d", count065, count066)
 	}
 
 	// 6. G1 Verification: Assignment 1 MUST NOT be reopened (which would cause SQLSTATE 23505)!
@@ -1695,7 +1765,7 @@ WHERE id IN (
 		t.Fatalf("failed querying assignment 1: %v", err)
 	}
 	if a1AssignedTo == nil {
-		t.Fatalf("G1 regression failure: migration 065 replayed historical audit action and reopened assignment 1!")
+		t.Fatalf("G1 regression failure: migration replayed historical audit action and reopened assignment 1!")
 	}
 
 	var a2AssignedTo *time.Time
@@ -1704,57 +1774,416 @@ WHERE id IN (
 		t.Fatalf("expected assignment 2 to remain open with assigned_to NULL, got err=%v val=%v", err, a2AssignedTo)
 	}
 
-	// 7. G2 Verification: Historical audit row for assignment 1 MUST be enriched with surviving facts!
-	var origNotes, origAssignedBy string
-	var origCreatedAt *time.Time
-	var origRecord []byte
+	// 7. H3 Verification for Surviving Assignment:
+	// - Unknown original creation time is NULL (NOT substituted with assigned_from!)
+	// - Original audit assertions (original_notes, original_record) are preserved untouched
+	// - Dedicated surviving_* fields capture current snapshot, observation timestamp, and explicit source
+	var origNotes, origAssignedBy, survNotes, survAssignedBy, survSource string
+	var origCreatedAt, survCreatedAt, survObservedAt *time.Time
+	var origRecord, survRecord []byte
 	err = db.QueryRow(ctx, `
-		SELECT original_notes, original_assigned_by, original_created_at, original_record::text
+		SELECT original_notes, original_assigned_by, original_created_at, original_record::text,
+		       COALESCE(surviving_notes, ''), COALESCE(surviving_assigned_by, ''), surviving_created_at,
+		       COALESCE(surviving_record::text, ''), surviving_observed_at, COALESCE(surviving_source, '')
 		FROM bed_assignment_migration_audit
-		WHERE bed_assignment_id = $1
-	`, assign1ID).Scan(&origNotes, &origAssignedBy, &origCreatedAt, &origRecord)
+		WHERE bed_assignment_id = $1 AND resolution_action = 'restored_active'
+	`, assign1ID).Scan(&origNotes, &origAssignedBy, &origCreatedAt, &origRecord,
+		&survNotes, &survAssignedBy, &survCreatedAt, &survRecord, &survObservedAt, &survSource)
 	if err != nil {
 		t.Fatalf("failed querying enriched audit row: %v", err)
 	}
-	if origNotes != "Historical assignment notes before 064" {
-		t.Fatalf("G2 regression failure: expected original_notes enriched, got: '%s'", origNotes)
+
+	// Original fact assertions preserved untouched:
+	if origCreatedAt != nil {
+		t.Fatalf("H3 regression failure: unknown original_created_at must be NULL, got: %v", origCreatedAt)
 	}
-	if origAssignedBy != doctor.ID {
-		t.Fatalf("G2 regression failure: expected original_assigned_by enriched, got: '%s'", origAssignedBy)
+	if origNotes != "" {
+		t.Fatalf("H3 regression failure: original_notes on 064 event should remain empty assertion, got: '%s'", origNotes)
 	}
-	if origCreatedAt == nil || !origCreatedAt.Equal(t0) {
-		t.Fatalf("G2 regression failure: expected original_created_at to match true creation time %v, got %v", t0, origCreatedAt)
+	if string(origRecord) != "{}" {
+		t.Fatalf("H3 regression failure: original_record on 064 event should remain empty json, got: %s", string(origRecord))
 	}
-	if len(origRecord) == 0 || string(origRecord) == "{}" {
-		t.Fatalf("G2 regression failure: expected original_record JSON to be enriched, got: %s", string(origRecord))
+
+	// Surviving facts recovered in dedicated columns:
+	if survNotes != "Surviving notes after discharge" {
+		t.Fatalf("H3 failure: expected surviving_notes to capture current state, got: '%s'", survNotes)
+	}
+	if survAssignedBy != doctor.ID {
+		t.Fatalf("H3 failure: expected surviving_assigned_by to match doctor %s, got: '%s'", doctor.ID, survAssignedBy)
+	}
+	if survCreatedAt == nil || !survCreatedAt.Equal(t0) {
+		t.Fatalf("H3 failure: expected surviving_created_at to match true creation time %v, got %v", t0, survCreatedAt)
+	}
+	if survObservedAt == nil {
+		t.Fatalf("H3 failure: expected surviving_observed_at observation timestamp, got nil")
+	}
+	if survSource != "bed_assignment_table" {
+		t.Fatalf("H3 failure: expected surviving_source 'bed_assignment_table', got: '%s'", survSource)
+	}
+	if len(survRecord) == 0 || string(survRecord) == "{}" {
+		t.Fatalf("H3 failure: expected surviving_record to capture full JSON snapshot, got: %s", string(survRecord))
+	}
+
+	// 8. H3 Verification for Deleted Source Assignment:
+	// Deleted source row must have unknown original_created_at = NULL, and surviving_* fields = NULL
+	var delOrigCreatedAt, delSurvCreatedAt, delSurvObservedAt *time.Time
+	var delSurvNotes *string
+	var delSurvRecord []byte
+	err = db.QueryRow(ctx, `
+		SELECT original_created_at, surviving_created_at, surviving_observed_at, surviving_notes, surviving_record
+		FROM bed_assignment_migration_audit
+		WHERE bed_assignment_id = $1
+	`, delAssignID).Scan(&delOrigCreatedAt, &delSurvCreatedAt, &delSurvObservedAt, &delSurvNotes, &delSurvRecord)
+	if err != nil {
+		t.Fatalf("failed querying audit row for deleted assignment: %v", err)
+	}
+	if delOrigCreatedAt != nil {
+		t.Fatalf("H3 failure: deleted source row must retain original_created_at as NULL, got: %v", delOrigCreatedAt)
+	}
+	if delSurvCreatedAt != nil || delSurvObservedAt != nil || delSurvNotes != nil || delSurvRecord != nil {
+		t.Fatalf("H3 failure: deleted source row must have nil surviving fields, got created=%v observed=%v notes=%v record=%s",
+			delSurvCreatedAt, delSurvObservedAt, delSurvNotes, string(delSurvRecord))
+	}
+}
+
+// H1: Databases where migration 065 was already recorded in schema_migration
+// (e.g. from commit fefe73e) skip in-place 065 edits. Migration 066 applies corrective
+// repair, surviving-state provenance enrichment, and conflict handling safely.
+func TestBed_ReviewH1_AlreadyApplied065Runner(t *testing.T) {
+	db, _, _, cleanup := setupBedTestDB(t, 62)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin := domain.Actor{ID: "usr-admin-h1", Role: "admin"}
+	doctor := domain.Actor{ID: "usr-doc-h1", Role: "doctor"}
+
+	_, err := db.Exec(ctx, `
+		INSERT INTO "user"(id, email, name) VALUES ($1, 'admin_h1@hospital.test', 'Admin H1'), ($2, 'doc_h1@hospital.test', 'Doc H1')
+		ON CONFLICT(id) DO NOTHING
+	`, admin.ID, doctor.ID)
+	if err != nil {
+		t.Fatalf("failed inserting users: %v", err)
+	}
+	_, err = db.Exec(ctx, `
+		INSERT INTO staff_access(user_id, role, active) VALUES ($1, 'admin', true), ($2, 'doctor', true)
+		ON CONFLICT(user_id) DO NOTHING
+	`, admin.ID, doctor.ID)
+	if err != nil {
+		t.Fatalf("failed inserting staff access: %v", err)
+	}
+
+	var patient1ID, case1ID, enc1ID string
+	err = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Kenenisa', 'Bekele', '1982-06-13', '+251911445566') RETURNING id::text`).Scan(&patient1ID)
+	if err != nil {
+		t.Fatalf("failed inserting patient 1: %v", err)
+	}
+	err = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 1', $3) RETURNING id::text`, patient1ID, doctor.ID, admin.ID).Scan(&case1ID)
+	if err != nil {
+		t.Fatalf("failed inserting case 1: %v", err)
+	}
+
+	var typeID, bedID string
+	err = db.QueryRow(ctx, `INSERT INTO bed_type(name, description, active) VALUES ('Type H1', 'Desc H1', true) RETURNING id::text`).Scan(&typeID)
+	if err != nil {
+		t.Fatalf("failed inserting bed type: %v", err)
+	}
+	err = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by, ward_name) VALUES ('H1-BED', 'Type H1', $1, 75000, true, $2, 'Ward H1') RETURNING id::text`, typeID, admin.ID).Scan(&bedID)
+	if err != nil {
+		t.Fatalf("failed inserting hospital bed: %v", err)
+	}
+
+	t0 := time.Now().Add(-10 * time.Hour).UTC().Truncate(time.Microsecond)
+	enc1AdmittedAt := t0.Add(-2 * time.Hour)
+	err = db.QueryRow(ctx, `
+		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key)
+		VALUES ('ipd', $1, $2, $3, $4, $5, 'active', 'Symptoms H1', $6, 'req-h1-1')
+		RETURNING id::text
+	`, case1ID, patient1ID, doctor.ID, bedID, enc1AdmittedAt, admin.ID).Scan(&enc1ID)
+	if err != nil {
+		t.Fatalf("failed inserting encounter 1: %v", err)
+	}
+
+	// Assignment 1 with differing assigned_from and created_at
+	var assign1ID string
+	tAssignedFrom := t0.Add(1 * time.Hour)
+	err = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Historical notes before 065', $4, $5, $6, $6)
+		RETURNING id::text
+	`, bedID, enc1ID, patient1ID, doctor.ID, tAssignedFrom, t0).Scan(&assign1ID)
+	if err != nil {
+		t.Fatalf("failed inserting assignment 1: %v", err)
+	}
+
+	// Apply complete historical 063 (from 392edb6)
+	const hist063 = `
+ALTER TABLE hospital_bed ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '' CHECK (length(description) <= 2000);
+CREATE INDEX IF NOT EXISTS idx_hospital_bed_active_state ON hospital_bed(active, state);
+CREATE INDEX IF NOT EXISTS idx_hospital_bed_type ON hospital_bed(type_id, active);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_bed_assignment ON bed_assignment(bed_id) WHERE assigned_to IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_encounter_bed_assignment ON bed_assignment(encounter_id) WHERE assigned_to IS NULL;
+CREATE INDEX IF NOT EXISTS idx_bed_type_active ON bed_type(active, name);
+ALTER TABLE encounter DROP CONSTRAINT IF EXISTS encounter_check;
+ALTER TABLE encounter ADD CONSTRAINT encounter_check CHECK((kind='ipd') OR (kind='opd' AND bed_id IS NULL));
+`
+	if _, err = db.Exec(ctx, hist063); err != nil {
+		t.Fatalf("failed applying hist 063: %v", err)
+	}
+	if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES ('063_bed_management_parity.sql') ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatalf("failed recording 063: %v", err)
+	}
+
+	// Apply complete historical 064 (from 392edb6)
+	const hist064 = `
+CREATE TABLE IF NOT EXISTS bed_assignment_migration_audit (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bed_assignment_id uuid NOT NULL,
+  encounter_id uuid NOT NULL,
+  bed_id uuid NOT NULL,
+  patient_id uuid NOT NULL,
+  original_assigned_from timestamptz NOT NULL,
+  original_assigned_to timestamptz,
+  reconciled_assigned_to timestamptz,
+  resolution_action text NOT NULL,
+  reason text NOT NULL,
+  reconciled_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS idx_ba_audit_assignment ON bed_assignment_migration_audit(bed_assignment_id);
+CREATE INDEX IF NOT EXISTS idx_ba_audit_encounter ON bed_assignment_migration_audit(encounter_id);
+CREATE INDEX IF NOT EXISTS idx_ba_audit_bed ON bed_assignment_migration_audit(bed_id);
+`
+	if _, err = db.Exec(ctx, hist064); err != nil {
+		t.Fatalf("failed applying hist 064: %v", err)
+	}
+	if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES ('064_bed_assignment_reconciliation_audit.sql') ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatalf("failed recording 064: %v", err)
+	}
+
+	// Apply actual historical 065 (from commit fefe73e)
+	const hist065 = `
+ALTER TABLE bed_assignment_migration_audit
+  ADD COLUMN IF NOT EXISTS original_notes text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS original_assigned_by text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS original_created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  ADD COLUMN IF NOT EXISTS original_record jsonb NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS administrative_quarantine_at timestamptz DEFAULT NULL;
+
+WITH prematurely_closed AS (
+  SELECT ba.id AS ba_id, ba.encounter_id, ba.bed_id, ba.patient_id, ba.assigned_from, ba.assigned_to, ba.created_at
+  FROM bed_assignment ba
+  JOIN encounter e ON e.id = ba.encounter_id
+  WHERE e.status = 'active'
+    AND e.bed_id = ba.bed_id
+    AND ba.assigned_to IS NOT NULL
+    AND ba.assigned_to = ba.created_at
+)
+INSERT INTO bed_assignment_migration_audit (
+  bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
+  original_notes, original_assigned_by, original_created_at, original_record,
+  reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
+)
+SELECT ba_id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
+       '', '', clock_timestamp(), '{}'::jsonb,
+       NULL, NULL, 'restored_active',
+       'Assignment matched active encounter bed_id but was closed with fabricated created_at'
+FROM prematurely_closed;
+
+UPDATE bed_assignment
+SET assigned_to = NULL
+WHERE id IN (
+  SELECT bed_assignment_id
+  FROM bed_assignment_migration_audit
+  WHERE resolution_action = 'restored_active'
+);
+`
+	if _, err = db.Exec(ctx, hist065); err != nil {
+		t.Fatalf("failed applying historical 065 from fefe73e: %v", err)
+	}
+	// RECORD 065 IN schema_migration to simulate the already-applied-065 database state!
+	if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES ('065_bed_assignment_reconciliation_repair.sql') ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatalf("failed recording 065: %v", err)
+	}
+
+	// Seed audit row for assignment 1 under 065 schema (as fefe73e left it)
+	if _, err = db.Exec(ctx, `
+		INSERT INTO bed_assignment_migration_audit(bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to, resolution_action, reason)
+		VALUES ($1, $2, $3, $4, $5, $5, 'restored_active', 'Simulated 064/065 audit row')
+	`, assign1ID, enc1ID, bedID, patient1ID, tAssignedFrom); err != nil {
+		t.Fatalf("failed inserting audit row 1: %v", err)
+	}
+
+	// Seed a deleted assignment 2: audited prior to 066, source deleted
+	var delAssign2ID string
+	tDel := time.Now().Add(-8 * time.Hour).UTC().Truncate(time.Microsecond)
+	err = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Deleted notes', $4, $5, $5, $5)
+		RETURNING id::text
+	`, bedID, enc1ID, patient1ID, doctor.ID, tDel).Scan(&delAssign2ID)
+	if err != nil {
+		t.Fatalf("failed inserting del assign 2: %v", err)
+	}
+	if _, err = db.Exec(ctx, `
+		INSERT INTO bed_assignment_migration_audit(bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to, resolution_action, reason)
+		VALUES ($1, $2, $3, $4, $5, $5, 'quarantined_duplicate', 'Simulated 065 audit for deleted assignment')
+	`, delAssign2ID, enc1ID, bedID, patient1ID, tDel); err != nil {
+		t.Fatalf("failed inserting audit row for del assign 2: %v", err)
+	}
+	if _, err = db.Exec(ctx, `DELETE FROM bed_assignment WHERE id = $1`, delAssign2ID); err != nil {
+		t.Fatalf("failed deleting source assignment 2: %v", err)
+	}
+
+	// Now assignment 1 was legitimately closed and encounter 1 discharged
+	relTime := time.Now().Add(-3 * time.Hour).UTC()
+	if _, err = db.Exec(ctx, `UPDATE bed_assignment SET assigned_to = $1, notes = 'Surviving notes updated after 065' WHERE id = $2`, relTime, assign1ID); err != nil {
+		t.Fatalf("failed closing assignment 1: %v", err)
+	}
+	if _, err = db.Exec(ctx, `UPDATE encounter SET status = 'discharged', discharged_at = $1, discharge_summary = 'Stay complete', bed_id = NULL WHERE id = $2`, relTime, enc1ID); err != nil {
+		t.Fatalf("failed discharging encounter 1: %v", err)
+	}
+
+	// New active occupant assignment 3
+	var patient2ID, case2ID, enc2ID, assign3ID string
+	err = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Genzebe', 'Dibaba', '1991-02-08', '+251911778899') RETURNING id::text`).Scan(&patient2ID)
+	if err != nil {
+		t.Fatalf("failed inserting patient 2: %v", err)
+	}
+	err = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 2', $3) RETURNING id::text`, patient2ID, doctor.ID, admin.ID).Scan(&case2ID)
+	if err != nil {
+		t.Fatalf("failed inserting case 2: %v", err)
+	}
+	err = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Symptoms 2', $5, 'req-h1-2') RETURNING id::text`, case2ID, patient2ID, doctor.ID, bedID, admin.ID).Scan(&enc2ID)
+	if err != nil {
+		t.Fatalf("failed inserting encounter 2: %v", err)
+	}
+	t2 := time.Now().Add(-1 * time.Hour).UTC()
+	err = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Active occupant assignment 3', $4, $5, NULL, $5)
+		RETURNING id::text
+	`, bedID, enc2ID, patient2ID, doctor.ID, t2).Scan(&assign3ID)
+	if err != nil {
+		t.Fatalf("failed inserting assignment 3: %v", err)
+	}
+
+	// RUN NORMAL MIGRATION RUNNER:
+	// Because 063, 064, and 065 are already recorded in schema_migration,
+	// the runner SKIPS 063, 064, and 065.
+	// Migration 066_bed_assignment_provenance_and_audit_repair.sql MUST execute and repair!
+	runBedMigrationRunner(t, db, ctx)
+
+	var count066 int
+	err = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='066_bed_assignment_provenance_and_audit_repair.sql'`).Scan(&count066)
+	if err != nil || count066 != 1 {
+		t.Fatalf("H1 failure: expected 066 recorded in schema_migration, count=%d err=%v", count066, err)
+	}
+
+	// Verify no G1 replay: assignment 1 remained closed, assignment 3 remained open
+	var a1End, a3End *time.Time
+	_ = db.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assign1ID).Scan(&a1End)
+	_ = db.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assign3ID).Scan(&a3End)
+	if a1End == nil {
+		t.Fatalf("G1 regression: assignment 1 was reopened!")
+	}
+	if a3End != nil {
+		t.Fatalf("expected assignment 3 to remain open, got: %v", a3End)
+	}
+
+	// Verify H3 provenance on Assignment 1 in already-applied-065 database:
+	// - original_created_at reset from fefe73e default to NULL (unknown)
+	// - surviving_created_at captured true creation time t0
+	// - surviving_notes captured updated surviving state
+	// - surviving_source and surviving_observed_at populated
+	var origCreatedAt, survCreatedAt, survObservedAt *time.Time
+	var survNotes, survAssignedBy, survSource string
+	var survRecord []byte
+	err = db.QueryRow(ctx, `
+		SELECT original_created_at, surviving_created_at, surviving_observed_at,
+		       COALESCE(surviving_notes, ''), COALESCE(surviving_assigned_by, ''),
+		       COALESCE(surviving_source, ''), COALESCE(surviving_record::text, '')
+		FROM bed_assignment_migration_audit
+		WHERE bed_assignment_id = $1 AND resolution_action = 'restored_active'
+	`, assign1ID).Scan(&origCreatedAt, &survCreatedAt, &survObservedAt, &survNotes, &survAssignedBy, &survSource, &survRecord)
+	if err != nil {
+		t.Fatalf("failed querying audit row for assign 1: %v", err)
+	}
+	if origCreatedAt != nil {
+		t.Fatalf("H3 failure: original_created_at must be NULL for unknown creation time, got: %v", origCreatedAt)
+	}
+	if survCreatedAt == nil || !survCreatedAt.Equal(t0) {
+		t.Fatalf("H3 failure: surviving_created_at must match true created_at %v, got %v", t0, survCreatedAt)
+	}
+	if survNotes != "Surviving notes updated after 065" {
+		t.Fatalf("H3 failure: surviving_notes expected 'Surviving notes updated after 065', got '%s'", survNotes)
+	}
+	if survAssignedBy != doctor.ID {
+		t.Fatalf("H3 failure: surviving_assigned_by expected doctor %s, got '%s'", doctor.ID, survAssignedBy)
+	}
+	if survSource != "bed_assignment_table" {
+		t.Fatalf("H3 failure: surviving_source expected 'bed_assignment_table', got '%s'", survSource)
+	}
+	if survObservedAt == nil {
+		t.Fatalf("H3 failure: surviving_observed_at expected observation timestamp, got nil")
+	}
+	if len(survRecord) == 0 || string(survRecord) == "{}" {
+		t.Fatalf("H3 failure: surviving_record expected non-empty JSON snapshot, got: %s", string(survRecord))
+	}
+
+	// Verify Deleted Assignment 2:
+	var delOrigCreatedAt, delSurvCreatedAt, delSurvObservedAt *time.Time
+	var delSurvNotes *string
+	var delSurvRecord []byte
+	err = db.QueryRow(ctx, `
+		SELECT original_created_at, surviving_created_at, surviving_observed_at, surviving_notes, surviving_record
+		FROM bed_assignment_migration_audit
+		WHERE bed_assignment_id = $1
+	`, delAssign2ID).Scan(&delOrigCreatedAt, &delSurvCreatedAt, &delSurvObservedAt, &delSurvNotes, &delSurvRecord)
+	if err != nil {
+		t.Fatalf("failed querying audit row for del assign 2: %v", err)
+	}
+	if delOrigCreatedAt != nil {
+		t.Fatalf("H3 failure: deleted source row must retain original_created_at as NULL, got: %v", delOrigCreatedAt)
+	}
+	if delSurvCreatedAt != nil || delSurvObservedAt != nil || delSurvNotes != nil || delSurvRecord != nil {
+		t.Fatalf("H3 failure: deleted source row must have nil surviving fields, got created=%v observed=%v notes=%v record=%s",
+			delSurvCreatedAt, delSurvObservedAt, delSurvNotes, string(delSurvRecord))
 	}
 }
 
 // F4: Multiple encounters per patient and selectable active encounter
+// H2: Fixture compliance with encounter_check1 (length(discharge_summary) > 0 for discharged status)
 func TestBed_F4_MultipleEncountersPerPatient(t *testing.T) {
 	_, store, _, cleanup := setupBedTestDB(t, 0)
 	defer cleanup()
 	ctx := context.Background()
 
-	admin, doctor, _, patientID, _, _ := seedBedStaffAndPatient(ctx, t, store.DB)
+	admin, doctor, _, _, _, _ := seedBedStaffAndPatient(ctx, t, store.DB)
+
+	var f4PatientID string
+	err := store.DB.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Haile', 'Gebrselassie', '1973-04-18', '+251911887766') RETURNING id::text`).Scan(&f4PatientID)
+	if err != nil {
+		t.Fatalf("failed inserting dedicated patient: %v", err)
+	}
+	_, _ = store.DB.Exec(ctx, `UPDATE patient_profile SET email = 'haile@hospital.test', gender = 'Male' WHERE patient_id = $1`, f4PatientID)
 
 	var case1ID, case2ID string
-	err := store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 1', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&case1ID)
+	err = store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 1', $3) RETURNING id::text`, f4PatientID, doctor.ID, admin.ID).Scan(&case1ID)
 	if err != nil {
 		t.Fatalf("failed inserting case 1: %v", err)
 	}
-	err = store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 2', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&case2ID)
+	err = store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 2', $3) RETURNING id::text`, f4PatientID, doctor.ID, admin.ID).Scan(&case2ID)
 	if err != nil {
 		t.Fatalf("failed inserting case 2: %v", err)
 	}
 
 	// Encounter 1: Historical discharged inpatient stay (kind='ipd', status='discharged')
+	// H2: include non-empty discharge_summary conforming to encounter_check1
 	var enc1ID string
 	err = store.DB.QueryRow(ctx, `
-		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, admitted_at, discharged_at, status, symptoms, created_by, request_key)
-		VALUES ('ipd', $1, $2, $3, clock_timestamp() - interval '5 days', clock_timestamp() - interval '2 days', 'discharged', 'Prior Admission', $4, 'req-menc-1')
+		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, admitted_at, discharged_at, discharge_summary, status, symptoms, created_by, request_key)
+		VALUES ('ipd', $1, $2, $3, clock_timestamp() - interval '5 days', clock_timestamp() - interval '2 days', 'Prior completed inpatient admission', 'discharged', 'Prior Admission', $4, 'req-menc-1')
 		RETURNING id::text
-	`, case1ID, patientID, doctor.ID, admin.ID).Scan(&enc1ID)
+	`, case1ID, f4PatientID, doctor.ID, admin.ID).Scan(&enc1ID)
 	if err != nil {
 		t.Fatalf("failed inserting historical encounter 1: %v", err)
 	}
@@ -1765,7 +2194,7 @@ func TestBed_F4_MultipleEncountersPerPatient(t *testing.T) {
 		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, admitted_at, status, symptoms, created_by, request_key)
 		VALUES ('ipd', $1, $2, $3, clock_timestamp() - interval '1 hour', 'active', 'Current Admission', $4, 'req-menc-2')
 		RETURNING id::text
-	`, case2ID, patientID, doctor.ID, admin.ID).Scan(&enc2ID)
+	`, case2ID, f4PatientID, doctor.ID, admin.ID).Scan(&enc2ID)
 	if err != nil {
 		t.Fatalf("failed inserting active encounter 2: %v", err)
 	}

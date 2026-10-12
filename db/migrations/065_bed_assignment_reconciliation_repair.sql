@@ -45,25 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_ba_audit_assignment ON bed_assignment_migration_a
 CREATE INDEX IF NOT EXISTS idx_ba_audit_encounter ON bed_assignment_migration_audit(encounter_id);
 CREATE INDEX IF NOT EXISTS idx_ba_audit_bed ON bed_assignment_migration_audit(bed_id);
 
--- 2. Provenance enrichment for existing audit rows from original 064 (G2):
--- Backfill surviving facts from bed_assignment into audit records that lacked them
-UPDATE bed_assignment_migration_audit a
-SET original_notes = ba.notes,
-    original_assigned_by = ba.assigned_by,
-    original_created_at = ba.created_at,
-    original_record = to_jsonb(ba.*)
-FROM bed_assignment ba
-WHERE a.bed_assignment_id = ba.id
-  AND (a.original_record = '{}'::jsonb OR a.original_record IS NULL);
-
--- For any audit rows where the source assignment was previously deleted,
--- retain original_assigned_from as original_created_at (authoritative historical fact)
--- rather than labeling repair execution time as creation time.
-UPDATE bed_assignment_migration_audit
-SET original_created_at = original_assigned_from
-WHERE original_created_at IS NULL;
-
--- 3. Comprehensive Reconciliation & Provenance Archiving for Conflicting Groups:
+-- 2. Comprehensive Reconciliation & Provenance Archiving for Conflicting Groups:
 -- Conservative policy:
 -- For any physical bed or encounter with multiple open assignments (assigned_to IS NULL):
 -- Preserve the legitimate active keeper (rn = 1). Priority: active encounter assigned to this bed, latest assigned_from/created_at/id.
