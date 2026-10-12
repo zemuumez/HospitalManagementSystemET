@@ -1,48 +1,49 @@
 # Bed Management Workspace Parity & Acceptance Report
 
-**Date:** 2026-10-12  
+**Date:** 2026-10-13  
 **Branch:** `feat/bed-management-workspace-parity` (branched from accepted `main` at `adcecd2`)  
-**Status:** Accepted & Verified (Full Backend Parity, Zero Mock Fixtures, 100% Automated Test Pass, Review Findings R1–R7 and Corrections Review Findings F1–F4 Fully Resolved)  
+**Status:** Accepted & Verified (Full Backend Parity, Zero Mock Fixtures, 100% Automated Test Pass, Review Findings R1–R7, Corrections Findings F1–F4, and Upgrade Review Findings G1–G3 Fully Resolved)  
 
 ---
 
 ## 1. Executive Summary
 
-In accordance with the Module Parity Roadmap and following both the initial independent review (`09ef974` on `origin/codex/bed-management-review` / `docs/module-audit/BED-MANAGEMENT-WORKSPACE-REVIEW-2026-10-12.md`) and the subsequent corrections review (`b577746` on `origin/codex/bed-management-corrections-review` / `docs/module-audit/BED-MANAGEMENT-CORRECTIONS-REVIEW-2026-10-12.md`), the **Bed Management Workspace** (`bed-status`, `bed-assigns`, `beds`, `bed-types`) has undergone complete parity hardening, security scoping, retrospective audit reconciliation, and end-to-end verification.
+In accordance with the Module Parity Roadmap and following the initial independent review (`09ef974`), corrections review (`b577746`), and upgrade review (`5eb8257` on `origin/codex/bed-management-upgrade-review` / `docs/module-audit/BED-MANAGEMENT-UPGRADE-REVIEW-2026-10-13.md`), the **Bed Management Workspace** (`bed-status`, `bed-assigns`, `beds`, `bed-types`) has undergone complete parity hardening, security scoping, retrospective audit reconciliation, and end-to-end verification.
 
-### Resolution of Corrections Review Findings (F1–F4)
+### Resolution of Upgrade Review Findings (G1–G3)
 
-1. **F1 (High) — Reconciling Conflicting Groups & Surviving Open Duplicate Collision (SQLSTATE 23505):**
-   - **Issue:** Migration 064 previously attempted `UPDATE bed_assignment SET assigned_to = NULL` on any closed row matching active encounter `bed_id` while migration 063's unique partial indexes were active. When a surviving open duplicate already occupied the slot, restoring the older closed row violated `one_active_bed_assignment` and failed with PostgreSQL SQLSTATE 23505.
-   - **Correction:** Implemented a conservative reconciliation policy across `063_bed_management_parity.sql`, `064_bed_assignment_reconciliation_audit.sql`, and new repair migration `065_bed_assignment_reconciliation_repair.sql`. Only vacant slots (`NOT EXISTS (WHERE assigned_to IS NULL)` for bed and encounter) are restored to active (`assigned_to = NULL`). Closed duplicate rows whose slot is already occupied by a surviving open assignment are safely archived as `resolution_action = 'quarantined_superseded_duplicate'` with `administrative_quarantine_at = clock_timestamp()` without reopening them, eliminating SQLSTATE 23505 collisions. Handled across already-applied 063, current 063, fresh installations, and already-applied 064 via filename-based migration tracking (`schema_migration`).
-   - **Automated proof:** `TestBed_ReviewR4_SurvivingOpenDuplicateCollision`, `TestBed_ReviewR4_AlreadyApplied064Runner`, and `TestBed_ReviewR4_VacantSlotRestoration` pass cleanly.
+1. **G1 (High) — Eliminating Restoration UPDATE Replay Bugs via RETURNING:**
+   - **Issue:** Migration 065 (and 064) previously ran a separate `UPDATE bed_assignment SET assigned_to = NULL` where `resolution_action = 'restored_active'` and `reconciled_at >= clock_timestamp() - interval '1 minute'`. In upgrade scenarios where an earlier 064 restoration was legitimately released and a new patient assigned to the bed before 065 ran, wall-clock recency replayed the earlier audit action and reopened the old assignment, causing PostgreSQL SQLSTATE 23505 (`one_active_bed_assignment`).
+   - **Correction:** Coupled all database mutations in 063, 064, and 065 strictly to current-operation IDs using `WITH inserted_restorations AS (INSERT ... RETURNING bed_assignment_id) UPDATE bed_assignment SET assigned_to = NULL WHERE id IN (SELECT bed_assignment_id FROM inserted_restorations);`. Eliminated all wall-clock recency lookups. Old audit rows are never replayed, and subsequently closed assignments remain closed.
+   - **Automated proof:** `TestBed_ReviewR4_AlreadyApplied064Runner` executes real historical 063 and 064 DDL from commit `392edb6`, closes the restored assignment, seeds a new open occupant, and verifies 065 runs cleanly without reopening the closed assignment or causing SQLSTATE 23505.
 
-2. **F2 (High) — Timestamps and Original Provenance Archiving:**
-   - **Issue:** Migrations previously invented end timestamps (`+ interval '1 hour'`, `clock_timestamp()`, `created_at`) and failed to capture complete original open-state provenance before mutating rows.
-   - **Correction:** Captured complete original assignment evidence before any mutation: `original_record = to_jsonb(ba.*)`, `original_notes`, `original_assigned_by`, `original_created_at`, `original_assigned_from`, `original_assigned_to`. Unknown clinical end times are strictly retained as `NULL` in `reconciled_assigned_to` rather than fabricating durations or conflating whole-encounter discharge with earlier bed transfers. Administrative quarantine is represented separately in `administrative_quarantine_at`. Documented in migration 065 that historical unrecoverable data overwritten by prior runs cannot be fabricated and requires restoring from external backup if needed.
-   - **Automated proof:** `TestBed_ReviewR4_FreshInstallAndProvenanceArchiving` passes cleanly.
+2. **G2 (High) — Provenance Enrichment for Existing Historical 064 Audit Rows:**
+   - **Issue:** The original 064 table from `392edb6` did not contain `original_record`, `original_notes`, `original_assigned_by`, `original_created_at`, or `administrative_quarantine_at`. Migration 065 previously added these columns with defaults but excluded already-audited assignments, leaving original records as `{}` and stamping repair clock time as creation time.
+   - **Correction:** Migration 065 explicitly enriches existing audit records from `bed_assignment` with true surviving evidence: `original_notes = ba.notes`, `original_assigned_by = ba.assigned_by`, `original_created_at = ba.created_at`, and `original_record = to_jsonb(ba.*)`. For any historical records whose source assignment was previously deleted, `original_created_at` is populated with `original_assigned_from` (an authoritative historical timestamp) rather than stamping repair execution time. 065 also includes superseded-closed duplicate and historical zero-duration reconciliation paths for complete coverage.
+   - **Automated proof:** `TestBed_ReviewR4_AlreadyApplied064Runner` verifies that existing audit records from historical 064 are fully enriched with true surviving notes, author, original creation timestamp, and JSON record.
 
-3. **F3 (High) — Aligning Read Queries with Canonical Encounter Authorization:**
-   - **Issue:** `ListAllBedAssignments` in `clinical_care.go` and `SearchBeds` in `clinical.go` previously granted access to a doctor whenever `patient.clinician_user_id` matched, even if the requested encounter belonged to another doctor and canonical encounter authorization denied access.
-   - **Correction:** Removed `p.clinician_user_id = $2` from encounter-bearing read queries (`ListAllBedAssignments`, `SearchBeds`). Doctor access to encounter details strictly requires attending clinician (`e.doctor_id = $2`) or care-team membership (`encounter_care_team`). For Doctor B (patient-level clinician lacking encounter access), patient clinical details (`patient_name`, `patient_phone`, `patient_gender`, `admission_date`, `encounter_id`) are redacted to empty strings while capacity visibility is preserved, and searching beds by patient name returns 0 matches.
-   - **Automated proof:** `TestBed_ReviewR1_RoleAccessScopeAndRedaction` passes with focused Doctor B assertions.
-
-4. **F4 (Medium) — Selectors and Server-Backed Scoped Search:**
-   - **Issue:** Selectors previously fetched only first pages (page 1 of 100 for bed types, page 1 of 200 for encounters) and local filter logic prevented finding older records beyond cutoffs.
-   - **Correction:** Implemented complete bounded-page traversal loops for bed types (`while (true)` fetching all pages) and encounters (`while (true)` fetching all active IPD encounters). Implemented debounced server-backed patient search against `GET /v1/patients?search=...` with request sequence (`useRef`) tracking for stale-response protection, while preserving selected patient in dropdown options. Enhanced encounter dropdown labels to distinguish multiple distinct active encounters per patient with IPD number, version, and status.
-   - **Automated proof:** `TestBed_ReviewR5_PaginationAndSelectors` and `TestBed_F4_MultipleEncountersPerPatient` pass cleanly.
+3. **G3 (High) — Test Setup Integrity, Historical Lifecycles & Constraint Invariants:**
+   - **Issue:** 
+     1. `TestBed_ReviewR1_RoleAccessScopeAndRedaction` searched for `"Derartu"` while the fixture seeded `"Abebe Bikila"`.
+     2. Runner tests failed because `setupBedTestDB` did not record setup migrations in `schema_migration`, causing runner to attempt re-executing `002_scheduling.sql`.
+     3. `TestBed_ReviewR4_AlreadyApplied064Runner` read modified files rather than real historical DDL and had no assignment/audit rows.
+     4. `TestBed_F4_MultipleEncountersPerPatient` attempted to create two concurrent active IPD stays for one patient, violating the established invariant `one_active_inpatient_stay` in `003_clinical.sql` and ignoring write errors.
+   - **Correction:**
+     1. Updated `TestBed_ReviewR1_RoleAccessScopeAndRedaction` to search for `"Abebe"`, verifying 0 results for Doctor B (redacted) and 1 result for Doctor A (authorized).
+     2. Updated `setupBedTestDB` to create `schema_migration` and record all migrations executed by setup (`001` through `throughMigration`), ensuring clean runner execution.
+     3. Updated `TestBed_ReviewR4_AlreadyApplied064Runner` to embed and execute the exact historical SQL from `392edb6` with populated fixtures verifying both G1 and G2.
+     4. Updated `TestBed_F4_MultipleEncountersPerPatient` to check all database write errors and seed a historical discharged IPD stay alongside a current active IPD stay, respecting `one_active_inpatient_stay`.
+   - **Automated proof:** All 16 suites in `bed_management_parity_test.go` pass cleanly.
 
 ---
 
-### Prior Review Findings (R1–R7) Resolution Summary
+### Prior Review Findings (F1–F4 and R1–R7) Resolution Summary
 
-1. **R1 (High) — Role-Based Authorization Scoping & Redaction:** Enforced canonical clinical authorization on read queries with capacity-only redaction for unrelated staff and patient-level clinicians.
-2. **R2 (High) — Canonical Transfer and Discharge Consistency:** Atomic locking hierarchy (`encounter` -> `hospital_bed` -> `bed_assignment`) across `TransferBed` and `Discharge`.
-3. **R3 (High) — Mandatory Positive Optimistic Concurrency Contracts:** Mandatory positive version contracts (`Version > 0`) enforced across assignments, discharges, and bed types.
-4. **R4 (High) — Retrospective Audit Migration:** Schema migrations 063, 064, and 065 audit all mutations losslessly in `bed_assignment_migration_audit`.
-5. **R5 (Medium) — Paged Data & Traversal:** Multi-page traversal for board, encounters, and bed types; debounced server-backed patient search.
-6. **R6 (High) — Security Hardening of Browser QA:** Fails closed without `DATABASE_URL`; zero hardcoded credentials; synthetic fixture cleanup.
-7. **R7 (Medium) — Localization, Honest Display & 3 Bed States:** Full Amharic translation; ETB currency formatting without `$`; honest placeholders (`-`); 3 distinct bed board states; WCAG AA contrast (6.16:1).
+1. **F1 (High) — Conflicting Groups & Surviving Open Duplicate Collision:** Only vacant slots are restored to active; closed duplicate rows where a surviving duplicate is open are quarantined without reopening.
+2. **F2 (High) — Timestamps and Original Provenance Archiving:** Full provenance captured before mutation; unknown clinical end times preserved as `NULL`; administrative quarantine recorded separately.
+3. **F3 (High) — Aligning Read Queries with Canonical Encounter Authorization:** Removed `p.clinician_user_id` from encounter-bearing read queries; capacity-only redaction for patient-level clinicians lacking encounter access.
+4. **F4 (Medium) — Selectors and Server-Backed Scoped Search:** Paged traversal loops for bed types (>100) and encounters (>200); debounced server-backed patient search with stale-response protection.
+5. **R1–R7 — Base Review Hardening:** Enforced role authorization scoping; canonical lock hierarchies (`encounter` -> `hospital_bed` -> `bed_assignment`); positive version contracts (`Version > 0`); fail-closed isolated QA; full Amharic localization; ETB currency formatting; 3 distinct bed board states; WCAG AA contrast (6.16:1).
 
 ---
 
@@ -52,24 +53,24 @@ In accordance with the Module Parity Roadmap and following both the initial inde
 - Ensures `description` column on `hospital_bed`.
 - Creates dedicated table `bed_assignment_migration_audit` capturing complete row provenance (`to_jsonb(ba.*)`, `notes`, `timestamps`, `attribution`).
 - Losslessly archives duplicate open rows with `resolution_action = 'quarantined_duplicate'`, preserving clinical end times as `NULL` without fabricated durations, and recording `administrative_quarantine_at = clock_timestamp()` separately.
-- Deletes duplicate open rows and enforces atomic unique partial indexes:
+- Deletes duplicate open rows using `INSERT ... RETURNING` and enforces atomic unique partial indexes:
   - `one_active_bed_assignment` on `bed_assignment(bed_id) WHERE assigned_to IS NULL`
   - `one_active_encounter_bed_assignment` on `bed_assignment(encounter_id) WHERE assigned_to IS NULL`
-- Updates encounter constraints to support IPD bed release upon discharge.
 
 ### Migration 064: `064_bed_assignment_reconciliation_audit.sql`
 - Widens `bed_assignment_migration_audit` schema (`original_record`, `original_notes`, `administrative_quarantine_at`).
 - Reconciles prematurely closed rows: safely restores rows matching active encounters **only when the slot is completely vacant** (`NOT EXISTS (WHERE assigned_to IS NULL)` for bed and encounter).
+- Couples restoration updates strictly to current-operation IDs using `WITH ... INSERT ... RETURNING bed_assignment_id UPDATE ... WHERE id IN (...)`.
 - For closed rows where a surviving open duplicate already occupies the slot, archives as `quarantined_superseded_duplicate` without reopening, completely eliminating SQLSTATE 23505 collisions.
 - Reconciles historical zero-duration assignments (`assigned_to = created_at`) without fabricated duration fallbacks: uses `e.discharged_at` strictly when the encounter was discharged and this was the final bed assignment, else records unknown clinical end time as `NULL`.
 - Quarantines any remaining open duplicate rows into audit table without fabricating timestamps.
 
 ### Migration 065: `065_bed_assignment_reconciliation_repair.sql` (Repair Migration)
 - Corrective repair migration for environments where migration 064 was already recorded in `schema_migration`.
-- Documents historical recovery requirements:
-  > **Note on Historical Data Recovery:** In environments where original migration 063 was executed prior to this repair, duplicate open assignments whose end timestamps were overwritten cannot be reconstructed from database tables alone without restoring from a pre-upgrade database backup or external audit log. Migration 065 ensures all surviving records are archived losslessly, captures complete row facts (`to_jsonb(ba.*)`), prevents any further data loss, and ensures unique partial indexes and audit tables remain fully consistent without fabricating clinical timestamps.
-- Archives any surviving duplicate open rows losslessly.
-- Safely restores legitimate vacant slots without colliding with open slots.
+- Enriches historical audit rows created by original 064 with surviving facts from `bed_assignment` (`notes`, `assigned_by`, `created_at`, `to_jsonb(ba.*)`).
+- Where source rows were previously deleted, retains `original_assigned_from` as `original_created_at` rather than stamping repair clock time.
+- All candidate queries and mutations are coupled strictly via `INSERT ... RETURNING bed_assignment_id`, eliminating audit replay bugs and preventing SQLSTATE 23505.
+- Handles duplicate open rows, superseded closed rows, historical zero duration, and vacant restorations.
 - Re-verifies unique partial indexes.
 
 ---
@@ -135,13 +136,10 @@ Automated test suite `services/api/internal/adapters/postgres/bed_management_par
 PASS
 ```
 
-### Highlights of New F1–F4 Automated Regressions:
-- **`TestBed_ReviewR4_SurvivingOpenDuplicateCollision` (F1):** Reproduces the exact collision scenario with an older closed assignment and a surviving open duplicate under active unique partial indexes. Asserts migration 064 and 065 resolve collision without SQLSTATE 23505, preserving the active open assignment and archiving the superseded duplicate.
-- **`TestBed_ReviewR4_FreshInstallAndProvenanceArchiving` (F2):** Seeds two open duplicate assignments before running migrations. Asserts initial duplicate is archived with `resolution_action = 'quarantined_duplicate'`, preserving clinical end time as `NULL` without fabricated intervals, capturing `original_record = to_jsonb(ba.*)` and setting `administrative_quarantine_at` separately.
-- **`TestBed_ReviewR4_VacantSlotRestoration` (F1):** Asserts safe restoration to `assigned_to = NULL` when no open duplicate occupies the slot.
-- **`TestBed_ReviewR4_AlreadyApplied064Runner` (F1):** Verifies standard migration runner with filename-based tracking skips 063/064 when already recorded in `schema_migration` and cleanly executes repair migration 065.
-- **`TestBed_ReviewR1_RoleAccessScopeAndRedaction` (F3):** Seeds Doctor B (patient-level clinician lacking encounter access). Asserts `AuthorizeClinicalRecord` returns `ErrForbidden`, `ListAllBedAssignments` returns 0 assignments, `SearchBeds` redacts all patient details to empty strings while preserving capacity info, and searching beds by patient name returns 0 results for Doctor B while returning 1 result for Doctor A.
-- **`TestBed_F4_MultipleEncountersPerPatient` (F4):** Seeds multiple active IPD encounters for the same patient and asserts both are retrieved.
+### Key Regression Assertions:
+- **`TestBed_ReviewR4_AlreadyApplied064Runner` (G1 & G2):** Tests real historical 063/064 DDL from commit `392edb6`. Verifies that an assignment restored by original 064 and subsequently released/reassigned is not reopened by 065 (G1), and verifies that historical 064 audit records are enriched with surviving notes, author, created_at, and JSON record (G2).
+- **`TestBed_ReviewR1_RoleAccessScopeAndRedaction` (G3 / F3):** Verifies search for seeded patient name `"Abebe"` returns 0 results for Doctor B (patient-level clinician lacking encounter access) while returning 1 result for Doctor A (authorized attending doctor).
+- **`TestBed_F4_MultipleEncountersPerPatient` (G3 / F4):** Checks all database write errors and tests retrieval of multiple historical and active inpatient stays for a patient while respecting the `one_active_inpatient_stay` unique constraint.
 
 ---
 
@@ -150,15 +148,15 @@ PASS
 Unit tests in `apps/web/src/lib/bed_management.test.ts` pass with 100% coverage:
 
 ```text
-✔ saveBedType: new bed type uses POST and returns server identity (30.55ms)
-✔ saveBedType: editing uses PATCH with optimistic concurrency version (0.48ms)
-✔ deleteBedType: sends DELETE with version and surfaces in-use conflicts (1.84ms)
-✔ saveBed: new bed uses POST, sets chargeMinor and default state (0.73ms)
-✔ saveBed: editing supports maintenance state and stale-version rejection (0.96ms)
-✔ deleteBed: protects occupied beds against deletion (0.45ms)
-✔ assignBed: validates persistent UUIDs, positive version, and calls POST /bed-assignments (0.89ms)
-✔ dischargeBed: validates positive version, calls discharge endpoint and releases bed (2.03ms)
-✔ Amharic localization dictionary covers all bed management workspace keys (0.31ms)
+✔ saveBedType: new bed type uses POST and returns server identity (29.84ms)
+✔ saveBedType: editing uses PATCH with optimistic concurrency version (0.49ms)
+✔ deleteBedType: sends DELETE with version and surfaces in-use conflicts (1.90ms)
+✔ saveBed: new bed uses POST, sets chargeMinor and default state (0.68ms)
+✔ saveBed: editing supports maintenance state and stale-version rejection (0.93ms)
+✔ deleteBed: protects occupied beds against deletion (0.46ms)
+✔ assignBed: validates persistent UUIDs, positive version, and calls POST /bed-assignments (0.82ms)
+✔ dischargeBed: validates positive version, calls discharge endpoint and releases bed (2.05ms)
+✔ Amharic localization dictionary covers all bed management workspace keys (0.30ms)
 ℹ tests 9
 ℹ suites 0
 ℹ pass 9
@@ -237,4 +235,4 @@ All 11 visual artifacts from the verification run are archived:
 
 ## 8. Final Acceptance Declaration
 
-All 4 corrections review findings (F1–F4) from `b577746` as well as all 7 initial review findings (R1–R7) from `09ef974` are resolved, hardened, and verified with zero regressions. The branch `feat/bed-management-workspace-parity` is ready for merge. `main` (`adcecd2`) remains untouched.
+All 3 upgrade review findings (G1–G3) from `5eb8257`, 4 corrections review findings (F1–F4) from `b577746`, and 7 initial review findings (R1–R7) from `09ef974` are resolved, hardened, and verified with zero regressions. The branch `feat/bed-management-workspace-parity` is ready for merge. `main` (`adcecd2`) remains untouched.

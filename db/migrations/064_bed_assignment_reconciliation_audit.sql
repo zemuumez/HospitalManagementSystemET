@@ -61,27 +61,24 @@ WITH vacant_active_candidates AS (
       SELECT 1 FROM bed_assignment_migration_audit a
       WHERE a.bed_assignment_id = ba.id
     )
+),
+inserted_restorations AS (
+  INSERT INTO bed_assignment_migration_audit (
+    bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
+    original_notes, original_assigned_by, original_created_at, original_record,
+    reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
+  )
+  SELECT ba_id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
+         notes, assigned_by, created_at, full_record,
+         NULL, NULL, 'restored_active',
+         'Assignment matched active encounter bed_id with vacant slot; restored to active occupancy'
+  FROM vacant_active_candidates
+  WHERE rn = 1
+  RETURNING bed_assignment_id
 )
-INSERT INTO bed_assignment_migration_audit (
-  bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
-  original_notes, original_assigned_by, original_created_at, original_record,
-  reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
-)
-SELECT ba_id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
-       notes, assigned_by, created_at, full_record,
-       NULL, NULL, 'restored_active',
-       'Assignment matched active encounter bed_id with vacant slot; restored to active occupancy'
-FROM vacant_active_candidates
-WHERE rn = 1;
-
 UPDATE bed_assignment
 SET assigned_to = NULL
-WHERE id IN (
-  SELECT bed_assignment_id
-  FROM bed_assignment_migration_audit
-  WHERE resolution_action = 'restored_active'
-    AND reconciled_at >= clock_timestamp() - interval '1 minute'
-);
+WHERE id IN (SELECT bed_assignment_id FROM inserted_restorations);
 
 -- B: For closed rows where a surviving open assignment ALREADY occupies the unique slot:
 -- Do NOT reopen the closed row; archive it as superseded duplicate so it never violates unique constraints.
@@ -138,28 +135,30 @@ WITH historical_zero_duration AS (
     AND NOT EXISTS (
       SELECT 1 FROM bed_assignment_migration_audit a WHERE a.bed_assignment_id = ba.id
     )
+),
+inserted_zero_duration AS (
+  INSERT INTO bed_assignment_migration_audit (
+    bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
+    original_notes, original_assigned_by, original_created_at, original_record,
+    reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
+  )
+  SELECT ba_id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
+         notes, assigned_by, created_at, full_record,
+         resolved_end, 
+         CASE WHEN resolved_end IS NULL THEN clock_timestamp() ELSE NULL END,
+         CASE WHEN resolved_end IS NOT NULL THEN 'reconciled_to_encounter_timeline' ELSE 'quarantined_historical_zero_duration' END,
+         CASE WHEN resolved_end IS NOT NULL 
+              THEN 'Reconciled zero-duration assignment using authoritative final encounter discharge'
+              ELSE 'Historical zero-duration assignment preserved with unknown clinical end time' END
+  FROM historical_zero_duration
+  RETURNING bed_assignment_id, reconciled_assigned_to, resolution_action
 )
-INSERT INTO bed_assignment_migration_audit (
-  bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
-  original_notes, original_assigned_by, original_created_at, original_record,
-  reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
-)
-SELECT ba_id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
-       notes, assigned_by, created_at, full_record,
-       resolved_end, 
-       CASE WHEN resolved_end IS NULL THEN clock_timestamp() ELSE NULL END,
-       CASE WHEN resolved_end IS NOT NULL THEN 'reconciled_to_encounter_timeline' ELSE 'quarantined_historical_zero_duration' END,
-       CASE WHEN resolved_end IS NOT NULL 
-            THEN 'Reconciled zero-duration assignment using authoritative final encounter discharge'
-            ELSE 'Historical zero-duration assignment preserved with unknown clinical end time' END
-FROM historical_zero_duration;
-
 UPDATE bed_assignment ba
-SET assigned_to = a.reconciled_assigned_to
-FROM bed_assignment_migration_audit a
-WHERE ba.id = a.bed_assignment_id
-  AND a.resolution_action = 'reconciled_to_encounter_timeline'
-  AND a.reconciled_assigned_to IS NOT NULL;
+SET assigned_to = izd.reconciled_assigned_to
+FROM inserted_zero_duration izd
+WHERE ba.id = izd.bed_assignment_id
+  AND izd.resolution_action = 'reconciled_to_encounter_timeline'
+  AND izd.reconciled_assigned_to IS NOT NULL;
 
 -- 4. Quarantine any surviving conflicting open assignments:
 -- Conservative policy: archive full evidence and remove from active bed occupancy without fabricating timestamps.
@@ -190,21 +189,19 @@ WITH conflicting_surviving_open AS (
     AND NOT EXISTS (
       SELECT 1 FROM bed_assignment_migration_audit a WHERE a.bed_assignment_id = ba.id
     )
+),
+inserted_conflicting_open AS (
+  INSERT INTO bed_assignment_migration_audit (
+    bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
+    original_notes, original_assigned_by, original_created_at, original_record,
+    reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
+  )
+  SELECT ba_id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
+         notes, assigned_by, created_at, full_record,
+         NULL, clock_timestamp(), 'quarantined_conflicting_assignment',
+         'Conflicting open assignment archived and quarantined without fabricating clinical end time'
+  FROM conflicting_surviving_open
+  RETURNING bed_assignment_id
 )
-INSERT INTO bed_assignment_migration_audit (
-  bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
-  original_notes, original_assigned_by, original_created_at, original_record,
-  reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
-)
-SELECT ba_id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
-       notes, assigned_by, created_at, full_record,
-       NULL, clock_timestamp(), 'quarantined_conflicting_assignment',
-       'Conflicting open assignment archived and quarantined without fabricating clinical end time'
-FROM conflicting_surviving_open;
-
 DELETE FROM bed_assignment
-WHERE id IN (
-  SELECT bed_assignment_id
-  FROM bed_assignment_migration_audit
-  WHERE resolution_action = 'quarantined_conflicting_assignment'
-);
+WHERE id IN (SELECT bed_assignment_id FROM inserted_conflicting_open);

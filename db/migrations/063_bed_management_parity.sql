@@ -58,25 +58,23 @@ WITH duplicate_bed_open AS (
   FROM bed_assignment ba
   LEFT JOIN encounter e ON e.id = ba.encounter_id
   WHERE ba.assigned_to IS NULL
+),
+inserted_bed_duplicates AS (
+  INSERT INTO bed_assignment_migration_audit (
+    bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
+    original_notes, original_assigned_by, original_created_at, original_record,
+    reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
+  )
+  SELECT id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
+         notes, assigned_by, created_at, full_record,
+         NULL, clock_timestamp(), 'quarantined_duplicate',
+         'Duplicate open assignment for physical bed quarantined during initial parity migration'
+  FROM duplicate_bed_open
+  WHERE rn > 1
+  RETURNING bed_assignment_id
 )
-INSERT INTO bed_assignment_migration_audit (
-  bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
-  original_notes, original_assigned_by, original_created_at, original_record,
-  reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
-)
-SELECT id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
-       notes, assigned_by, created_at, full_record,
-       NULL, clock_timestamp(), 'quarantined_duplicate',
-       'Duplicate open assignment for physical bed quarantined during initial parity migration'
-FROM duplicate_bed_open
-WHERE rn > 1;
-
 DELETE FROM bed_assignment
-WHERE id IN (
-  SELECT bed_assignment_id
-  FROM bed_assignment_migration_audit
-  WHERE resolution_action = 'quarantined_duplicate'
-);
+WHERE id IN (SELECT bed_assignment_id FROM inserted_bed_duplicates);
 
 WITH duplicate_enc_open AS (
   SELECT ba.id, ba.encounter_id, ba.bed_id, ba.patient_id, ba.assigned_from, ba.assigned_to,
@@ -92,28 +90,26 @@ WITH duplicate_enc_open AS (
   FROM bed_assignment ba
   LEFT JOIN encounter e ON e.id = ba.encounter_id
   WHERE ba.assigned_to IS NULL
+),
+inserted_enc_duplicates AS (
+  INSERT INTO bed_assignment_migration_audit (
+    bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
+    original_notes, original_assigned_by, original_created_at, original_record,
+    reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
+  )
+  SELECT id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
+         notes, assigned_by, created_at, full_record,
+         NULL, clock_timestamp(), 'quarantined_duplicate',
+         'Duplicate open assignment for encounter quarantined during initial parity migration'
+  FROM duplicate_enc_open
+  WHERE rn > 1
+    AND NOT EXISTS (
+      SELECT 1 FROM bed_assignment_migration_audit a WHERE a.bed_assignment_id = duplicate_enc_open.id
+    )
+  RETURNING bed_assignment_id
 )
-INSERT INTO bed_assignment_migration_audit (
-  bed_assignment_id, encounter_id, bed_id, patient_id, original_assigned_from, original_assigned_to,
-  original_notes, original_assigned_by, original_created_at, original_record,
-  reconciled_assigned_to, administrative_quarantine_at, resolution_action, reason
-)
-SELECT id, encounter_id, bed_id, patient_id, assigned_from, assigned_to,
-       notes, assigned_by, created_at, full_record,
-       NULL, clock_timestamp(), 'quarantined_duplicate',
-       'Duplicate open assignment for encounter quarantined during initial parity migration'
-FROM duplicate_enc_open
-WHERE rn > 1
-  AND NOT EXISTS (
-    SELECT 1 FROM bed_assignment_migration_audit a WHERE a.bed_assignment_id = duplicate_enc_open.id
-  );
-
 DELETE FROM bed_assignment
-WHERE id IN (
-  SELECT bed_assignment_id
-  FROM bed_assignment_migration_audit
-  WHERE resolution_action = 'quarantined_duplicate'
-);
+WHERE id IN (SELECT bed_assignment_id FROM inserted_enc_duplicates);
 
 -- 5. Unique partial indexes enforcing concurrency protection
 -- Exactly one active assignment per physical bed
