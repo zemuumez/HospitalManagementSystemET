@@ -1,4 +1,5 @@
 import { EncounterRegister } from "@/components/encounter-register";
+import { EncounterWorkspace } from "@/components/encounter-workspace";
 import { AttendanceWorkspace } from "@/components/attendance-workspace";
 import { OdontogramRegister } from "@/components/odontogram-register";
 import {
@@ -165,11 +166,11 @@ export default async function ModulePage({
       "ipd-timelines",
     ].includes(slug)
   )
-    return <EncounterRegister key={slug} kind="ipd" />;
+    return <EncounterWorkspace key={slug} slug={slug} kind="ipd" />;
   if (
     ["opd-patient-departments", "opd-diagnosis", "opd-timelines"].includes(slug)
   )
-    return <EncounterRegister key={slug} kind="opd" />;
+    return <EncounterWorkspace key={slug} slug={slug} kind="opd" />;
   if (
     [
       "users",

@@ -22,7 +22,8 @@
     "test:doctor": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --doctor-workspace",
     "test:settings": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --settings-workspace",
     "test:inventory": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --inventory-workspace",
-    "test:smart-cards": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --smart-cards-workspace"
+    "test:smart-cards": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --smart-cards-workspace",
+    "test:clinical-encounters": "node --env-file=apps/web/.env.local scripts/verify-connected-isolated.mjs --clinical-encounters-workspace"
   },
   "overrides": {
     "@grpc/grpc-js": "1.14.5",

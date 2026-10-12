@@ -176,6 +176,13 @@ function isAllowedPath(path: string[]): boolean {
         "transfer",
         "bed-assignments",
         "bed-history",
+        "diagnoses",
+        "procedures",
+        "attachments",
+        "admission-details",
+        "billing",
+        "discharge-summary",
+        "addenda",
       ].includes(path[2]);
     }
     if (path[0] === "bed-assignments" && path[2] === "discharge") {
@@ -187,7 +194,10 @@ function isAllowedPath(path: string[]): boolean {
     if (path[0] === "medication-orders" && path[2] === "cancel") {
       return true;
     }
-    if (path[0] === "odontograms" && (path[2] === "pdf" || path[1] === "legends")) {
+    if (
+      path[0] === "odontograms" &&
+      (path[2] === "pdf" || path[1] === "legends")
+    ) {
       return true;
     }
     if (
@@ -239,6 +249,14 @@ function isAllowedPath(path: string[]): boolean {
     }
     if (path[0] === "attachments" && path[2] === "content") {
       return true;
+    }
+  }
+
+  if (path.length === 4) {
+    if (path[0] === "encounters") {
+      if (path[2] === "care-team") return true;
+      if (path[2] === "billing" && ["clearance", "invoice"].includes(path[3]))
+        return true;
     }
   }
 

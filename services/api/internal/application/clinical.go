@@ -30,6 +30,8 @@ type ClinicalRepository interface {
 	Cases(context.Context, domain.Actor, int) ([]domain.Case, error)
 	CreateCase(context.Context, domain.Actor, domain.CaseInput) (domain.Case, error)
 	Encounters(context.Context, domain.Actor, string, int, int) ([]domain.Encounter, error)
+	Encounter(context.Context, domain.Actor, string) (domain.Encounter, error)
+	UpdateEncounter(context.Context, domain.Actor, string, domain.UpdateEncounterInput) (domain.Encounter, error)
 	Admit(context.Context, domain.Actor, domain.EncounterInput, string) (domain.Encounter, error)
 	Discharge(context.Context, domain.Actor, string, domain.Discharge, time.Time) (domain.Encounter, error)
 	Notes(context.Context, domain.Actor, string) ([]domain.ClinicalNote, error)
@@ -119,6 +121,27 @@ func (c Clinical) Encounters(ctx context.Context, a domain.Actor, kind string, p
 	}
 	return c.Store.Encounters(ctx, a, kind, page, pageSize)
 }
+func (c Clinical) Encounter(ctx context.Context, a domain.Actor, id string) (domain.Encounter, error) {
+	if !a.Can("clinical.read") {
+		return domain.Encounter{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.Encounter{}, domain.ErrValidation
+	}
+	return c.Store.Encounter(ctx, a, id)
+}
+func (c Clinical) UpdateEncounter(ctx context.Context, a domain.Actor, id string, u domain.UpdateEncounterInput) (domain.Encounter, error) {
+	if a.Role != "admin" && a.Role != "doctor" {
+		return domain.Encounter{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.Encounter{}, domain.ErrValidation
+	}
+	if err := u.Validate(); err != nil {
+		return domain.Encounter{}, err
+	}
+	return c.Store.UpdateEncounter(ctx, a, id, u)
+}
 func (c Clinical) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInput, key string) (domain.Encounter, error) {
 	if !a.Can("clinical.admit") {
 		return domain.Encounter{}, domain.ErrForbidden
@@ -132,7 +155,7 @@ func (c Clinical) Admit(ctx context.Context, a domain.Actor, i domain.EncounterI
 	return c.Store.Admit(ctx, a, i, key)
 }
 func (c Clinical) Discharge(ctx context.Context, a domain.Actor, id string, d domain.Discharge) (domain.Encounter, error) {
-	if a.Role != "doctor" {
+	if a.Role != "doctor" && a.Role != "admin" {
 		return domain.Encounter{}, domain.ErrForbidden
 	}
 	d.Summary = strings.TrimSpace(d.Summary)

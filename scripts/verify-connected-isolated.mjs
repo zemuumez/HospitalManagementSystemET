@@ -33,15 +33,15 @@ const inventoryWorkspaceMode = process.argv.includes("--inventory-workspace");
 const smartCardsWorkspaceMode = process.argv.includes(
   "--smart-cards-workspace",
 );
-const odontogramWorkspaceMode = process.argv.includes(
-  "--odontogram-workspace",
-);
+const odontogramWorkspaceMode = process.argv.includes("--odontogram-workspace");
 const bedManagementWorkspaceMode = process.argv.includes(
   "--bed-management-workspace",
 );
+const clinicalEncountersWorkspaceMode = process.argv.includes(
+  "--clinical-encounters-workspace",
+);
 const rawDatabaseUrl =
-  process.env.DATABASE_URL?.trim() ||
-  process.env.HMS_TEST_DATABASE_URL?.trim();
+  process.env.DATABASE_URL?.trim() || process.env.HMS_TEST_DATABASE_URL?.trim();
 if (!rawDatabaseUrl) {
   throw new Error(
     "FATAL: DATABASE_URL is not set. Browser QA must fail closed without explicit database credentials.",
@@ -304,7 +304,8 @@ try {
       doctorWorkspaceMode ||
       settingsWorkspaceMode ||
       odontogramWorkspaceMode ||
-      bedManagementWorkspaceMode
+      bedManagementWorkspaceMode ||
+      clinicalEncountersWorkspaceMode
     ) {
       const { hashPassword } = await import("better-auth/crypto");
       const email = `qa-admin-${token}@example.test`;
@@ -357,7 +358,9 @@ try {
                                     ? "scripts/verify-odontogram-workspace.mjs"
                                     : bedManagementWorkspaceMode
                                       ? "scripts/verify-bed-management-workspace.mjs"
-                                      : "scripts/verify-connected.mjs",
+                                      : clinicalEncountersWorkspaceMode
+                                        ? "scripts/verify-clinical-encounters-workspace.mjs"
+                                        : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,

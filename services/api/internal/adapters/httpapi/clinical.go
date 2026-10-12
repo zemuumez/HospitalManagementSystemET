@@ -191,6 +191,32 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 		}
 	case strings.HasPrefix(r.URL.Path, "/v1/encounters/"):
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/encounters/"), "/")
+		if len(parts) == 1 {
+			id := parts[0]
+			if r.Method == "GET" {
+				out, e := s.Clinical.Encounter(r.Context(), a, id)
+				if e != nil {
+					fail(w, e)
+				} else {
+					write(w, 200, out)
+				}
+				return true
+			}
+			if r.Method == "PATCH" || r.Method == "PUT" {
+				var i domain.UpdateEncounterInput
+				if !decode(w, r, &i) {
+					return true
+				}
+				out, e := s.Clinical.UpdateEncounter(r.Context(), a, id, i)
+				if e != nil {
+					fail(w, e)
+				} else {
+					write(w, 200, out)
+				}
+				return true
+			}
+			return false
+		}
 		if len(parts) != 2 {
 			return false
 		}

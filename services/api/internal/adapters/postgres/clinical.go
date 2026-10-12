@@ -254,7 +254,7 @@ COALESCE((SELECT email FROM "user" WHERE id=patient_portal_owner(p.id)),''),u.em
 COALESCE((SELECT CASE WHEN i.paid_minor>=i.total_minor THEN 'Paid' ELSE 'Unpaid' END FROM encounter_billing eb JOIN invoice i ON i.id=eb.invoice_id WHERE eb.encounter_id=e.id),'Unbilled'),
 (SELECT count(*) FROM encounter visits WHERE visits.patient_id=e.patient_id AND visits.doctor_id=e.doctor_id AND visits.kind='opd')`
 const encounterFrom = ` FROM encounter e JOIN patient p ON p.id=e.patient_id JOIN "user" u ON u.id=e.doctor_id LEFT JOIN hospital_bed b ON b.id=e.bed_id `
-const encounterScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND e.doctor_id=$2) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
+const encounterScope = `($1 IN ('admin','receptionist') OR ($1='doctor' AND (e.doctor_id=$2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id=e.id AND ect.staff_id=$2 AND ect.revoked_at IS NULL))) OR ($1='nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id=e.id AND ect.staff_id=$2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id=e.id AND en.nurse_id=$2 AND en.active))) OR ($1='patient' AND patient_portal_owner(p.id)=$2))`
 
 func scanEncounter(row pgx.Row) (domain.Encounter, error) {
 	var e domain.Encounter
@@ -297,6 +297,79 @@ func (s Store) Encounters(ctx context.Context, a domain.Actor, kind string, page
 	}
 	return out, tx.Commit(ctx)
 }
+
+func (s Store) Encounter(ctx context.Context, a domain.Actor, id string) (domain.Encounter, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.Encounter{}, err
+	}
+	defer tx.Rollback(ctx)
+	row := tx.QueryRow(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE `+encounterScope+` AND e.id=$3`, a.Role, a.ID, id)
+	e, err := scanEncounter(row)
+	if err != nil {
+		return e, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event(actor_id,action,resource_id) VALUES($1,'encounter.viewed',$2)`, a.ID, id); err != nil {
+		return domain.Encounter{}, err
+	}
+	return e, tx.Commit(ctx)
+}
+
+func (s Store) UpdateEncounter(ctx context.Context, a domain.Actor, id string, u domain.UpdateEncounterInput) (domain.Encounter, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.Encounter{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var currentDoctorID string
+	var currentStatus string
+	var currentVersion int
+	err = tx.QueryRow(ctx, `SELECT doctor_id, status, version FROM encounter WHERE id=$1 FOR UPDATE`, id).Scan(&currentDoctorID, &currentStatus, &currentVersion)
+	if err != nil {
+		return domain.Encounter{}, clinicalError(err)
+	}
+	if a.Role == "doctor" && currentDoctorID != a.ID {
+		return domain.Encounter{}, domain.ErrForbidden
+	}
+	if currentVersion != u.Version {
+		return domain.Encounter{}, domain.ErrStale
+	}
+	if currentStatus != "active" {
+		return domain.Encounter{}, domain.ErrValidation
+	}
+
+	newDoctorID := currentDoctorID
+	if u.DoctorID != "" && u.DoctorID != currentDoctorID {
+		var dummy string
+		if err = tx.QueryRow(ctx, `SELECT u.id FROM "user" u JOIN staff_access s ON s.user_id=u.id WHERE u.id=$1 AND s.active AND s.role='doctor' FOR SHARE`, u.DoctorID).Scan(&dummy); err != nil {
+			return domain.Encounter{}, domain.ErrValidation
+		}
+		newDoctorID = u.DoctorID
+		if _, err = tx.Exec(ctx, `UPDATE patient_case SET doctor_id=$1 WHERE id=(SELECT case_id FROM encounter WHERE id=$2)`, newDoctorID, id); err != nil {
+			return domain.Encounter{}, clinicalError(err)
+		}
+	}
+
+	cmd, err := tx.Exec(ctx, `UPDATE encounter SET symptoms=$1, intake=$2, doctor_id=$3, version=version+1 WHERE id=$4 AND version=$5`, u.Symptoms, u.Intake, newDoctorID, id, u.Version)
+	if err != nil {
+		return domain.Encounter{}, clinicalError(err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return domain.Encounter{}, domain.ErrStale
+	}
+
+	if _, err = tx.Exec(ctx, `INSERT INTO audit_event(actor_id,action,resource_id) VALUES($1,'encounter.updated',$2)`, a.ID, id); err != nil {
+		return domain.Encounter{}, err
+	}
+
+	out, err := scanEncounter(tx.QueryRow(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE e.id=$1`, id))
+	if err != nil {
+		return domain.Encounter{}, err
+	}
+	return out, tx.Commit(ctx)
+}
+
 func (s Store) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInput, key string) (domain.Encounter, error) {
 	empty := domain.Encounter{}
 	tx, err := s.DB.Begin(ctx)
@@ -339,6 +412,9 @@ func (s Store) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInpu
 		return empty, clinicalError(err)
 	}
 	if i.Kind == "ipd" {
+		if _, err = tx.Exec(ctx, `INSERT INTO bed_assignment(bed_id,encounter_id,patient_id,assigned_from,notes,assigned_by) VALUES($1,$2,$3,$4,'Initial admission assignment',$5)`, i.BedID, id, patientID, i.AdmittedAt, a.ID); err != nil {
+			return empty, err
+		}
 		if _, err = tx.Exec(ctx, `INSERT INTO bed_event(encounter_id,kind,to_bed_id,charge_minor,actor_id,encounter_version) VALUES($1,'admission',$2,$3,$4,1)`, id, i.BedID, charge, a.ID); err != nil {
 			return empty, err
 		}
@@ -358,7 +434,7 @@ func (s Store) Discharge(ctx context.Context, a domain.Actor, id string, d domai
 		return domain.Encounter{}, err
 	}
 	defer tx.Rollback(ctx)
-	out, err := scanEncounter(tx.QueryRow(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE e.id=$1 AND e.doctor_id=$2 FOR UPDATE OF e`, id, a.ID))
+	out, err := scanEncounter(tx.QueryRow(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE e.id=$1 AND ($2='admin' OR e.doctor_id=$3) FOR UPDATE OF e`, id, a.Role, a.ID))
 	if err != nil {
 		return out, err
 	}
@@ -374,6 +450,10 @@ func (s Store) Discharge(ctx context.Context, a domain.Actor, id string, d domai
 		_ = tx.QueryRow(ctx, `SELECT id FROM hospital_bed WHERE id=$1 FOR UPDATE`, out.BedID).Scan(&dummy)
 		// Close any open bed_assignment
 		if _, err = tx.Exec(ctx, `UPDATE bed_assignment SET assigned_to=$2 WHERE encounter_id=$1 AND assigned_to IS NULL`, id, now); err != nil {
+			return out, err
+		}
+		// Reset hospital_bed state to 'ready'
+		if _, err = tx.Exec(ctx, `UPDATE hospital_bed SET state='ready' WHERE id=$1`, out.BedID); err != nil {
 			return out, err
 		}
 	}

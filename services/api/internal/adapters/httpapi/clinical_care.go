@@ -137,6 +137,15 @@ func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Ac
 				}
 
 			case "care-team":
+				if len(parts) == 3 && r.Method == "DELETE" {
+					memberID := parts[2]
+					if err := s.ClinicalCare.RevokeCareTeamMember(r.Context(), a, memberID); err != nil {
+						fail(w, err)
+						return true
+					}
+					write(w, 200, map[string]bool{"ok": true})
+					return true
+				}
 				if r.Method == "GET" {
 					team, err := s.ClinicalCare.CareTeam(r.Context(), a, encounterID)
 					if err != nil {

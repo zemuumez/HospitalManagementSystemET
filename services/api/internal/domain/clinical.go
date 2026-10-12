@@ -145,6 +145,28 @@ func (e *EncounterInput) Validate(now time.Time) error {
 	return nil
 }
 
+type UpdateEncounterInput struct {
+	Symptoms string          `json:"symptoms"`
+	Intake   EncounterIntake `json:"intake"`
+	DoctorID string          `json:"doctorId,omitempty"`
+	Version  int             `json:"version"`
+}
+
+func (u *UpdateEncounterInput) Validate() error {
+	if err := u.Intake.Validate(); err != nil {
+		return err
+	}
+	u.Symptoms = strings.TrimSpace(u.Symptoms)
+	u.DoctorID = strings.TrimSpace(u.DoctorID)
+	if len([]rune(u.Symptoms)) > 2000 || u.Version < 1 {
+		return ErrValidation
+	}
+	if u.DoctorID != "" && !UUIDPattern.MatchString(u.DoctorID) {
+		return ErrValidation
+	}
+	return nil
+}
+
 type Encounter struct {
 	PatientEmail string `json:"patientEmail"`
 	DoctorEmail  string `json:"doctorEmail"`

@@ -309,3 +309,38 @@ To achieve full parity, eliminate all mock fallbacks, and satisfy the user accep
    - **Journey 8:** Amharic localization and dark mode WCAG AA contrast verification.
 3. **Isolated Integration Runner:**
    - Wire `--clinical-encounters-workspace` into `scripts/verify-connected-isolated.mjs` for fail-closed isolated schema testing.
+
+---
+
+## 9. Verification Evidence & Test Execution Results
+
+### 9.1 PostgreSQL Integration Test Suite (`encounter_parity_test.go`)
+Executed against live isolated PostgreSQL schemas (`hms.local/api/internal/adapters/postgres`):
+- `TestEncounter_SchemaUpgradeAnd067Repair` — **PASS (3.33s)**
+  - Validates migration `067_clinical_encounter_parity_and_discharge_repair.sql` schema application, index creation, historical discharged encounter closure, and automatic bed repair back to `ready` status.
+- `TestEncounter_GetByID_ScopingAndCareTeam` — **PASS (3.00s)**
+  - Validates canonical actor scoping: Admin and assigned primary doctor can read; unassigned secondary doctor is hidden (`ErrNotFound`); care team delegation dynamically grants read access.
+- `TestEncounter_Update_ConcurrencyAndOwnership` — **PASS (2.93s)**
+  - Validates optimistic locking version checks: mutations with stale version reject with `ErrStale` (HTTP 409); unassigned doctor mutations reject with `ErrForbidden` (HTTP 403); successful mutations increment `version` and update composite case doctor.
+- `TestEncounter_Discharge_AtomicBedReleaseAndConcurrency` — **PASS (3.00s)**
+  - Validates that patient discharge atomically updates `encounter.status='discharged'`, clears `bed_id`, closes active `bed_assignment`, and restores `hospital_bed.state='ready'`.
+- `TestEncounter_Discharge_AdminPermission` — **PASS (3.11s)**
+  - Validates administrative override allowing hospital administrators to discharge inpatients.
+
+**Overall Result:** **5 / 5 suites PASS (16.93s)**.
+
+### 9.2 Playwright Browser QA Suite (`scripts/verify-clinical-encounters-workspace.mjs`)
+Executed via isolated integration runner `npm run test:clinical-encounters`:
+
+| Journey | Test Scenario | Verified Assertions | Screenshot Artifact | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Journey 1** | IPD Workspace Landing | Table headers, search box, pagination bar, status filter | `01_ipd_workspace_landing.png` | **PASS** |
+| **Journey 2** | IPD Admission Workflow | Case selection, bed assignment, vitals intake, record creation | `02_ipd_admission_created.png` | **PASS** |
+| **Journey 3** | Fresh Session Persistence | Multi-context re-login, encounter data integrity across sessions | `03_persistence_fresh_session.png` | **PASS** |
+| **Journey 4** | Diagnoses & Vitals Updates | BP/symptoms update with versioning, ICD-10 diagnosis recording | `04_encounter_diagnosis_recorded.png` | **PASS** |
+| **Journey 5** | Concurrency Conflict Rejection | Stale version edit rejection via HTTP 409 Conflict | `05_concurrency_conflict_rejection.png` | **PASS** |
+| **Journey 6** | Care Team Delegation & Security | Unauthorized doctor denied (403/404); delegation grants; revocation strips | `06_care_team_delegation_revocation.png` | **PASS** |
+| **Journey 7** | Bed Transfer & Atomic Discharge | Transfer to telemetry bed; discharge releases bed atomically to ready | `07_discharge_atomic_bed_release.png` | **PASS** |
+| **Journey 8** | Amharic Localization & Dark Mode | Ethiopian Amharic translation in DOM, dark theme contrast ratio >= 4.5:1 | `08_unauthorized_rejection_amharic_dark_mode.png` | **PASS** |
+
+**Overall Result:** **8 / 8 journeys PASS (0 errors)**. All synthetic data cleaned up in `finally` block; zero test pollution in development database.
