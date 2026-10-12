@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -238,20 +238,27 @@ export function BedManagementWorkspace({ id }: { id: string }) {
     setApiErrorBanner("");
 
     try {
-      // 1. Always load bed types for dropdown selectors
-      const typesRes = await api<{ bedTypes: ApiBedType[]; total?: number }>(
-        `bed-types?page=1&pageSize=100`,
-      );
-      if (typesRes?.bedTypes && Array.isArray(typesRes.bedTypes)) {
-        const loadedTypes: BedTypeRow[] = typesRes.bedTypes.map((bt) => ({
-          id: bt.id,
-          title: bt.name,
-          description: bt.description,
-          version: bt.version || 1,
-          bedsCount: bt.bedsCount || 0,
-        }));
-        setBedTypes(loadedTypes);
+      // 1. Always load bed types across all pages for dropdown selectors
+      let allBedTypes: BedTypeRow[] = [];
+      let btPage = 1;
+      while (true) {
+        const typesRes = await api<{ bedTypes: ApiBedType[]; total?: number }>(
+          `bed-types?page=${btPage}&pageSize=100`,
+        );
+        if (!typesRes?.bedTypes || typesRes.bedTypes.length === 0) break;
+        for (const bt of typesRes.bedTypes) {
+          allBedTypes.push({
+            id: bt.id,
+            title: bt.name,
+            description: bt.description,
+            version: bt.version || 1,
+            bedsCount: bt.bedsCount || 0,
+          });
+        }
+        if (allBedTypes.length >= (typesRes.total || 0) || typesRes.bedTypes.length < 100) break;
+        btPage++;
       }
+      setBedTypes(allBedTypes);
 
       // 2. Tab-specific loading & server-backed pagination/search
       if (activeTab === "bed-types") {
@@ -463,8 +470,18 @@ export function BedManagementWorkspace({ id }: { id: string }) {
       }
 
       try {
-        const encRes = await api<{ encounters: any[] }>("encounters?kind=ipd&page=1&pageSize=200");
-        if (encRes?.encounters) setRemoteEncounters(encRes.encounters);
+        let allEncounters: any[] = [];
+        let encPage = 1;
+        while (true) {
+          const encRes = await api<{ encounters: any[] }>(
+            `encounters?kind=ipd&page=${encPage}&pageSize=200`,
+          );
+          if (!encRes?.encounters || encRes.encounters.length === 0) break;
+          allEncounters = allEncounters.concat(encRes.encounters);
+          if (encRes.encounters.length < 200) break;
+          encPage++;
+        }
+        setRemoteEncounters(allEncounters);
       } catch (err: any) {
         auxErrors.push(`Encounters: ${err?.message || "fetch failed"}`);
       }
@@ -485,6 +502,38 @@ export function BedManagementWorkspace({ id }: { id: string }) {
   useEffect(() => {
     loadBedManagementData();
   }, [loadBedManagementData]);
+
+  const patientReqSeq = useRef(0);
+
+  // Server-backed debounced patient search with request cancellation / stale-response protection
+  useEffect(() => {
+    if (!bedAssignModalOpen) return;
+    const seq = ++patientReqSeq.current;
+    const timer = setTimeout(async () => {
+      try {
+        const q = patientSearch.trim();
+        const res = await api<{ patients: Patient[] }>(
+          q
+            ? `patients?search=${encodeURIComponent(q)}&page=1&pageSize=50`
+            : `patients?page=1&pageSize=50`,
+        );
+        if (seq === patientReqSeq.current && res?.patients) {
+          setRemotePatients((prev) => {
+            const map = new Map<string, Patient>();
+            for (const p of res.patients) map.set(p.id, p);
+            if (formAssignPatientId) {
+              const cur = prev.find((p) => p.id === formAssignPatientId);
+              if (cur && !map.has(cur.id)) map.set(cur.id, cur);
+            }
+            return Array.from(map.values());
+          });
+        }
+      } catch {
+        // ignore cancelled or stale error
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [patientSearch, bedAssignModalOpen, formAssignPatientId]);
 
   // Tab switching
   function navigateToTab(tab: BedTab) {
@@ -2113,7 +2162,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                     <option value="">{t("Select IPD Encounter")}</option>
                     {filteredEncounters.map((enc) => (
                       <option key={enc.id} value={enc.id}>
-                        {enc.id.slice(0, 8).toUpperCase()} - {enc.patientName || "IPD Patient"} (v{enc.version || 1}) [{enc.status}]
+                        {enc.id.slice(0, 8).toUpperCase()} - {enc.patientName || "IPD Patient"} (IPD #{enc.number || enc.id.slice(0, 6)}) [{enc.status}] (v{enc.version || 1})
                       </option>
                     ))}
                   </select>

@@ -68,7 +68,7 @@ func (s Store) SearchBeds(ctx context.Context, a domain.Actor, search, ward, bed
 			OR b.description ILIKE $%d
 			OR (
 				($1 = 'admin' OR $1 = 'receptionist'
-				 OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+				 OR ($1 = 'doctor' AND (e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
 				 OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
 				) AND (p.given_name || ' ' || p.family_name) ILIKE $%d
 			)
@@ -111,23 +111,23 @@ func (s Store) SearchBeds(ctx context.Context, a domain.Actor, search, ward, bed
 		       COALESCE(b.description, '') AS description,
 		       b.active,
 		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
-		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'doctor' AND (e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
 		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
 		       ) THEN COALESCE(p.given_name || ' ' || p.family_name, '') ELSE '' END AS patient_name,
 		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
-		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'doctor' AND (e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
 		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
 		       ) THEN COALESCE(p.phone, '') ELSE '' END AS patient_phone,
 		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
-		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'doctor' AND (e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
 		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
 		       ) THEN COALESCE(pp.gender, '') ELSE '' END AS patient_gender,
 		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
-		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'doctor' AND (e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
 		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
 		       ) THEN COALESCE(TO_CHAR(COALESCE(ba.assigned_from, e.admitted_at), 'DDth Mon, YYYY HH12:MI:SS AM'), '') ELSE '' END AS admission_date,
 		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
-		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'doctor' AND (e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
 		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
 		       ) THEN COALESCE(COALESCE(ba.encounter_id::text, e.id::text), '') ELSE '' END AS encounter_id
 		%s

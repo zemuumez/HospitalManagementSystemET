@@ -132,6 +132,32 @@ async function main() {
   );
   createdUserIds.push(unrelatedNurseId);
 
+  // Doctor B: Patient-level clinician NOT on Doctor A's encounter (for F3 scope testing)
+  const docBToken = randomBytes(4).toString("hex");
+  const doctorBId = `qa-docb-${docBToken}`;
+  const doctorBEmail = `docb-${docBToken}@example.test`;
+  const doctorBPassword = `DocBPass!${randomBytes(8).toString("hex")}`;
+  await db.query('INSERT INTO "user"(id, name, email) VALUES($1, $2, $3)', [
+    doctorBId,
+    "QA Patient Clinician Doctor B",
+    doctorBEmail,
+  ]);
+  await db.query(
+    'INSERT INTO account(id, "accountId", "providerId", "userId", password) VALUES($1, $2, \'credential\', $2, $3)',
+    [`acc-docb-${docBToken}`, doctorBId, await hashPassword(doctorBPassword)],
+  );
+  await db.query(
+    "INSERT INTO staff_access(user_id, role, active) VALUES($1, 'doctor', true)",
+    [doctorBId],
+  );
+  createdUserIds.push(doctorBId);
+
+  // Set patient's clinician_user_id to Doctor B
+  await db.query("UPDATE patient SET clinician_user_id = $1 WHERE id = $2", [
+    doctorBId,
+    patientId,
+  ]);
+
   // Clinical case & active IPD encounter
   const caseRes = await db.query(
     "INSERT INTO patient_case(patient_id, doctor_id, created_by, description) VALUES($1, $2, $3, 'QA Bed Case') RETURNING id",
@@ -425,6 +451,35 @@ async function main() {
     await nursePage.close();
     await nurseContext.close();
 
+    // Doctor B (patient-level clinician who is not on Doctor A's encounter)
+    const docBContext = await browser.newContext({
+      viewport: { width: 1440, height: 950 },
+    });
+    const docBPage = await docBContext.newPage();
+    await performLogin(docBPage, doctorBEmail, doctorBPassword);
+
+    await docBPage.goto(`${base}/modules/bed-assigns`, { waitUntil: "networkidle" });
+    await docBPage.waitForSelector('[data-ready="true"]', { timeout: 15000 });
+    const docBRows = await docBPage.locator(`tr:has-text("${testBedName}")`).count();
+    assert.equal(
+      docBRows,
+      0,
+      `Patient clinician Doctor B must not list assignments belonging to Doctor A's encounter`,
+    );
+
+    // Bed status check for Doctor B: patient name must be redacted
+    await docBPage.goto(`${base}/modules/bed-status`, { waitUntil: "networkidle" });
+    await docBPage.waitForSelector('[data-ready="true"]', { timeout: 15000 });
+    const docBBoardText = await docBPage.textContent("body");
+    assert.ok(
+      !docBBoardText.includes(patientName),
+      `Patient name "${patientName}" must be redacted for Doctor B who lacks encounter access`,
+    );
+    console.log("PASS: Patient-level clinician Doctor B denied access to Doctor A's encounter details (F3).");
+
+    await docBPage.close();
+    await docBContext.close();
+
     // -------------------------------------------------------------
     // Journey 5: Discharge Lifecycle & In-Use Deletion Protection
     // -------------------------------------------------------------
@@ -564,6 +619,7 @@ async function main() {
         await db.query("DELETE FROM patient_case WHERE id = ANY($1::uuid[])", [createdCaseIds]);
       }
       if (createdPatientIds.length > 0) {
+        await db.query("UPDATE patient SET clinician_user_id = NULL WHERE id = ANY($1::uuid[])", [createdPatientIds]);
         await db.query("DELETE FROM patient WHERE id = ANY($1::uuid[])", [createdPatientIds]);
       }
       if (createdUserIds.length > 0) {

@@ -258,8 +258,7 @@ func (s Store) ListAllBedAssignments(ctx context.Context, a domain.Actor, search
 		WHERE (
 			$1 = 'admin' OR $1 = 'receptionist'
 			OR ($1 = 'doctor' AND (
-				p.clinician_user_id = $2
-				OR e.doctor_id = $2
+				e.doctor_id = $2
 				OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)
 			))
 			OR ($1 = 'nurse' AND (

@@ -849,6 +849,76 @@ func TestBed_ReviewR1_RoleAccessScopeAndRedaction(t *testing.T) {
 		t.Fatalf("security violation: unrelated doctor saw %d assignments (expected 0)", total)
 	}
 
+	// 2b. Doctor B (who is patient.clinician_user_id but NOT on doctor A's encounter)
+	// Canonical encounter access denies Doctor B:
+	// - AuthorizeClinicalRecord returns ErrForbidden
+	// - ListAllBedAssignments returns 0 rows
+	// - SearchBeds returns bed as occupied but REDACTS patient clinical details
+	// - SearchBeds with patient search returns 0 results
+	patientClinicianDoc := domain.Actor{ID: "usr-patient-clinician-b", Role: "doctor"}
+	_, err = store.DB.Exec(ctx, `
+		INSERT INTO "user"(id, email, name) VALUES ($1, 'doc_b@hospital.test', 'Doctor B') ON CONFLICT(id) DO NOTHING
+	`, patientClinicianDoc.ID)
+	if err != nil {
+		t.Fatalf("failed to insert doc B: %v", err)
+	}
+	_, err = store.DB.Exec(ctx, `
+		INSERT INTO staff_access(user_id, role, active) VALUES ($1, 'doctor', true) ON CONFLICT(user_id) DO NOTHING
+	`, patientClinicianDoc.ID)
+	if err != nil {
+		t.Fatalf("failed to insert staff_access for doc B: %v", err)
+	}
+	_, err = store.DB.Exec(ctx, `
+		UPDATE patient SET clinician_user_id = $1 WHERE id = $2
+	`, patientClinicianDoc.ID, patientID)
+	if err != nil {
+		t.Fatalf("failed to update patient clinician_user_id: %v", err)
+	}
+
+	// Canonical admission authorization must deny Doctor B for Doctor A's encounter
+	if err := store.AuthorizeClinicalRecord(ctx, patientClinicianDoc, patientID, encID, "admission"); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for patient-level clinician B accessing doctor A encounter, got: %v", err)
+	}
+
+	// ListAllBedAssignments must NOT return Doctor A's encounter assignment to Doctor B
+	docBList, totalB, err := store.ListAllBedAssignments(ctx, patientClinicianDoc, "", "active", 1, 25)
+	if err != nil {
+		t.Fatalf("doctor B ListAllBedAssignments failed: %v", err)
+	}
+	if totalB != 0 || len(docBList) != 0 {
+		t.Fatalf("security violation: doctor B saw %d assignments belonging to doctor A encounter", totalB)
+	}
+
+	// SearchBeds must redact patient details for Doctor B
+	docBBeds, _, err := store.SearchBeds(ctx, patientClinicianDoc, "", "", "", nil, 1, 10)
+	if err != nil {
+		t.Fatalf("doctor B SearchBeds failed: %v", err)
+	}
+	for _, b := range docBBeds {
+		if b.ID == bed.ID {
+			if b.PatientName != "" || b.PatientPhone != "" || b.PatientGender != "" || b.EncounterID != "" {
+				t.Fatalf("security violation: doctor B saw patient clinical details on doctor A encounter bed: %+v", b)
+			}
+		}
+	}
+
+	// SearchBeds with patient name must return 0 results for Doctor B, but 1 for Doctor A
+	_, totalSearchB, err := store.SearchBeds(ctx, patientClinicianDoc, "Derartu", "", "", nil, 1, 10)
+	if err != nil {
+		t.Fatalf("doctor B SearchBeds by name failed: %v", err)
+	}
+	if totalSearchB != 0 {
+		t.Fatalf("security violation: doctor B matched bed by patient name, got %d", totalSearchB)
+	}
+
+	_, totalSearchA, err := store.SearchBeds(ctx, doctor, "Derartu", "", "", nil, 1, 10)
+	if err != nil {
+		t.Fatalf("doctor A SearchBeds by name failed: %v", err)
+	}
+	if totalSearchA != 1 {
+		t.Fatalf("doctor A expected to match 1 bed by patient name, got %d", totalSearchA)
+	}
+
 	// 3. Admin, receptionist, and assigned doctor MUST see the assignment
 	adminList, total, err := store.ListAllBedAssignments(ctx, admin, "", "active", 1, 25)
 	if err != nil || total != 1 || len(adminList) != 1 {
@@ -1081,17 +1151,51 @@ func TestBed_ReviewR3_MandatoryPositiveVersionContracts(t *testing.T) {
 	}
 }
 
-// R4: Corrective migration 064 quarantine and reconciliation audit
-func TestBed_ReviewR4_Migration064QuarantineAndAudit(t *testing.T) {
-	db, store, _, cleanup := setupBedTestDB(t, 62)
+// Helper function: standard migration runner with schema_migration tracking table
+func runBedMigrationRunner(t *testing.T, db *pgxpool.Pool, ctx context.Context) {
+	t.Helper()
+	if _, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		t.Fatalf("failed to create schema_migration: %v", err)
+	}
+	files, err := filepath.Glob("../../../../../db/migrations/*.sql")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("failed to glob migration files: %v", err)
+	}
+	sort.Strings(files)
+	for _, f := range files {
+		base := filepath.Base(f)
+		var exists bool
+		err = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migration WHERE name=$1)`, base).Scan(&exists)
+		if err != nil {
+			t.Fatalf("failed checking schema_migration for %s: %v", base, err)
+		}
+		if exists {
+			continue
+		}
+		sqlBytes, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("failed reading migration %s: %v", f, err)
+		}
+		if _, err = db.Exec(ctx, string(sqlBytes)); err != nil {
+			t.Fatalf("normal migration runner failed applying %s: %v", base, err)
+		}
+		if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1)`, base); err != nil {
+			t.Fatalf("failed recording %s in schema_migration: %v", base, err)
+		}
+	}
+}
+
+// R4 / F1: Migration 064 safely handles surviving open duplicate without unique constraint collision (SQLSTATE 23505)
+func TestBed_ReviewR4_SurvivingOpenDuplicateCollision(t *testing.T) {
+	db, _, _, cleanup := setupBedTestDB(t, 62)
 	defer cleanup()
 	ctx := context.Background()
 
-	admin := domain.Actor{ID: "usr-admin-r4", Role: "admin"}
-	doctor := domain.Actor{ID: "usr-doc-r4", Role: "doctor"}
+	admin := domain.Actor{ID: "usr-admin-f1", Role: "admin"}
+	doctor := domain.Actor{ID: "usr-doc-f1", Role: "doctor"}
 
 	_, _ = db.Exec(ctx, `
-		INSERT INTO "user"(id, email, name) VALUES ($1, 'admin_r4@hospital.test', 'Admin R4'), ($2, 'doc_r4@hospital.test', 'Doc R4')
+		INSERT INTO "user"(id, email, name) VALUES ($1, 'admin_f1@hospital.test', 'Admin F1'), ($2, 'doc_f1@hospital.test', 'Doc F1')
 		ON CONFLICT(id) DO NOTHING
 	`, admin.ID, doctor.ID)
 	_, _ = db.Exec(ctx, `
@@ -1100,15 +1204,201 @@ func TestBed_ReviewR4_Migration064QuarantineAndAudit(t *testing.T) {
 	`, admin.ID, doctor.ID)
 
 	var patientID, caseID, encID string
-	_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Derartu', 'Tulu', '1972-03-21', '+251911998877') RETURNING id::text`).Scan(&patientID)
-	_ = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case R4', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&caseID)
+	_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Abebe', 'Bikila', '1960-01-01', '+251911112233') RETURNING id::text`).Scan(&patientID)
+	_ = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case F1', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&caseID)
 
 	var typeID, bedID string
-	_ = db.QueryRow(ctx, `INSERT INTO bed_type(name, description, active) VALUES ('Type R4', 'Desc', true) RETURNING id::text`).Scan(&typeID)
-	_ = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by, ward_name) VALUES ('R4-BED', 'Type R4', $1, 60000, true, $2, 'Ward R4') RETURNING id::text`, typeID, admin.ID).Scan(&bedID)
-	_ = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Fever', $5, 'req-r4') RETURNING id::text`, caseID, patientID, doctor.ID, bedID, admin.ID).Scan(&encID)
+	_ = db.QueryRow(ctx, `INSERT INTO bed_type(name, description, active) VALUES ('Type F1', 'Desc', true) RETURNING id::text`).Scan(&typeID)
+	_ = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by, ward_name) VALUES ('F1-BED', 'Type F1', $1, 60000, true, $2, 'Ward F1') RETURNING id::text`, typeID, admin.ID).Scan(&bedID)
+	_ = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Symptoms', $5, 'req-f1') RETURNING id::text`, caseID, patientID, doctor.ID, bedID, admin.ID).Scan(&encID)
 
-	// Seed an assignment that was closed with fabricated created_at
+	// Seed TWO assignments for the same active encounter & bed:
+	// Older assignment 1 (closed by original 063 with assigned_to = created_at)
+	// Newer assignment 2 (surviving open assignment: assigned_to IS NULL)
+	var assign1ID, assign2ID string
+	t1 := time.Now().Add(-5 * time.Hour).UTC()
+	t2 := time.Now().Add(-2 * time.Hour).UTC()
+	_ = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Older duplicate assignment', $4, $5, $5, $5)
+		RETURNING id::text
+	`, bedID, encID, patientID, doctor.ID, t1).Scan(&assign1ID)
+
+	_ = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Surviving open assignment', $4, $5, NULL, $5)
+		RETURNING id::text
+	`, bedID, encID, patientID, doctor.ID, t2).Scan(&assign2ID)
+
+	// In an original-063 database, the unique indexes are already active on bed_assignment
+	_, err := db.Exec(ctx, `
+		CREATE UNIQUE INDEX IF NOT EXISTS one_active_bed_assignment ON bed_assignment(bed_id) WHERE assigned_to IS NULL;
+		CREATE UNIQUE INDEX IF NOT EXISTS one_active_encounter_bed_assignment ON bed_assignment(encounter_id) WHERE assigned_to IS NULL;
+	`)
+	if err != nil {
+		t.Fatalf("failed to create unique indexes: %v", err)
+	}
+
+	// Apply migration 064: MUST NOT CRASH with SQLSTATE 23505!
+	sql64, err := os.ReadFile("../../../../../db/migrations/064_bed_assignment_reconciliation_audit.sql")
+	if err != nil {
+		t.Fatalf("failed to read migration 064: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql64)); err != nil {
+		t.Fatalf("migration 064 failed on surviving open duplicate: %v", err)
+	}
+
+	// Apply migration 065: repair must also run cleanly
+	sql65, err := os.ReadFile("../../../../../db/migrations/065_bed_assignment_reconciliation_repair.sql")
+	if err != nil {
+		t.Fatalf("failed to read migration 065: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql65)); err != nil {
+		t.Fatalf("migration 065 failed: %v", err)
+	}
+
+	// Verify surviving assignment 2 remains active
+	var a2AssignedTo *time.Time
+	err = db.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assign2ID).Scan(&a2AssignedTo)
+	if err != nil || a2AssignedTo != nil {
+		t.Fatalf("expected assignment 2 to remain active with assigned_to NULL, got err=%v val=%v", err, a2AssignedTo)
+	}
+
+	// Verify older assignment 1 was archived and quarantined, NOT reopened to cause collision
+	var a1AssignedTo *time.Time
+	err = db.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assign1ID).Scan(&a1AssignedTo)
+	if err != nil {
+		t.Fatalf("failed to query assignment 1: %v", err)
+	}
+	if a1AssignedTo == nil {
+		t.Fatalf("security violation: assignment 1 was erroneously reopened, violating unique slot occupancy")
+	}
+
+	// Verify audit table captured full original provenance
+	var auditCount int
+	var action, origNotes string
+	var origRecord []byte
+	err = db.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(MAX(resolution_action), ''), COALESCE(MAX(original_notes), ''), COALESCE(MAX(original_record::text), '')
+		FROM bed_assignment_migration_audit
+		WHERE bed_assignment_id = $1
+	`, assign1ID).Scan(&auditCount, &action, &origNotes, &origRecord)
+	if err != nil || auditCount != 1 || action != "quarantined_superseded_duplicate" {
+		t.Fatalf("expected audit record with quarantined_superseded_duplicate, count=%d action='%s', err=%v", auditCount, action, err)
+	}
+	if origNotes != "Older duplicate assignment" || len(origRecord) == 0 {
+		t.Fatalf("expected audit table to capture complete original notes and JSON record")
+	}
+}
+
+// R4 / F2: Fresh installation archives duplicate open assignments before mutation without fabricating timestamps
+func TestBed_ReviewR4_FreshInstallAndProvenanceArchiving(t *testing.T) {
+	db, _, _, cleanup := setupBedTestDB(t, 62)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin := domain.Actor{ID: "usr-admin-f2", Role: "admin"}
+	doctor := domain.Actor{ID: "usr-doc-f2", Role: "doctor"}
+
+	_, _ = db.Exec(ctx, `
+		INSERT INTO "user"(id, email, name) VALUES ($1, 'admin_f2@hospital.test', 'Admin F2'), ($2, 'doc_f2@hospital.test', 'Doc F2')
+		ON CONFLICT(id) DO NOTHING
+	`, admin.ID, doctor.ID)
+	_, _ = db.Exec(ctx, `
+		INSERT INTO staff_access(user_id, role, active) VALUES ($1, 'admin', true), ($2, 'doctor', true)
+		ON CONFLICT(user_id) DO NOTHING
+	`, admin.ID, doctor.ID)
+
+	var patientID, caseID, encID string
+	_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Haile', 'Gebrselassie', '1973-04-18', '+251911445566') RETURNING id::text`).Scan(&patientID)
+	_ = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case F2', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&caseID)
+
+	var typeID, bedID string
+	_ = db.QueryRow(ctx, `INSERT INTO bed_type(name, description, active) VALUES ('Type F2', 'Desc', true) RETURNING id::text`).Scan(&typeID)
+	_ = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by, ward_name) VALUES ('F2-BED', 'Type F2', $1, 60000, true, $2, 'Ward F2') RETURNING id::text`, typeID, admin.ID).Scan(&bedID)
+	_ = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Symptoms', $5, 'req-f2') RETURNING id::text`, caseID, patientID, doctor.ID, bedID, admin.ID).Scan(&encID)
+
+	// Seed two concurrently open assignments (assigned_to IS NULL) before running migrations 063-065
+	var assign1ID, assign2ID string
+	t1 := time.Now().Add(-4 * time.Hour).UTC()
+	t2 := time.Now().Add(-1 * time.Hour).UTC()
+	_ = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'First open duplicate', $4, $5, NULL, $5)
+		RETURNING id::text
+	`, bedID, encID, patientID, doctor.ID, t1).Scan(&assign1ID)
+
+	_ = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Second open duplicate', $4, $5, NULL, $5)
+		RETURNING id::text
+	`, bedID, encID, patientID, doctor.ID, t2).Scan(&assign2ID)
+
+	// Run migration runner through 063, 064, and 065
+	runBedMigrationRunner(t, db, ctx)
+
+	// Exactly ONE assignment must survive as active in bed_assignment
+	var openCount int
+	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM bed_assignment WHERE bed_id = $1 AND assigned_to IS NULL`, bedID).Scan(&openCount)
+	if err != nil || openCount != 1 {
+		t.Fatalf("expected exactly 1 active assignment for bed, got %d, err: %v", openCount, err)
+	}
+
+	// Verify the older duplicate was archived with complete provenance and WITHOUT fabricated timestamps
+	var auditCount int
+	var resolutionAction, origNotes string
+	var reconciledAssignedTo, adminQuarantineAt *time.Time
+	err = db.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(MAX(resolution_action), ''), COALESCE(MAX(original_notes), ''),
+		       MAX(reconciled_assigned_to), MAX(administrative_quarantine_at)
+		FROM bed_assignment_migration_audit
+		WHERE bed_assignment_id = $1
+	`, assign1ID).Scan(&auditCount, &resolutionAction, &origNotes, &reconciledAssignedTo, &adminQuarantineAt)
+	if err != nil || auditCount != 1 {
+		t.Fatalf("expected 1 audit record for duplicate assignment 1, got %d, err: %v", auditCount, err)
+	}
+	if resolutionAction != "quarantined_duplicate" {
+		t.Fatalf("expected resolution_action 'quarantined_duplicate', got: %s", resolutionAction)
+	}
+	if origNotes != "First open duplicate" {
+		t.Fatalf("expected complete original notes captured in audit table, got: %s", origNotes)
+	}
+	if reconciledAssignedTo != nil {
+		t.Fatalf("clinical end time must remain NULL (unknown) without fabricating durations, got: %v", reconciledAssignedTo)
+	}
+	if adminQuarantineAt == nil {
+		t.Fatalf("administrative quarantine time must be separately recorded")
+	}
+}
+
+// R4: Restoration of legitimately active assignment when slot is vacant
+func TestBed_ReviewR4_VacantSlotRestoration(t *testing.T) {
+	db, _, _, cleanup := setupBedTestDB(t, 62)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin := domain.Actor{ID: "usr-admin-vac", Role: "admin"}
+	doctor := domain.Actor{ID: "usr-doc-vac", Role: "doctor"}
+
+	_, _ = db.Exec(ctx, `
+		INSERT INTO "user"(id, email, name) VALUES ($1, 'admin_vac@hospital.test', 'Admin Vac'), ($2, 'doc_vac@hospital.test', 'Doc Vac')
+		ON CONFLICT(id) DO NOTHING
+	`, admin.ID, doctor.ID)
+	_, _ = db.Exec(ctx, `
+		INSERT INTO staff_access(user_id, role, active) VALUES ($1, 'admin', true), ($2, 'doctor', true)
+		ON CONFLICT(user_id) DO NOTHING
+	`, admin.ID, doctor.ID)
+
+	var patientID, caseID, encID string
+	_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Kenenisa', 'Bekele', '1982-06-13', '+251911778899') RETURNING id::text`).Scan(&patientID)
+	_ = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case Vac', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&caseID)
+
+	var typeID, bedID string
+	_ = db.QueryRow(ctx, `INSERT INTO bed_type(name, description, active) VALUES ('Type Vac', 'Desc', true) RETURNING id::text`).Scan(&typeID)
+	_ = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by, ward_name) VALUES ('VAC-BED', 'Type Vac', $1, 60000, true, $2, 'Ward Vac') RETURNING id::text`, typeID, admin.ID).Scan(&bedID)
+	_ = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Symptoms', $5, 'req-vac') RETURNING id::text`, caseID, patientID, doctor.ID, bedID, admin.ID).Scan(&encID)
+
+	// Seed single assignment closed with fabricated created_at and NO other assignment
 	var assignID string
 	createdAt := time.Now().Add(-2 * time.Hour).UTC()
 	_ = db.QueryRow(ctx, `
@@ -1117,45 +1407,21 @@ func TestBed_ReviewR4_Migration064QuarantineAndAudit(t *testing.T) {
 		RETURNING id::text
 	`, bedID, encID, patientID, doctor.ID, createdAt).Scan(&assignID)
 
-	// Apply migration 063 and 064
-	sql63, err := os.ReadFile("../../../../../db/migrations/063_bed_management_parity.sql")
-	if err != nil {
-		t.Fatalf("failed to read migration 063: %v", err)
-	}
-	if _, err = db.Exec(ctx, string(sql63)); err != nil {
-		t.Fatalf("failed to run migration 063: %v", err)
-	}
+	// Run migration runner through 063, 064, and 065
+	runBedMigrationRunner(t, db, ctx)
 
-	sql64, err := os.ReadFile("../../../../../db/migrations/064_bed_assignment_reconciliation_audit.sql")
-	if err != nil {
-		t.Fatalf("failed to read migration 064: %v", err)
-	}
-	if _, err = db.Exec(ctx, string(sql64)); err != nil {
-		t.Fatalf("failed to run migration 064: %v", err)
-	}
-
-	// Verify that bed_assignment_migration_audit has archived the record and restored it to active
-	var auditCount int
-	var resolutionAction string
-	err = db.QueryRow(ctx, `
-		SELECT COUNT(*), COALESCE(MAX(resolution_action), '')
-		FROM bed_assignment_migration_audit
-		WHERE bed_assignment_id = $1
-	`, assignID).Scan(&auditCount, &resolutionAction)
-	if err != nil {
-		t.Fatalf("failed to query migration audit table: %v", err)
-	}
-	if auditCount != 1 || resolutionAction != "restored_active" {
-		t.Fatalf("expected 1 audit record with resolution_action 'restored_active', got %d with '%s'", auditCount, resolutionAction)
-	}
-
-	// Verify the assignment is now active (assigned_to IS NULL)
+	// Verify the vacant assignment is safely restored to active (assigned_to IS NULL)
 	var assignedTo *time.Time
-	_ = db.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assignID).Scan(&assignedTo)
-	if assignedTo != nil {
-		t.Fatalf("expected assignment to be restored with assigned_to NULL, got: %v", assignedTo)
+	err := db.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assignID).Scan(&assignedTo)
+	if err != nil || assignedTo != nil {
+		t.Fatalf("expected assignment to be safely restored with assigned_to NULL, got err=%v val=%v", err, assignedTo)
 	}
-	_ = store
+
+	var action string
+	_ = db.QueryRow(ctx, `SELECT resolution_action FROM bed_assignment_migration_audit WHERE bed_assignment_id = $1`, assignID).Scan(&action)
+	if action != "restored_active" {
+		t.Fatalf("expected resolution_action 'restored_active', got: %s", action)
+	}
 }
 
 // R5: Pagination beyond 25 encounters and 100 beds
@@ -1228,4 +1494,103 @@ func TestBed_ReviewR5_PaginationAndSelectors(t *testing.T) {
 		t.Fatalf("expected >= 110 beds with pageSize 150, got len=%d total=%d", len(allBeds), totalBeds)
 	}
 }
+
+// R4 / F1: Corrective migration 065 executes on databases where 064 was already recorded in schema_migration
+func TestBed_ReviewR4_AlreadyApplied064Runner(t *testing.T) {
+	db, _, _, cleanup := setupBedTestDB(t, 62)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin := domain.Actor{ID: "usr-admin-rep", Role: "admin"}
+	doctor := domain.Actor{ID: "usr-doc-rep", Role: "doctor"}
+
+	_, _ = db.Exec(ctx, `
+		INSERT INTO "user"(id, email, name) VALUES ($1, 'admin_rep@hospital.test', 'Admin Rep'), ($2, 'doc_rep@hospital.test', 'Doc Rep')
+		ON CONFLICT(id) DO NOTHING
+	`, admin.ID, doctor.ID)
+	_, _ = db.Exec(ctx, `
+		INSERT INTO staff_access(user_id, role, active) VALUES ($1, 'admin', true), ($2, 'doctor', true)
+		ON CONFLICT(user_id) DO NOTHING
+	`, admin.ID, doctor.ID)
+
+	var patientID, caseID, encID string
+	_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Tirunesh', 'Dibaba', '1985-06-01', '+251911334455') RETURNING id::text`).Scan(&patientID)
+	_ = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case Rep', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&caseID)
+
+	var typeID, bedID string
+	_ = db.QueryRow(ctx, `INSERT INTO bed_type(name, description, active) VALUES ('Type Rep', 'Desc', true) RETURNING id::text`).Scan(&typeID)
+	_ = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by, ward_name) VALUES ('REP-BED', 'Type Rep', $1, 60000, true, $2, 'Ward Rep') RETURNING id::text`, typeID, admin.ID).Scan(&bedID)
+	_ = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Symptoms', $5, 'req-rep') RETURNING id::text`, caseID, patientID, doctor.ID, bedID, admin.ID).Scan(&encID)
+
+	// Apply 063 and 064 manually and record them in schema_migration
+	if _, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		t.Fatalf("failed to create schema_migration: %v", err)
+	}
+	sql63, _ := os.ReadFile("../../../../../db/migrations/063_bed_management_parity.sql")
+	if _, err := db.Exec(ctx, string(sql63)); err != nil {
+		t.Fatalf("failed applying 063: %v", err)
+	}
+	_, _ = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES ('063_bed_management_parity.sql') ON CONFLICT DO NOTHING`)
+
+	sql64, _ := os.ReadFile("../../../../../db/migrations/064_bed_assignment_reconciliation_audit.sql")
+	if _, err := db.Exec(ctx, string(sql64)); err != nil {
+		t.Fatalf("failed applying 064: %v", err)
+	}
+	_, _ = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES ('064_bed_assignment_reconciliation_audit.sql') ON CONFLICT DO NOTHING`)
+
+	// Normal migration runner runs: MUST skip 063, 064 and apply 065 cleanly!
+	runBedMigrationRunner(t, db, ctx)
+
+	var count065 int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='065_bed_assignment_reconciliation_repair.sql'`).Scan(&count065)
+	if count065 != 1 {
+		t.Fatalf("expected 065 in schema_migration, got: %d", count065)
+	}
+}
+
+// F4: Multiple active encounters per patient and pagination beyond cutoffs
+func TestBed_F4_MultipleEncountersPerPatient(t *testing.T) {
+	_, store, _, cleanup := setupBedTestDB(t, 0)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin, doctor, _, patientID, _, _ := seedBedStaffAndPatient(ctx, t, store.DB)
+
+	var case1ID, case2ID string
+	_ = store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 1', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&case1ID)
+	_ = store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case 2', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&case2ID)
+
+	// Create TWO active IPD encounters for the SAME patient
+	var enc1ID, enc2ID string
+	_ = store.DB.QueryRow(ctx, `
+		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, admitted_at, status, symptoms, created_by, request_key)
+		VALUES ('ipd', $1, $2, $3, clock_timestamp() - interval '2 days', 'active', 'Admission 1', $4, 'req-menc-1')
+		RETURNING id::text
+	`, case1ID, patientID, doctor.ID, admin.ID).Scan(&enc1ID)
+
+	_ = store.DB.QueryRow(ctx, `
+		INSERT INTO encounter(kind, case_id, patient_id, doctor_id, admitted_at, status, symptoms, created_by, request_key)
+		VALUES ('ipd', $1, $2, $3, clock_timestamp() - interval '1 hour', 'active', 'Admission 2', $4, 'req-menc-2')
+		RETURNING id::text
+	`, case2ID, patientID, doctor.ID, admin.ID).Scan(&enc2ID)
+
+	encs, err := store.Encounters(ctx, admin, "ipd", 1, 50)
+	if err != nil {
+		t.Fatalf("failed to query encounters: %v", err)
+	}
+
+	found1, found2 := false, false
+	for _, e := range encs {
+		if e.ID == enc1ID {
+			found1 = true
+		}
+		if e.ID == enc2ID {
+			found2 = true
+		}
+	}
+	if !found1 || !found2 {
+		t.Fatalf("expected both active encounters for same patient to be returned, found1=%v, found2=%v", found1, found2)
+	}
+}
+
 
