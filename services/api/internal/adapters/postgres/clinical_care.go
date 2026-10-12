@@ -23,17 +23,36 @@ func (s Store) BedOccupancyReport(ctx context.Context) (domain.BedOccupancyRepor
 	if err != nil {
 		return rep, err
 	}
-	err = s.DB.QueryRow(ctx, `SELECT COUNT(DISTINCT bed_id) FROM encounter WHERE status = 'active' AND bed_id IS NOT NULL`).Scan(&rep.OccupiedBeds)
+	err = s.DB.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT b.id) 
+		FROM hospital_bed b
+		WHERE b.active = true 
+		  AND (
+		    EXISTS (SELECT 1 FROM encounter e WHERE e.bed_id = b.id AND e.status = 'active')
+		    OR EXISTS (SELECT 1 FROM bed_assignment ba WHERE ba.bed_id = b.id AND ba.assigned_to IS NULL)
+		  )
+	`).Scan(&rep.OccupiedBeds)
+	if err != nil {
+		return rep, err
+	}
+	err = s.DB.QueryRow(ctx, `SELECT COUNT(*) FROM hospital_bed WHERE active = true AND state = 'maintenance'`).Scan(&rep.MaintenanceBeds)
+	if err != nil {
+		return rep, err
+	}
+	err = s.DB.QueryRow(ctx, `
+		SELECT COUNT(*) 
+		FROM hospital_bed b 
+		WHERE b.active = true 
+		  AND b.state = 'ready' 
+		  AND NOT EXISTS (SELECT 1 FROM encounter e WHERE e.bed_id = b.id AND e.status = 'active')
+		  AND NOT EXISTS (SELECT 1 FROM bed_assignment ba WHERE ba.bed_id = b.id AND ba.assigned_to IS NULL)
+	`).Scan(&rep.AvailableBeds)
 	if err != nil {
 		return rep, err
 	}
 	err = s.DB.QueryRow(ctx, `SELECT COUNT(*) FROM encounter WHERE status = 'active'`).Scan(&rep.ActiveAdmissions)
 	if err != nil {
 		return rep, err
-	}
-	rep.AvailableBeds = rep.TotalBeds - rep.OccupiedBeds
-	if rep.AvailableBeds < 0 {
-		rep.AvailableBeds = 0
 	}
 	if rep.TotalBeds > 0 {
 		rep.OccupancyRate = float64(rep.OccupiedBeds) / float64(rep.TotalBeds) * 100.0
@@ -48,32 +67,167 @@ func (s Store) AssignBed(ctx context.Context, a domain.Actor, input domain.Assig
 	}
 	defer tx.Rollback(ctx)
 
-	out, err := transferBedTx(ctx, tx, a, input.EncounterID, domain.BedTransfer{BedID: input.BedID, Version: input.Version, Reason: input.Notes})
+	// 1. Verify patient exists
+	var patientName, patientEmail, patientPhone, patientGender string
+	err = tx.QueryRow(ctx, `
+		SELECT (p.given_name || ' ' || p.family_name), COALESCE(pp.email, ''), COALESCE(p.phone, ''), COALESCE(pp.gender, '') 
+		FROM patient p
+		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
+		WHERE p.id = $1
+	`, input.PatientID).Scan(&patientName, &patientEmail, &patientPhone, &patientGender)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+
+	// 2. Verify encounter exists and validate ownership server-side!
+	var encPatientID string
+	var encStatus string
+	var encKind string
+	var encCurrentBedID *string
+	var encVersion int
+	var encNumber int64
+	err = tx.QueryRow(ctx, `
+		SELECT patient_id, status, kind, bed_id, version, number 
+		FROM encounter 
+		WHERE id = $1 FOR UPDATE OF encounter
+	`, input.EncounterID).Scan(&encPatientID, &encStatus, &encKind, &encCurrentBedID, &encVersion, &encNumber)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+
+	// Server-side ownership validation:
+	if encPatientID != input.PatientID {
+		return domain.BedAssignment{}, domain.ErrValidation
+	}
+	if encStatus != "active" {
+		return domain.BedAssignment{}, domain.ErrConflict
+	}
+	if input.Version > 0 && encVersion != input.Version {
+		return domain.BedAssignment{}, domain.ErrStale
+	}
+
+	// 3. Verify target bed exists, is active, is ready, and lock for update
+	var bedName, bedType, bedWard, bedState string
+	var bedCharge int64
+	err = tx.QueryRow(ctx, `
+		SELECT b.name, t.name, COALESCE(b.ward_name, 'General Ward'), b.charge_minor, b.state
+		FROM hospital_bed b
+		JOIN bed_type t ON t.id = b.type_id
+		WHERE b.id = $1 AND b.active = true
+		FOR UPDATE OF b
+	`, input.BedID).Scan(&bedName, &bedType, &bedWard, &bedCharge, &bedState)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+	if bedState != "ready" {
+		return domain.BedAssignment{}, domain.ErrConflict
+	}
+
+	// Check if bed is already occupied by ANY other active encounter
+	var occupiedByOther bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM encounter 
+			WHERE bed_id = $1 AND status = 'active' AND id != $2
+		)
+	`, input.BedID, input.EncounterID).Scan(&occupiedByOther)
 	if err != nil {
 		return domain.BedAssignment{}, err
 	}
-	if out.PatientID != input.PatientID {
-		return domain.BedAssignment{}, domain.ErrValidation
-	}
-	if _, err = tx.Exec(ctx, `UPDATE bed_assignment SET assigned_to=clock_timestamp() WHERE encounter_id=$1 AND assigned_to IS NULL`, input.EncounterID); err != nil {
-		return domain.BedAssignment{}, err
+	if occupiedByOther {
+		return domain.BedAssignment{}, domain.ErrConflict
 	}
 
+	// Check if bed has an active assignment in bed_assignment
+	var hasActiveAssignment bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM bed_assignment
+			WHERE bed_id = $1 AND assigned_to IS NULL AND encounter_id != $2
+		)
+	`, input.BedID, input.EncounterID).Scan(&hasActiveAssignment)
+	if err != nil {
+		return domain.BedAssignment{}, err
+	}
+	if hasActiveAssignment {
+		return domain.BedAssignment{}, domain.ErrConflict
+	}
+
+	// 4. Handle transfer or initial assignment
+	ipdNo := fmt.Sprintf("IPD-%d", encNumber)
+	if encCurrentBedID != nil && *encCurrentBedID != "" {
+		if *encCurrentBedID == input.BedID {
+			// Bed is already actively assigned to this encounter - reject duplicate assignment
+			return domain.BedAssignment{}, domain.ErrConflict
+		}
+		// Transfer: close old assignment
+			_, err = tx.Exec(ctx, `
+				UPDATE bed_assignment 
+				SET assigned_to = clock_timestamp() 
+				WHERE encounter_id = $1 AND assigned_to IS NULL
+			`, input.EncounterID)
+			if err != nil {
+				return domain.BedAssignment{}, err
+			}
+			// Record transfer bed event
+			_, err = tx.Exec(ctx, `
+				INSERT INTO bed_event (encounter_id, kind, from_bed_id, to_bed_id, charge_minor, actor_id, reason, encounter_version)
+				VALUES ($1, 'transfer', $2, $3, $4, $5, $6, $7)
+			`, input.EncounterID, *encCurrentBedID, input.BedID, bedCharge, a.ID, input.Notes, encVersion+1)
+			if err != nil {
+				return domain.BedAssignment{}, err
+			}
+	} else {
+		// First admission to a bed
+		_, err = tx.Exec(ctx, `
+			INSERT INTO bed_event (encounter_id, kind, to_bed_id, charge_minor, actor_id, reason, encounter_version)
+			VALUES ($1, 'admission', $2, $3, $4, $5, $6)
+		`, input.EncounterID, input.BedID, bedCharge, a.ID, input.Notes, encVersion+1)
+		if err != nil {
+			return domain.BedAssignment{}, err
+		}
+	}
+
+	// 5. Update encounter
+	_, err = tx.Exec(ctx, `
+		UPDATE encounter 
+		SET bed_id = $2, bed_charge_minor = $3, version = version + 1 
+		WHERE id = $1
+	`, input.EncounterID, input.BedID, bedCharge)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+
+	// 6. Insert new bed_assignment
 	var assign domain.BedAssignment
 	assign.BedID = input.BedID
+	assign.BedName = bedName
+	assign.BedType = bedType
+	assign.WardName = bedWard
 	assign.EncounterID = input.EncounterID
+	assign.IPDNo = ipdNo
 	assign.PatientID = input.PatientID
+	assign.PatientName = patientName
+	assign.PatientEmail = patientEmail
+	assign.PatientPhone = patientPhone
+	assign.PatientGender = patientGender
 	assign.Notes = input.Notes
 	assign.AssignedBy = a.ID
+	assign.Status = true
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO bed_assignment (
 			bed_id, encounter_id, patient_id, notes, assigned_by
 		) VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, assigned_from, created_at
-	`, input.BedID, input.EncounterID, input.PatientID, input.Notes, a.ID,
-	).Scan(&assign.ID, &assign.AssignedFrom, &assign.CreatedAt)
+	`, input.BedID, input.EncounterID, input.PatientID, input.Notes, a.ID).Scan(
+		&assign.ID, &assign.AssignedFrom, &assign.CreatedAt,
+	)
 	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+
+	if err = pharmacyAudit(ctx, tx, a, "bed.assigned", assign.ID); err != nil {
 		return domain.BedAssignment{}, err
 	}
 
@@ -83,14 +237,106 @@ func (s Store) AssignBed(ctx context.Context, a domain.Actor, input domain.Assig
 	return assign, nil
 }
 
-func (s Store) ListBedAssignments(ctx context.Context, encounterID string) ([]domain.BedAssignment, error) {
-	rows, err := s.DB.Query(ctx, `
-		SELECT ba.id, ba.bed_id, b.name AS bed_name, b.bed_type, ba.encounter_id,
-		       ba.patient_id, (p.given_name || ' ' || p.family_name) AS patient_name,
-		       ba.assigned_from, ba.assigned_to, ba.notes, ba.assigned_by, ba.created_at
+func (s Store) ListAllBedAssignments(ctx context.Context, search, status string, page, pageSize int) ([]domain.BedAssignment, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 25
+	}
+	offset := (page - 1) * pageSize
+
+	baseQuery := `
 		FROM bed_assignment ba
 		JOIN hospital_bed b ON b.id = ba.bed_id
+		JOIN bed_type bt ON bt.id = b.type_id
 		JOIN patient p ON p.id = ba.patient_id
+		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
+		JOIN encounter e ON e.id = ba.encounter_id
+		WHERE 1=1
+	`
+	args := []any{}
+	argIdx := 1
+
+	if status == "active" {
+		baseQuery += ` AND ba.assigned_to IS NULL`
+	} else if status == "discharged" {
+		baseQuery += ` AND ba.assigned_to IS NOT NULL`
+	}
+
+	if search = strings.TrimSpace(search); search != "" {
+		baseQuery += fmt.Sprintf(` AND (
+			(p.given_name || ' ' || p.family_name) ILIKE $%d
+			OR b.name ILIKE $%d
+			OR b.ward_name ILIKE $%d
+			OR ba.notes ILIKE $%d
+			OR p.phone ILIKE $%d
+			OR e.number::text ILIKE $%d
+		)`, argIdx, argIdx, argIdx, argIdx, argIdx, argIdx)
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	var total int
+	countQuery := `SELECT COUNT(*) ` + baseQuery
+	if err := s.DB.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	selectQuery := fmt.Sprintf(`
+		SELECT ba.id, ba.bed_id, b.name AS bed_name, bt.name AS bed_type, COALESCE(b.ward_name, 'General Ward') AS ward_name,
+		       ba.encounter_id, COALESCE('IPD-' || e.number::text, e.id::text) AS ipd_no,
+		       ba.patient_id, (p.given_name || ' ' || p.family_name) AS patient_name,
+		       COALESCE(pp.email, '') AS patient_email, COALESCE(p.phone, '') AS patient_phone,
+		       COALESCE(pp.gender, '') AS patient_gender,
+		       ba.assigned_from, ba.assigned_to, ba.notes, ba.assigned_by,
+		       (ba.assigned_to IS NULL) AS status, ba.created_at
+		%s
+		ORDER BY ba.assigned_from DESC, ba.id
+		LIMIT $%d OFFSET $%d
+	`, baseQuery, argIdx, argIdx+1)
+	args = append(args, pageSize, offset)
+
+	rows, err := s.DB.Query(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	list := []domain.BedAssignment{}
+	for rows.Next() {
+		var a domain.BedAssignment
+		if err := rows.Scan(
+			&a.ID, &a.BedID, &a.BedName, &a.BedType, &a.WardName,
+			&a.EncounterID, &a.IPDNo,
+			&a.PatientID, &a.PatientName,
+			&a.PatientEmail, &a.PatientPhone,
+			&a.PatientGender,
+			&a.AssignedFrom, &a.AssignedTo, &a.Notes, &a.AssignedBy,
+			&a.Status, &a.CreatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+		list = append(list, a)
+	}
+	return list, total, rows.Err()
+}
+
+func (s Store) ListBedAssignments(ctx context.Context, encounterID string) ([]domain.BedAssignment, error) {
+	rows, err := s.DB.Query(ctx, `
+		SELECT ba.id, ba.bed_id, b.name AS bed_name, bt.name AS bed_type, COALESCE(b.ward_name, 'General Ward') AS ward_name,
+		       ba.encounter_id, COALESCE('IPD-' || e.number::text, e.id::text) AS ipd_no,
+		       ba.patient_id, (p.given_name || ' ' || p.family_name) AS patient_name,
+		       COALESCE(pp.email, '') AS patient_email, COALESCE(p.phone, '') AS patient_phone,
+		       COALESCE(pp.gender, '') AS patient_gender,
+		       ba.assigned_from, ba.assigned_to, ba.notes, ba.assigned_by,
+		       (ba.assigned_to IS NULL) AS status, ba.created_at
+		FROM bed_assignment ba
+		JOIN hospital_bed b ON b.id = ba.bed_id
+		JOIN bed_type bt ON bt.id = b.type_id
+		JOIN patient p ON p.id = ba.patient_id
+		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
+		JOIN encounter e ON e.id = ba.encounter_id
 		WHERE ba.encounter_id = $1
 		ORDER BY ba.assigned_from DESC
 	`, encounterID)
@@ -103,9 +349,13 @@ func (s Store) ListBedAssignments(ctx context.Context, encounterID string) ([]do
 	for rows.Next() {
 		var a domain.BedAssignment
 		if err := rows.Scan(
-			&a.ID, &a.BedID, &a.BedName, &a.BedType, &a.EncounterID,
-			&a.PatientID, &a.PatientName, &a.AssignedFrom, &a.AssignedTo,
-			&a.Notes, &a.AssignedBy, &a.CreatedAt,
+			&a.ID, &a.BedID, &a.BedName, &a.BedType, &a.WardName,
+			&a.EncounterID, &a.IPDNo,
+			&a.PatientID, &a.PatientName,
+			&a.PatientEmail, &a.PatientPhone,
+			&a.PatientGender,
+			&a.AssignedFrom, &a.AssignedTo, &a.Notes, &a.AssignedBy,
+			&a.Status, &a.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -115,6 +365,94 @@ func (s Store) ListBedAssignments(ctx context.Context, encounterID string) ([]do
 		list = []domain.BedAssignment{}
 	}
 	return list, nil
+}
+
+func (s Store) DischargeBedAssignment(ctx context.Context, a domain.Actor, id string, notes string) (domain.BedAssignment, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return domain.BedAssignment{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var assign domain.BedAssignment
+	var bedID, encID string
+	var assignedTo *time.Time
+	var encNumber int64
+	err = tx.QueryRow(ctx, `
+		SELECT ba.id, ba.bed_id, ba.encounter_id, ba.patient_id, ba.assigned_to, ba.notes,
+		       b.name, bt.name, COALESCE(b.ward_name, 'General Ward'),
+		       (p.given_name || ' ' || p.family_name), COALESCE(pp.email, ''), COALESCE(p.phone, ''),
+		       COALESCE(pp.gender, ''), ba.assigned_from, ba.created_at, e.number
+		FROM bed_assignment ba
+		JOIN hospital_bed b ON b.id = ba.bed_id
+		JOIN bed_type bt ON bt.id = b.type_id
+		JOIN patient p ON p.id = ba.patient_id
+		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
+		JOIN encounter e ON e.id = ba.encounter_id
+		WHERE ba.id = $1 FOR UPDATE OF ba
+	`, id).Scan(
+		&assign.ID, &bedID, &encID, &assign.PatientID, &assignedTo, &assign.Notes,
+		&assign.BedName, &assign.BedType, &assign.WardName,
+		&assign.PatientName, &assign.PatientEmail, &assign.PatientPhone,
+		&assign.PatientGender, &assign.AssignedFrom, &assign.CreatedAt, &encNumber,
+	)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+	if assignedTo != nil {
+		return domain.BedAssignment{}, domain.ErrConflict
+	}
+
+	now := time.Now().UTC()
+	appendNote := assign.Notes
+	if notes = strings.TrimSpace(notes); notes != "" {
+		if appendNote != "" {
+			appendNote += " | " + notes
+		} else {
+			appendNote = notes
+		}
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE bed_assignment 
+		SET assigned_to = $2, notes = $3 
+		WHERE id = $1
+	`, id, now, appendNote)
+	if err != nil {
+		return domain.BedAssignment{}, err
+	}
+
+	// Update encounter to release bed
+	var encVersion int
+	err = tx.QueryRow(ctx, `SELECT version FROM encounter WHERE id = $1 FOR UPDATE`, encID).Scan(&encVersion)
+	if err == nil {
+		_, _ = tx.Exec(ctx, `
+			UPDATE encounter 
+			SET bed_id = NULL, version = version + 1 
+			WHERE id = $1 AND bed_id = $2
+		`, encID, bedID)
+
+		_, _ = tx.Exec(ctx, `
+			INSERT INTO bed_event (encounter_id, kind, from_bed_id, charge_minor, actor_id, reason, encounter_version)
+			VALUES ($1, 'discharge', $2, 0, $3, $4, $5)
+		`, encID, bedID, a.ID, notes, encVersion+1)
+	}
+
+	if err = pharmacyAudit(ctx, tx, a, "bed.discharged", id); err != nil {
+		return domain.BedAssignment{}, err
+	}
+
+	assign.BedID = bedID
+	assign.EncounterID = encID
+	assign.IPDNo = fmt.Sprintf("IPD-%d", encNumber)
+	assign.AssignedTo = &now
+	assign.Notes = appendNote
+	assign.Status = false
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.BedAssignment{}, err
+	}
+	return assign, nil
 }
 
 // ─── Care Team Delegation ─────────────────────────────────────────────────────

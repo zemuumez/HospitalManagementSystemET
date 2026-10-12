@@ -9,24 +9,31 @@ import (
 // ─── Bed Assignment & Occupancy Report ────────────────────────────────────────
 
 type BedAssignment struct {
-	ID           string     `json:"id"`
-	BedID        string     `json:"bedId"`
-	BedName      string     `json:"bedName,omitempty"`
-	BedType      string     `json:"bedType,omitempty"`
-	EncounterID  string     `json:"encounterId"`
-	PatientID    string     `json:"patientId"`
-	PatientName  string     `json:"patientName,omitempty"`
-	AssignedFrom time.Time  `json:"assignedFrom"`
-	AssignedTo   *time.Time `json:"assignedTo,omitempty"`
-	Notes        string     `json:"notes"`
-	AssignedBy   string     `json:"assignedBy"`
-	CreatedAt    time.Time  `json:"createdAt"`
+	ID            string     `json:"id"`
+	BedID         string     `json:"bedId"`
+	BedName       string     `json:"bedName,omitempty"`
+	BedType       string     `json:"bedType,omitempty"`
+	WardName      string     `json:"wardName,omitempty"`
+	EncounterID   string     `json:"encounterId"`
+	IPDNo         string     `json:"ipdNo,omitempty"`
+	PatientID     string     `json:"patientId"`
+	PatientName   string     `json:"patientName,omitempty"`
+	PatientEmail  string     `json:"patientEmail,omitempty"`
+	PatientPhone  string     `json:"patientPhone,omitempty"`
+	PatientGender string     `json:"patientGender,omitempty"`
+	AssignedFrom  time.Time  `json:"assignedFrom"`
+	AssignedTo    *time.Time `json:"assignedTo,omitempty"`
+	Notes         string     `json:"notes"`
+	AssignedBy    string     `json:"assignedBy"`
+	Status        bool       `json:"status"` // true = active, false = discharged/inactive
+	CreatedAt     time.Time  `json:"createdAt"`
 }
 
 type BedOccupancyReport struct {
 	TotalBeds        int     `json:"totalBeds"`
 	OccupiedBeds     int     `json:"occupiedBeds"`
 	AvailableBeds    int     `json:"availableBeds"`
+	MaintenanceBeds  int     `json:"maintenanceBeds"`
 	OccupancyRate    float64 `json:"occupancyRate"`
 	ActiveAdmissions int     `json:"activeAdmissions"`
 }
@@ -41,13 +48,17 @@ type AssignBedInput struct {
 
 func (i *AssignBedInput) Validate() error {
 	i.Notes = strings.TrimSpace(i.Notes)
-	if i.Version < 1 || !UUIDPattern.MatchString(i.BedID) || !UUIDPattern.MatchString(i.EncounterID) || !UUIDPattern.MatchString(i.PatientID) {
+	if !UUIDPattern.MatchString(i.BedID) || !UUIDPattern.MatchString(i.EncounterID) || !UUIDPattern.MatchString(i.PatientID) {
 		return ErrValidation
 	}
 	if len(i.Notes) > 1000 {
 		return ErrValidation
 	}
 	return nil
+}
+
+type DischargeBedAssignmentInput struct {
+	DischargeNotes string `json:"dischargeNotes,omitempty"`
 }
 
 // ─── Care Team Delegation ─────────────────────────────────────────────────────

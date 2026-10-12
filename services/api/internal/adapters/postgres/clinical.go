@@ -3,10 +3,13 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+	"time"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"hms.local/api/internal/domain"
-	"time"
 )
 
 func clinicalError(err error) error {
@@ -35,11 +38,111 @@ func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
 	}
 	return out, rows.Err()
 }
+
+func (s Store) SearchBeds(ctx context.Context, search, ward, bedType string, available *bool, page, pageSize int) ([]domain.Bed, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 25
+	}
+	offset := (page - 1) * pageSize
+
+	baseQuery := `
+		FROM hospital_bed b
+		JOIN bed_type t ON t.id = b.type_id
+		LEFT JOIN bed_assignment ba ON ba.bed_id = b.id AND ba.assigned_to IS NULL
+		LEFT JOIN encounter e ON (e.id = ba.encounter_id OR (e.bed_id = b.id AND e.status = 'active'))
+		LEFT JOIN patient p ON p.id = COALESCE(e.patient_id, (SELECT patient_id FROM encounter WHERE id = ba.encounter_id))
+		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
+		WHERE b.active = true
+	`
+	args := []any{}
+	argIdx := 1
+
+	if search = strings.TrimSpace(search); search != "" {
+		baseQuery += fmt.Sprintf(` AND (
+			b.name ILIKE $%d 
+			OR t.name ILIKE $%d 
+			OR b.ward_name ILIKE $%d 
+			OR (p.given_name || ' ' || p.family_name) ILIKE $%d
+			OR b.description ILIKE $%d
+		)`, argIdx, argIdx, argIdx, argIdx, argIdx)
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	if ward = strings.TrimSpace(ward); ward != "" && ward != "all" {
+		baseQuery += fmt.Sprintf(` AND b.ward_name = $%d`, argIdx)
+		args = append(args, ward)
+		argIdx++
+	}
+
+	if bedType = strings.TrimSpace(bedType); bedType != "" && bedType != "all" {
+		baseQuery += fmt.Sprintf(` AND (t.name = $%d OR t.id::text = $%d)`, argIdx, argIdx)
+		args = append(args, bedType)
+		argIdx++
+	}
+
+	if available != nil {
+		if *available {
+			baseQuery += ` AND b.state = 'ready' AND ba.id IS NULL AND e.id IS NULL`
+		} else {
+			baseQuery += ` AND (b.state != 'ready' OR ba.id IS NOT NULL OR e.id IS NOT NULL)`
+		}
+	}
+
+	var total int
+	countQuery := `SELECT COUNT(DISTINCT b.id) ` + baseQuery
+	if err := s.DB.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	selectQuery := fmt.Sprintf(`
+		SELECT DISTINCT ON (b.ward_name, b.name, b.id)
+		       b.id, b.name, t.name, b.type_id, b.charge_minor, b.state, b.version,
+		       (b.state = 'ready' AND ba.id IS NULL AND e.id IS NULL) AS is_available,
+		       COALESCE(b.ward_name, 'General Ward') AS ward_name,
+		       COALESCE(b.description, '') AS description,
+		       b.active,
+		       COALESCE(p.given_name || ' ' || p.family_name, '') AS patient_name,
+		       COALESCE(p.phone, '') AS patient_phone,
+		       COALESCE(pp.gender, '') AS patient_gender,
+		       COALESCE(TO_CHAR(COALESCE(ba.assigned_from, e.admitted_at), 'DDth Mon, YYYY HH12:MI:SS AM'), '') AS admission_date,
+		       COALESCE(COALESCE(ba.encounter_id::text, e.id::text), '') AS encounter_id
+		%s
+		ORDER BY b.ward_name, b.name, b.id
+		LIMIT $%d OFFSET $%d
+	`, baseQuery, argIdx, argIdx+1)
+	args = append(args, pageSize, offset)
+
+	rows, err := s.DB.Query(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	out := []domain.Bed{}
+	for rows.Next() {
+		var b domain.Bed
+		if err := rows.Scan(
+			&b.ID, &b.Name, &b.Type, &b.TypeID, &b.ChargeMinor, &b.State, &b.Version,
+			&b.Available, &b.WardName, &b.Description, &b.Active,
+			&b.PatientName, &b.PatientPhone, &b.PatientGender,
+			&b.AdmissionDate, &b.EncounterID,
+		); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, b)
+	}
+	return out, total, rows.Err()
+}
+
 func (s Store) CreateBed(ctx context.Context, a domain.Actor, i domain.BedInput) (domain.Bed, error) {
 	if i.WardName == "" {
 		i.WardName = "General Ward"
 	}
-	b := domain.Bed{BedInput: i, Available: true, State: "ready", Version: 1}
+	b := domain.Bed{BedInput: i, Available: true, State: "ready", Version: 1, Active: true}
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
 		return b, e
@@ -56,7 +159,11 @@ func (s Store) CreateBed(ctx context.Context, a domain.Actor, i domain.BedInput)
 	if e != nil {
 		return b, clinicalError(e)
 	}
-	e = tx.QueryRow(ctx, `INSERT INTO hospital_bed(name,bed_type,charge_minor,created_by,type_id,ward_name) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, i.Name, b.Type, i.ChargeMinor, a.ID, b.TypeID, i.WardName).Scan(&b.ID)
+	e = tx.QueryRow(ctx, `
+		INSERT INTO hospital_bed(name,bed_type,charge_minor,created_by,type_id,ward_name,description) 
+		VALUES($1,$2,$3,$4,$5,$6,$7) 
+		RETURNING id
+	`, i.Name, b.Type, i.ChargeMinor, a.ID, b.TypeID, i.WardName, i.Description).Scan(&b.ID)
 	if e != nil {
 		return b, clinicalError(e)
 	}

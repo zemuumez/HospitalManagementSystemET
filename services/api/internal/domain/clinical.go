@@ -11,16 +11,45 @@ type BedInput struct {
 	Type        string `json:"type"`
 	WardName    string `json:"wardName,omitempty"`
 	ChargeMinor int64  `json:"chargeMinor"`
+	Description string `json:"description,omitempty"`
 }
 
 func (b *BedInput) Validate() error {
 	b.Name = strings.TrimSpace(b.Name)
 	b.Type = strings.TrimSpace(b.Type)
 	b.WardName = strings.TrimSpace(b.WardName)
+	b.Description = strings.TrimSpace(b.Description)
 	if b.WardName == "" {
 		b.WardName = "General Ward"
 	}
-	if len([]rune(b.Name)) < 1 || len([]rune(b.Name)) > 80 || len([]rune(b.WardName)) > 80 || (b.TypeID == "" && len([]rune(b.Type)) < 1) || (b.TypeID != "" && !UUIDPattern.MatchString(b.TypeID)) || len([]rune(b.Type)) > 80 || b.ChargeMinor < 0 || b.ChargeMinor > 1000000000 {
+	if len([]rune(b.Name)) < 1 || len([]rune(b.Name)) > 80 || len([]rune(b.WardName)) > 80 || (b.TypeID == "" && len([]rune(b.Type)) < 1) || (b.TypeID != "" && !UUIDPattern.MatchString(b.TypeID)) || len([]rune(b.Type)) > 80 || b.ChargeMinor < 0 || b.ChargeMinor > 1000000000 || len([]rune(b.Description)) > 2000 {
+		return ErrValidation
+	}
+	return nil
+}
+
+type UpdateBedInput struct {
+	TypeID      string `json:"typeId"`
+	Name        string `json:"name"`
+	WardName    string `json:"wardName,omitempty"`
+	ChargeMinor int64  `json:"chargeMinor"`
+	Description string `json:"description,omitempty"`
+	State       string `json:"state,omitempty"`
+	Version     int    `json:"version"`
+}
+
+func (u *UpdateBedInput) Validate() error {
+	u.Name = strings.TrimSpace(u.Name)
+	u.WardName = strings.TrimSpace(u.WardName)
+	u.Description = strings.TrimSpace(u.Description)
+	u.State = strings.TrimSpace(u.State)
+	if u.WardName == "" {
+		u.WardName = "General Ward"
+	}
+	if len([]rune(u.Name)) < 1 || len([]rune(u.Name)) > 80 || len([]rune(u.WardName)) > 80 || !UUIDPattern.MatchString(u.TypeID) || u.ChargeMinor < 0 || u.ChargeMinor > 1000000000 || len([]rune(u.Description)) > 2000 || u.Version < 1 {
+		return ErrValidation
+	}
+	if u.State != "" && u.State != "ready" && u.State != "maintenance" && u.State != "unavailable" {
 		return ErrValidation
 	}
 	return nil
@@ -28,10 +57,16 @@ func (b *BedInput) Validate() error {
 
 type Bed struct {
 	BedInput
-	ID        string `json:"id"`
-	Available bool   `json:"available"`
-	State     string `json:"state"`
-	Version   int    `json:"version"`
+	ID            string `json:"id"`
+	Available     bool   `json:"available"`
+	State         string `json:"state"`
+	Version       int    `json:"version"`
+	Active        bool   `json:"active"`
+	PatientName   string `json:"patientName,omitempty"`
+	PatientPhone  string `json:"patientPhone,omitempty"`
+	PatientGender string `json:"patientGender,omitempty"`
+	AdmissionDate string `json:"admissionDate,omitempty"`
+	EncounterID   string `json:"encounterId,omitempty"`
 }
 type CaseInput struct {
 	PatientID   string `json:"patientId"`
@@ -172,5 +207,6 @@ type BedTypeInput struct {
 }
 type BedType struct {
 	BedTypeInput
-	ID string `json:"id"`
+	ID        string `json:"id"`
+	BedsCount int    `json:"bedsCount"`
 }

@@ -13,6 +13,8 @@ type ClinicalCareRepository interface {
 	BedOccupancyReport(ctx context.Context) (domain.BedOccupancyReport, error)
 	AssignBed(ctx context.Context, a domain.Actor, input domain.AssignBedInput) (domain.BedAssignment, error)
 	ListBedAssignments(ctx context.Context, encounterID string) ([]domain.BedAssignment, error)
+	ListAllBedAssignments(ctx context.Context, search, status string, page, limit int) ([]domain.BedAssignment, int, error)
+	DischargeBedAssignment(ctx context.Context, a domain.Actor, id, notes string) (domain.BedAssignment, error)
 
 	// Care team delegation
 	CareTeam(ctx context.Context, encounterID string) ([]domain.CareTeamMember, error)
@@ -98,6 +100,26 @@ func (s ClinicalCareService) ListBedAssignments(ctx context.Context, a domain.Ac
 		return nil, err
 	}
 	return s.Store.ListBedAssignments(ctx, encounterID)
+}
+
+func (s ClinicalCareService) ListAllBedAssignments(ctx context.Context, a domain.Actor, search, status string, page, pageSize int) ([]domain.BedAssignment, int, error) {
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" && a.Role != "receptionist" {
+		return nil, 0, domain.ErrForbidden
+	}
+	if page < 1 || page > 1000 || pageSize < 1 || pageSize > 100 {
+		return nil, 0, domain.ErrValidation
+	}
+	return s.Store.ListAllBedAssignments(ctx, search, status, page, pageSize)
+}
+
+func (s ClinicalCareService) DischargeBedAssignment(ctx context.Context, a domain.Actor, id, notes string) (domain.BedAssignment, error) {
+	if a.Role != "admin" && a.Role != "doctor" && a.Role != "nurse" && a.Role != "receptionist" {
+		return domain.BedAssignment{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.BedAssignment{}, domain.ErrValidation
+	}
+	return s.Store.DischargeBedAssignment(ctx, a, id, notes)
 }
 
 // ─── Care Team ────────────────────────────────────────────────────────────────

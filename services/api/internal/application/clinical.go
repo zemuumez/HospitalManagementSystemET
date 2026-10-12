@@ -16,12 +16,17 @@ type ClinicalRepository interface {
 	Vitals(context.Context, domain.Actor, string, int) ([]domain.Vitals, error)
 	RecordVitals(context.Context, domain.Actor, string, domain.VitalsInput, string) (domain.Vitals, error)
 	BedTypes(context.Context, int) ([]domain.BedType, error)
+	SearchBedTypes(context.Context, string, int, int) ([]domain.BedType, int, error)
 	SaveBedType(context.Context, domain.Actor, string, domain.BedTypeInput) (domain.BedType, error)
+	DeleteBedType(context.Context, domain.Actor, string, int) error
 	SetBedState(context.Context, domain.Actor, string, domain.BedStateInput) (domain.Bed, error)
 	TransferBed(context.Context, domain.Actor, string, domain.BedTransfer) (domain.Encounter, error)
 	BedHistory(context.Context, domain.Actor, string, int) ([]domain.BedEvent, error)
 	Beds(context.Context, int) ([]domain.Bed, error)
+	SearchBeds(context.Context, string, string, string, *bool, int, int) ([]domain.Bed, int, error)
 	CreateBed(context.Context, domain.Actor, domain.BedInput) (domain.Bed, error)
+	UpdateBed(context.Context, domain.Actor, string, domain.UpdateBedInput) (domain.Bed, error)
+	DeleteBed(context.Context, domain.Actor, string) error
 	Cases(context.Context, domain.Actor, int) ([]domain.Case, error)
 	CreateCase(context.Context, domain.Actor, domain.CaseInput) (domain.Case, error)
 	Encounters(context.Context, domain.Actor, string, int) ([]domain.Encounter, error)
@@ -44,6 +49,16 @@ func (c Clinical) Beds(ctx context.Context, a domain.Actor, page int) ([]domain.
 	}
 	return c.Store.Beds(ctx, page)
 }
+
+func (c Clinical) SearchBeds(ctx context.Context, a domain.Actor, search, ward, bedType string, available *bool, page, pageSize int) ([]domain.Bed, int, error) {
+	if !a.Can("beds.read") {
+		return nil, 0, domain.ErrForbidden
+	}
+	if page < 1 || page > 1000 || pageSize < 1 || pageSize > 100 {
+		return nil, 0, domain.ErrValidation
+	}
+	return c.Store.SearchBeds(ctx, search, ward, bedType, available, page, pageSize)
+}
 func (c Clinical) CreateBed(ctx context.Context, a domain.Actor, b domain.BedInput) (domain.Bed, error) {
 	if a.Role != "admin" {
 		return domain.Bed{}, domain.ErrForbidden
@@ -52,6 +67,27 @@ func (c Clinical) CreateBed(ctx context.Context, a domain.Actor, b domain.BedInp
 		return domain.Bed{}, e
 	}
 	return c.Store.CreateBed(ctx, a, b)
+}
+func (c Clinical) UpdateBed(ctx context.Context, a domain.Actor, id string, u domain.UpdateBedInput) (domain.Bed, error) {
+	if a.Role != "admin" {
+		return domain.Bed{}, domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.Bed{}, domain.ErrValidation
+	}
+	if e := u.Validate(); e != nil {
+		return domain.Bed{}, e
+	}
+	return c.Store.UpdateBed(ctx, a, id, u)
+}
+func (c Clinical) DeleteBed(ctx context.Context, a domain.Actor, id string) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	return c.Store.DeleteBed(ctx, a, id)
 }
 func (c Clinical) Cases(ctx context.Context, a domain.Actor, page int) ([]domain.Case, error) {
 	if !a.Can("clinical.read") {
@@ -164,6 +200,16 @@ func (c Clinical) BedTypes(ctx context.Context, a domain.Actor, page int) ([]dom
 	}
 	return c.Store.BedTypes(ctx, page)
 }
+
+func (c Clinical) SearchBedTypes(ctx context.Context, a domain.Actor, search string, page, pageSize int) ([]domain.BedType, int, error) {
+	if !a.Can("beds.read") {
+		return nil, 0, domain.ErrForbidden
+	}
+	if page < 1 || page > 1000 || pageSize < 1 || pageSize > 100 {
+		return nil, 0, domain.ErrValidation
+	}
+	return c.Store.SearchBedTypes(ctx, search, page, pageSize)
+}
 func (c Clinical) SaveBedType(ctx context.Context, a domain.Actor, id string, i domain.BedTypeInput) (domain.BedType, error) {
 	if a.Role != "admin" {
 		return domain.BedType{}, domain.ErrForbidden
@@ -174,4 +220,13 @@ func (c Clinical) SaveBedType(ctx context.Context, a domain.Actor, id string, i 
 		return domain.BedType{}, domain.ErrValidation
 	}
 	return c.Store.SaveBedType(ctx, a, id, i)
+}
+func (c Clinical) DeleteBedType(ctx context.Context, a domain.Actor, id string, version int) error {
+	if a.Role != "admin" {
+		return domain.ErrForbidden
+	}
+	if !domain.UUIDPattern.MatchString(id) {
+		return domain.ErrValidation
+	}
+	return c.Store.DeleteBedType(ctx, a, id, version)
 }

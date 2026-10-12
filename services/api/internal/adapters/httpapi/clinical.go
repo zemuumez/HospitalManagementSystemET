@@ -1,10 +1,14 @@
 package httpapi
 
 import (
-	"hms.local/api/internal/domain"
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"hms.local/api/internal/domain"
 )
 
 func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor) bool {
@@ -14,11 +18,18 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 	}
 	switch {
 	case r.URL.Path == "/v1/bed-types" && r.Method == "GET":
-		out, e := s.Clinical.BedTypes(r.Context(), a, page)
+		search := r.URL.Query().Get("search")
+		pageSize := 25
+		if raw := r.URL.Query().Get("pageSize"); raw != "" {
+			if ps, err := strconv.Atoi(raw); err == nil && ps > 0 {
+				pageSize = ps
+			}
+		}
+		out, total, e := s.Clinical.SearchBedTypes(r.Context(), a, search, page, pageSize)
 		if e != nil {
 			fail(w, e)
 		} else {
-			write(w, 200, map[string]any{"bedTypes": out, "page": page, "pageSize": 25})
+			write(w, 200, map[string]any{"bedTypes": out, "total": total, "page": page, "pageSize": pageSize})
 		}
 	case (r.URL.Path == "/v1/bed-types" && r.Method == "POST") || (strings.HasPrefix(r.URL.Path, "/v1/bed-types/") && r.Method == "PATCH"):
 		var i domain.BedTypeInput
@@ -39,25 +50,88 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 			}
 			write(w, status, out)
 		}
+	case strings.HasPrefix(r.URL.Path, "/v1/bed-types/") && r.Method == "DELETE":
+		id := strings.TrimPrefix(r.URL.Path, "/v1/bed-types/")
+		version := 0
+		if raw := r.URL.Query().Get("version"); raw != "" {
+			version, _ = strconv.Atoi(raw)
+		}
+		e := s.Clinical.DeleteBedType(r.Context(), a, id, version)
+		if e != nil {
+			fail(w, e)
+		} else {
+			write(w, 200, map[string]bool{"ok": true})
+		}
 
-	case strings.HasPrefix(r.URL.Path, "/v1/beds/") && r.Method == "PATCH":
+	case strings.HasPrefix(r.URL.Path, "/v1/beds/") && (r.Method == "PATCH" || r.Method == "PUT"):
 		id := strings.TrimPrefix(r.URL.Path, "/v1/beds/")
-		var i domain.BedStateInput
-		if !decode(w, r, &i) {
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 32<<10))
+		if err != nil {
+			write(w, 400, map[string]string{"error": "Invalid request", "code": "INVALID_JSON"})
 			return true
 		}
-		out, e := s.Clinical.SetBedState(r.Context(), a, id, i)
+		var checkMap map[string]any
+		if err := json.Unmarshal(bodyBytes, &checkMap); err != nil {
+			write(w, 400, map[string]string{"error": "Invalid JSON request", "code": "INVALID_JSON"})
+			return true
+		}
+		if _, hasName := checkMap["name"]; hasName {
+			var updateInput domain.UpdateBedInput
+			d := json.NewDecoder(bytes.NewReader(bodyBytes))
+			d.DisallowUnknownFields()
+			if d.Decode(&updateInput) != nil || d.Decode(&struct{}{}) != io.EOF {
+				write(w, 400, map[string]string{"error": "Invalid JSON request", "code": "INVALID_JSON"})
+				return true
+			}
+			out, e := s.Clinical.UpdateBed(r.Context(), a, id, updateInput)
+			if e != nil {
+				fail(w, e)
+			} else {
+				write(w, 200, out)
+			}
+		} else {
+			var stateInput domain.BedStateInput
+			d := json.NewDecoder(bytes.NewReader(bodyBytes))
+			d.DisallowUnknownFields()
+			if d.Decode(&stateInput) != nil || d.Decode(&struct{}{}) != io.EOF {
+				write(w, 400, map[string]string{"error": "Invalid JSON request", "code": "INVALID_JSON"})
+				return true
+			}
+			out, e := s.Clinical.SetBedState(r.Context(), a, id, stateInput)
+			if e != nil {
+				fail(w, e)
+			} else {
+				write(w, 200, out)
+			}
+		}
+	case strings.HasPrefix(r.URL.Path, "/v1/beds/") && r.Method == "DELETE":
+		id := strings.TrimPrefix(r.URL.Path, "/v1/beds/")
+		e := s.Clinical.DeleteBed(r.Context(), a, id)
 		if e != nil {
 			fail(w, e)
 		} else {
-			write(w, 200, out)
+			write(w, 200, map[string]bool{"ok": true})
 		}
 	case r.URL.Path == "/v1/beds" && r.Method == "GET":
-		out, e := s.Clinical.Beds(r.Context(), a, page)
+		search := r.URL.Query().Get("search")
+		ward := r.URL.Query().Get("ward")
+		bedType := r.URL.Query().Get("bedType")
+		pageSize := 25
+		if raw := r.URL.Query().Get("pageSize"); raw != "" {
+			if ps, err := strconv.Atoi(raw); err == nil && ps > 0 {
+				pageSize = ps
+			}
+		}
+		var available *bool
+		if raw := r.URL.Query().Get("available"); raw != "" {
+			b := raw == "true" || raw == "1"
+			available = &b
+		}
+		out, total, e := s.Clinical.SearchBeds(r.Context(), a, search, ward, bedType, available, page, pageSize)
 		if e != nil {
 			fail(w, e)
 		} else {
-			write(w, 200, map[string]any{"beds": out, "page": page, "pageSize": 25})
+			write(w, 200, map[string]any{"beds": out, "total": total, "page": page, "pageSize": pageSize})
 		}
 	case r.URL.Path == "/v1/beds" && r.Method == "POST":
 		var i domain.BedInput

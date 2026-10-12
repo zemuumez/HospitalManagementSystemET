@@ -33,6 +33,27 @@ func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Ac
 		write(w, 200, rep)
 		return true
 
+	case r.URL.Path == "/v1/bed-assignments" && r.Method == "GET":
+		page := 1
+		if raw := r.URL.Query().Get("page"); raw != "" {
+			page, _ = strconv.Atoi(raw)
+		}
+		pageSize := 25
+		if raw := r.URL.Query().Get("pageSize"); raw != "" {
+			if ps, err := strconv.Atoi(raw); err == nil && ps > 0 {
+				pageSize = ps
+			}
+		}
+		search := r.URL.Query().Get("search")
+		status := r.URL.Query().Get("status")
+		list, total, err := s.ClinicalCare.ListAllBedAssignments(r.Context(), a, search, status, page, pageSize)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, map[string]any{"assignments": list, "total": total, "page": page, "pageSize": pageSize})
+		return true
+
 	case r.URL.Path == "/v1/bed-assignments" && r.Method == "POST":
 		var input domain.AssignBedInput
 		if !decode(w, r, &input) {
@@ -44,6 +65,43 @@ func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Ac
 			return true
 		}
 		write(w, 201, assign)
+		return true
+
+	case strings.HasPrefix(r.URL.Path, "/v1/bed-assignments/") && strings.HasSuffix(r.URL.Path, "/discharge") && r.Method == "POST":
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/bed-assignments/"), "/discharge")
+		var input domain.DischargeBedAssignmentInput
+		_ = json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&input)
+		assign, err := s.ClinicalCare.DischargeBedAssignment(r.Context(), a, id, input.DischargeNotes)
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, assign)
+		return true
+
+	case r.URL.Path == "/v1/bed-transfers" && r.Method == "POST":
+		var input struct {
+			EncounterID string `json:"encounterId"`
+			PatientID   string `json:"patientId"`
+			BedID       string `json:"bedId"`
+			Notes       string `json:"notes"`
+			Version     int    `json:"version"`
+		}
+		if !decode(w, r, &input) {
+			return true
+		}
+		assign, err := s.ClinicalCare.AssignBed(r.Context(), a, domain.AssignBedInput{
+			EncounterID: input.EncounterID,
+			PatientID:   input.PatientID,
+			BedID:       input.BedID,
+			Notes:       input.Notes,
+			Version:     input.Version,
+		})
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		write(w, 200, assign)
 		return true
 
 	// ─── Care Team Members ───────────────────────────────────────────────────────

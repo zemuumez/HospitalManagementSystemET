@@ -173,7 +173,13 @@ function isAllowedPath(path: string[]): boolean {
         "ipd-details",
         "billing-summary",
         "clearance",
+        "transfer",
+        "bed-assignments",
+        "bed-history",
       ].includes(path[2]);
+    }
+    if (path[0] === "bed-assignments" && path[2] === "discharge") {
+      return true;
     }
     if (path[0] === "invoices") {
       return ["payments", "refunds"].includes(path[2]);
