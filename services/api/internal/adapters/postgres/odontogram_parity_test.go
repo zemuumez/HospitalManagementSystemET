@@ -1839,7 +1839,16 @@ func TestOdontogram_G1_DuplicateChartConflictingTeethHistoryPreserved(t *testing
 		t.Fatalf("failed to insert chart 2 entries: %v", err)
 	}
 
-	// Now run corrective migration 062
+	// Run migration 061 followed by corrective migration 062
+	m61Path := "../../../../../db/migrations/061_odontogram_parity_upgrade.sql"
+	sql61, err := os.ReadFile(m61Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 061: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql61)); err != nil {
+		t.Fatalf("failed to execute migration 061: %v", err)
+	}
+
 	m62Path := "../../../../../db/migrations/062_odontogram_upgrade_reconciliation.sql"
 	sql62, err := os.ReadFile(m62Path)
 	if err != nil {
@@ -2499,7 +2508,7 @@ func TestOdontogram_H1_UpgradeScenariosWithNormalRunner(t *testing.T) {
 	})
 }
 
-// H2: Complete standalone chart headers and child identities archived before deduplication
+// H2: Complete standalone chart headers, overlapping child teeth, and typed/untyped provenance preserved across sequential 061 -> 062 migrations
 func TestOdontogram_H2_CompleteChartHeaderAndToothProvenancePreservation(t *testing.T) {
 	ctx := context.Background()
 	db, _, _, cleanup := setupOdontogramTestDB(t, 59)
@@ -2516,44 +2525,72 @@ func TestOdontogram_H2_CompleteChartHeaderAndToothProvenancePreservation(t *test
 		t.Fatal(err)
 	}
 
+	// Record migrations 001 through 060 in schema_migration tracking table
+	if _, err = db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		t.Fatal(err)
+	}
+	files, _ := filepath.Glob("../../../../../db/migrations/*.sql")
+	for _, f := range files {
+		base := filepath.Base(f)
+		if base <= "060_odontogram_chart_parity.sql" {
+			_, _ = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1) ON CONFLICT DO NOTHING`, base)
+		}
+	}
+
 	tHeader1 := time.Date(2026, 1, 5, 9, 0, 0, 0, time.UTC)
 	tHeader2 := time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
-	tChild1 := time.Date(2026, 2, 20, 14, 45, 0, 0, time.UTC) // differing child timestamp!
-	tChild2 := time.Date(2026, 2, 20, 15, 10, 0, 0, time.UTC) // differing child timestamp!
+	tHeader3 := time.Date(2026, 3, 1, 10, 15, 0, 0, time.UTC)
+	tChild1 := time.Date(2026, 1, 5, 9, 15, 0, 0, time.UTC)
+	tChild2 := time.Date(2026, 2, 20, 14, 45, 0, 0, time.UTC)
+	tChild3 := time.Date(2026, 2, 20, 15, 10, 0, 0, time.UTC)
 
 	_, err = db.Exec(ctx, `ALTER TABLE odontogram_chart ADD COLUMN IF NOT EXISTS legacy_provenance jsonb DEFAULT NULL`)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Chart 1: Standalone EMPTY duplicate chart with unique notes & attribution but NO child rows!
+	// Chart 1: Dr. Alice examination (Tooth 1 caries) + untyped prior snapshot (Tooth 19)
 	var chart1ID string
 	err = db.QueryRow(ctx, `
 		INSERT INTO odontogram_chart (
 			patient_id, doctor_id, description, odontogram,
 			version, created_by, updated_by, created_at, updated_at, is_legacy, legacy_provenance
 		) VALUES (
-			$1::uuid, 'doctor-user-1', 'Initial triage examination - completely asymptomatic, no treatment required',
-			'{}'::jsonb, 1, 'doctor-user-1', 'doctor-user-1',
+			$1::uuid, 'doctor-user-1', 'Dr. Alice initial examination notes',
+			'{"1": "caries"}'::jsonb, 1, 'doctor-user-1', 'doctor-user-1',
 			$2, $2, true,
 			'[{"tooth_number": 19, "condition": "healthy", "procedure_notes": "Prior clinic checkup", "diagnosed_by": "dr-prior"}]'::jsonb
 		)
 		RETURNING id::text
 	`, patientID, tHeader1).Scan(&chart1ID)
 	if err != nil {
-		t.Fatalf("failed to insert empty duplicate chart 1: %v", err)
+		t.Fatalf("failed to insert chart 1: %v", err)
 	}
 
-	// Chart 2: Clinical procedure chart with tooth rows, differing child timestamps and authors
+	var entryTooth1AliceID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO patient_odontogram_entry (
+			patient_id, chart_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES
+		($1::uuid, $2::uuid, 1, 'caries', 'Dr. Alice deep caries on tooth 1', 'doctor-user-1', $3, $3)
+		RETURNING id::text
+	`, patientID, chart1ID, tChild1).Scan(&entryTooth1AliceID)
+	if err != nil {
+		t.Fatalf("failed to insert entry tooth 1 Alice: %v", err)
+	}
+
+	// Chart 2: Dr. Bob emergency procedure (Tooth 1 root_canal - OVERLAPPING CONFLICTING TOOTH! + Tooth 14 crown)
+	// Plus TYPED prior snapshots (both chart_header and tooth_entry)
 	var chart2ID string
 	err = db.QueryRow(ctx, `
 		INSERT INTO odontogram_chart (
 			patient_id, doctor_id, description, odontogram,
-			version, created_by, updated_by, created_at, updated_at, is_legacy
+			version, created_by, updated_by, created_at, updated_at, is_legacy, legacy_provenance
 		) VALUES (
-			$1::uuid, 'doctor-user-2', 'Operative procedure: tooth 1 caries excavation and tooth 14 crown fitting',
-			'{"1": "caries", "14": "crown"}'::jsonb, 2, 'doctor-user-2', 'doctor-user-2',
-			$2, $2, true
+			$1::uuid, 'doctor-user-2', 'Dr. Bob emergency procedure: tooth 1 pulpectomy and tooth 14 crown fitting',
+			'{"1": "root_canal", "14": "crown"}'::jsonb, 2, 'doctor-user-2', 'doctor-user-2',
+			$2, $2, true,
+			'[{"type": "chart_header", "chart_id": "hist-header-uuid", "description": "Prior archival examination notes", "doctor_id": "doctor-user-1"}, {"type": "tooth_entry", "id": "hist-entry-uuid", "tooth_number": 5, "condition": "filling", "procedure_notes": "Childhood amalgam restoration", "diagnosed_by": "dr-prior"}]'::jsonb
 		)
 		RETURNING id::text
 	`, patientID, tHeader2).Scan(&chart2ID)
@@ -2561,39 +2598,58 @@ func TestOdontogram_H2_CompleteChartHeaderAndToothProvenancePreservation(t *test
 		t.Fatalf("failed to insert chart 2: %v", err)
 	}
 
-	var entry1ID, entry2ID string
+	var entryTooth1BobID, entryTooth14ID string
 	err = db.QueryRow(ctx, `
 		INSERT INTO patient_odontogram_entry (
 			patient_id, chart_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
 		) VALUES
-		($1::uuid, $2::uuid, 1, 'caries', 'Extensive occlusal caries excavated', 'doctor-user-2', $3, $3)
+		($1::uuid, $2::uuid, 1, 'root_canal', 'Dr. Bob emergency pulpectomy tooth 1', 'doctor-user-2', $3, $3)
 		RETURNING id::text
-	`, patientID, chart2ID, tChild1).Scan(&entry1ID)
+	`, patientID, chart2ID, tChild2).Scan(&entryTooth1BobID)
 	if err != nil {
-		t.Fatalf("failed to insert entry 1: %v", err)
+		t.Fatalf("failed to insert entry tooth 1 Bob: %v", err)
 	}
 
 	err = db.QueryRow(ctx, `
 		INSERT INTO patient_odontogram_entry (
 			patient_id, chart_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
 		) VALUES
-		($1::uuid, $2::uuid, 14, 'crown', 'Full ceramic crown margins verified', 'doctor-user-1', $3, $3)
+		($1::uuid, $2::uuid, 14, 'crown', 'Dr. Alice ceramic crown tooth 14', 'doctor-user-1', $3, $3)
 		RETURNING id::text
-	`, patientID, chart2ID, tChild2).Scan(&entry2ID)
+	`, patientID, chart2ID, tChild3).Scan(&entryTooth14ID)
 	if err != nil {
-		t.Fatalf("failed to insert entry 2: %v", err)
+		t.Fatalf("failed to insert entry tooth 14: %v", err)
 	}
 
-	// Run migration 062 (corrective consolidation)
-	sql62, err := os.ReadFile("../../../../../db/migrations/062_odontogram_upgrade_reconciliation.sql")
+	// Chart 3: Standalone EMPTY duplicate chart with unique notes & attribution but NO child rows!
+	var chart3ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy
+		) VALUES (
+			$1::uuid, 'doctor-user-1', 'Initial triage examination - completely asymptomatic, no treatment required',
+			'{}'::jsonb, 1, 'doctor-user-1', 'doctor-user-1',
+			$2, $2, true
+		)
+		RETURNING id::text
+	`, patientID, tHeader3).Scan(&chart3ID)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = db.Exec(ctx, string(sql62)); err != nil {
-		t.Fatalf("failed to execute migration 062: %v", err)
+		t.Fatalf("failed to insert empty duplicate chart 3: %v", err)
 	}
 
-	// 1. Verify exactly 1 legacy chart header remains
+	// RUN EVERY PENDING MIGRATION IN FILENAME ORDER THROUGH THE PRODUCTION RUNNER (061 -> 062)
+	runNormalMigrationRunner(t, ctx, db)
+
+	// Verify both 061 and 062 are recorded in schema_migration
+	var count061, count062 int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='061_odontogram_parity_upgrade.sql'`).Scan(&count061)
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='062_odontogram_upgrade_reconciliation.sql'`).Scan(&count062)
+	if count061 != 1 || count062 != 1 {
+		t.Fatalf("expected both 061 and 062 recorded in schema_migration, got 061=%d 062=%d", count061, count062)
+	}
+
+	// 1. Verify exactly 1 legacy chart header remains in odontogram_chart
 	var count int
 	_ = db.QueryRow(ctx, `SELECT count(*) FROM odontogram_chart WHERE patient_id = $1::uuid AND is_legacy = true`, patientID).Scan(&count)
 	if count != 1 {
@@ -2613,8 +2669,11 @@ func TestOdontogram_H2_CompleteChartHeaderAndToothProvenancePreservation(t *test
 		t.Fatalf("failed to unmarshal legacy_provenance: %v", err)
 	}
 
-	// 3. Assert standalone EMPTY chart header is preserved as typed record
-	var foundEmptyHeader, foundActiveHeader, foundChild1, foundChild2, foundPreSnapshot bool
+	// 3. Assert all source headers, child entries, overlapping observations, and snapshots are preserved
+	var foundChart1Header, foundChart2Header, foundEmptyChart3Header bool
+	var foundTooth1Alice, foundTooth1Bob, foundTooth14 bool
+	var foundTypedPriorHeader, foundTypedPriorEntry, foundUntypedPriorTooth19 bool
+
 	for _, item := range provItems {
 		itemType, _ := item["type"].(string)
 
@@ -2622,48 +2681,74 @@ func TestOdontogram_H2_CompleteChartHeaderAndToothProvenancePreservation(t *test
 			cid, _ := item["chart_id"].(string)
 			desc, _ := item["description"].(string)
 			doc, _ := item["doctor_id"].(string)
-			if cid == chart1ID && strings.Contains(desc, "Initial triage examination") && doc == "doctor-user-1" {
-				foundEmptyHeader = true
+
+			if cid == chart1ID && strings.Contains(desc, "Dr. Alice initial examination") {
+				foundChart1Header = true
 			}
-			if cid == chart2ID && strings.Contains(desc, "Operative procedure") && doc == "doctor-user-2" {
-				foundActiveHeader = true
+			if cid == chart2ID && strings.Contains(desc, "Dr. Bob emergency procedure") {
+				foundChart2Header = true
+			}
+			if cid == chart3ID && strings.Contains(desc, "Initial triage examination") && doc == "doctor-user-1" {
+				foundEmptyChart3Header = true
+			}
+			if cid == "hist-header-uuid" && strings.Contains(desc, "Prior archival examination notes") {
+				foundTypedPriorHeader = true
 			}
 		}
 
 		if itemType == "tooth_entry" {
 			eid, _ := item["id"].(string)
 			toothNum, _ := item["tooth_number"].(float64)
+			note, _ := item["procedure_notes"].(string)
 			diagBy, _ := item["diagnosed_by"].(string)
 
-			if eid == entry1ID && toothNum == 1 && diagBy == "doctor-user-2" {
-				foundChild1 = true
+			if eid == entryTooth1AliceID && toothNum == 1 && strings.Contains(note, "Dr. Alice deep caries") && diagBy == "doctor-user-1" {
+				foundTooth1Alice = true
 			}
-			if eid == entry2ID && toothNum == 14 && diagBy == "doctor-user-1" {
-				foundChild2 = true
+			if eid == entryTooth1BobID && toothNum == 1 && strings.Contains(note, "Dr. Bob emergency pulpectomy") && diagBy == "doctor-user-2" {
+				foundTooth1Bob = true
+			}
+			if eid == entryTooth14ID && toothNum == 14 && diagBy == "doctor-user-1" {
+				foundTooth14 = true
+			}
+			if eid == "hist-entry-uuid" && toothNum == 5 && strings.Contains(note, "Childhood amalgam restoration") {
+				foundTypedPriorEntry = true
 			}
 		}
 
-		// Prior snapshot item
+		// Untyped prior snapshot
 		toothNum, _ := item["tooth_number"].(float64)
 		if toothNum == 19 {
-			foundPreSnapshot = true
+			foundUntypedPriorTooth19 = true
 		}
 	}
 
-	if !foundEmptyHeader {
-		t.Errorf("H2 LOSS: Standalone empty duplicate chart header was omitted from provenance!")
+	if !foundChart1Header {
+		t.Errorf("HISTORICAL LOSS: Chart 1 header was omitted from provenance!")
 	}
-	if !foundActiveHeader {
-		t.Errorf("H2 LOSS: Active chart header was omitted from provenance!")
+	if !foundChart2Header {
+		t.Errorf("HISTORICAL LOSS: Chart 2 header was omitted from provenance!")
 	}
-	if !foundChild1 {
-		t.Errorf("H2 LOSS: Child entry 1 identity or attribution was omitted!")
+	if !foundEmptyChart3Header {
+		t.Errorf("HISTORICAL LOSS: Standalone empty duplicate chart 3 header was omitted from provenance!")
 	}
-	if !foundChild2 {
-		t.Errorf("H2 LOSS: Child entry 2 identity or attribution was omitted!")
+	if !foundTooth1Alice {
+		t.Errorf("HISTORICAL LOSS: Overlapping tooth 1 Alice observation was omitted from provenance!")
 	}
-	if !foundPreSnapshot {
-		t.Errorf("H2 LOSS: Prior snapshot tooth 19 was omitted!")
+	if !foundTooth1Bob {
+		t.Errorf("HISTORICAL LOSS: Overlapping tooth 1 Bob observation was omitted from provenance!")
+	}
+	if !foundTooth14 {
+		t.Errorf("HISTORICAL LOSS: Tooth 14 entry was omitted from provenance!")
+	}
+	if !foundTypedPriorHeader {
+		t.Errorf("HISTORICAL LOSS: Prior typed chart_header snapshot was omitted from provenance!")
+	}
+	if !foundTypedPriorEntry {
+		t.Errorf("HISTORICAL LOSS: Prior typed tooth_entry snapshot was omitted from provenance!")
+	}
+	if !foundUntypedPriorTooth19 {
+		t.Errorf("HISTORICAL LOSS: Prior untyped tooth 19 snapshot was omitted from provenance!")
 	}
 }
 

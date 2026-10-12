@@ -1,19 +1,26 @@
 -- 061_odontogram_parity_upgrade.sql
--- Corrective upgrade migration for odontogram parity (F1 & F2).
+-- Corrective upgrade migration for odontogram parity (F1 & F2, G1, J1).
 -- Safely applies schema additions to databases that already ran migration 060,
--- cleans up legacy chart duplicates, captures available legacy provenance,
--- and seeds the established clinical legend definitions.
+-- archives complete legacy chart headers and child observations before deduplication,
+-- captures existing provenance snapshots, and seeds the established clinical legend definitions.
 
 -- 1. Add legacy_provenance column to odontogram_chart if missing
 ALTER TABLE odontogram_chart
   ADD COLUMN IF NOT EXISTS legacy_provenance jsonb DEFAULT NULL;
 
--- 2. Deduplicate legacy charts per patient (handles artifacts from earlier 9eaa114 compatibility writes)
+-- 2. Non-Destructive Deduplication of Legacy Charts per Patient (J1 & G1)
+-- Archives complete source chart headers (including empty duplicates, triage notes, attribution,
+-- timestamps, version, and JSON), child tooth entries (with primary key id), and existing provenance
+-- BEFORE any deduplication or row removal.
 DO $$
 DECLARE
   p RECORD;
   primary_id uuid;
   dup RECORD;
+  all_headers jsonb;
+  all_children jsonb;
+  existing_prov jsonb;
+  all_prov jsonb;
 BEGIN
   FOR p IN (
     SELECT patient_id, COUNT(*) AS cnt
@@ -22,16 +29,82 @@ BEGIN
     GROUP BY patient_id
     HAVING COUNT(*) > 1
   ) LOOP
-    -- Choose the latest chart as primary keeper
+    -- Choose the primary keeper chart
     SELECT id INTO primary_id
     FROM odontogram_chart
     WHERE patient_id = p.patient_id AND is_legacy = true
-    ORDER BY updated_at DESC, created_at DESC, version DESC
+    ORDER BY updated_at DESC, created_at DESC, version DESC, id ASC
     LIMIT 1;
 
-    -- For all other duplicate legacy charts for this patient:
+    -- Step A: BEFORE deleting or merging any duplicate rows, assemble the COMPLETE historical provenance
+    -- 1. All source chart headers (preserves empty duplicates, triage notes, attribution, timestamps)
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'type', 'chart_header',
+          'chart_id', ch.id::text,
+          'patient_id', ch.patient_id::text,
+          'doctor_id', ch.doctor_id,
+          'encounter_id', ch.encounter_id::text,
+          'description', ch.description,
+          'odontogram', ch.odontogram,
+          'version', ch.version,
+          'created_by', ch.created_by,
+          'updated_by', ch.updated_by,
+          'created_at', ch.created_at,
+          'updated_at', ch.updated_at
+        ) ORDER BY ch.created_at ASC, ch.id ASC
+      ),
+      '[]'::jsonb
+    ) INTO all_headers
+    FROM odontogram_chart ch
+    WHERE ch.patient_id = p.patient_id AND ch.is_legacy = true;
+
+    -- 2. All child tooth entries across all legacy charts (including child primary key 'id')
+    SELECT COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'type', 'tooth_entry',
+          'id', e.id::text,
+          'chart_id', e.chart_id::text,
+          'tooth_number', e.tooth_number,
+          'condition', e.condition,
+          'procedure_notes', e.procedure_notes,
+          'diagnosed_by', e.diagnosed_by,
+          'encounter_id', e.encounter_id::text,
+          'created_at', e.created_at,
+          'updated_at', e.updated_at
+        ) ORDER BY e.tooth_number ASC, e.created_at ASC, e.id ASC
+      ),
+      '[]'::jsonb
+    ) INTO all_children
+    FROM patient_odontogram_entry e
+    JOIN odontogram_chart ch ON ch.id = e.chart_id
+    WHERE ch.patient_id = p.patient_id AND ch.is_legacy = true;
+
+    -- 3. Pre-existing provenance entries already recorded on any legacy chart of this patient
+    SELECT COALESCE(
+      jsonb_agg(elem),
+      '[]'::jsonb
+    ) INTO existing_prov
+    FROM odontogram_chart ch,
+    LATERAL jsonb_array_elements(
+      CASE
+        WHEN ch.legacy_provenance IS NOT NULL AND jsonb_typeof(ch.legacy_provenance) = 'array'
+        THEN ch.legacy_provenance
+        ELSE '[]'::jsonb
+      END
+    ) AS elem
+    WHERE ch.patient_id = p.patient_id AND ch.is_legacy = true;
+
+    -- Combine and deduplicate exact identical JSON elements
+    SELECT COALESCE(jsonb_agg(DISTINCT elem), '[]'::jsonb)
+    INTO all_prov
+    FROM jsonb_array_elements(all_headers || all_children || existing_prov) AS elem;
+
+    -- Step B: Consolidate non-conflicting child teeth to primary keeper
     FOR dup IN (
-      SELECT id, odontogram
+      SELECT id
       FROM odontogram_chart
       WHERE patient_id = p.patient_id AND is_legacy = true AND id <> primary_id
     ) LOOP
@@ -44,21 +117,23 @@ BEGIN
           WHERE pe.chart_id = primary_id AND pe.tooth_number = e.tooth_number
         );
 
-      -- Delete remaining conflicting child entries in the duplicate chart
+      -- Delete colliding child entries in the duplicate chart (SAFE: already archived in all_prov!)
       DELETE FROM patient_odontogram_entry WHERE chart_id = dup.id;
 
-      -- Update primary chart's odontogram JSON to reflect all child entries
-      UPDATE odontogram_chart
-      SET odontogram = (
-        SELECT COALESCE(jsonb_object_agg(tooth_number::text, condition), '{}'::jsonb)
-        FROM patient_odontogram_entry
-        WHERE chart_id = primary_id
-      )
-      WHERE id = primary_id;
-
-      -- Delete duplicate legacy chart
+      -- Delete duplicate legacy chart header (SAFE: already archived in all_prov!)
       DELETE FROM odontogram_chart WHERE id = dup.id;
     END LOOP;
+
+    -- Step C: Store complete provenance on primary keeper and sync odontogram JSON
+    UPDATE odontogram_chart
+    SET legacy_provenance = all_prov,
+        odontogram = (
+          SELECT COALESCE(jsonb_object_agg(tooth_number::text, condition), '{}'::jsonb)
+          FROM patient_odontogram_entry
+          WHERE chart_id = primary_id
+        )
+    WHERE id = primary_id;
+
   END LOOP;
 END $$;
 
@@ -103,7 +178,7 @@ CREATE TABLE IF NOT EXISTS odontogram_legend (
 
 CREATE INDEX IF NOT EXISTS idx_odontogram_legend_code ON odontogram_legend(code);
 
--- 6. Seed and reconcile the 11 established default clinical condition definitions (F2)
+-- 6. Seed the 11 established default clinical condition definitions (F2)
 INSERT INTO odontogram_legend (id, code, name, color, description, is_default)
 VALUES
   ('leg-healthy', 'Healthy', 'Healthy Tooth',              '#ffffff', 'Sound tooth surface with no pathology', true),

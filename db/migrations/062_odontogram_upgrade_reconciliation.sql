@@ -144,11 +144,12 @@ BEGIN
         ELSE '[]'::jsonb
       END
     ) AS elem
-    WHERE ch.patient_id = p.patient_id AND ch.is_legacy = true
-      AND (elem->>'type' IS NULL OR elem->>'type' NOT IN ('chart_header', 'tooth_entry'));
+    WHERE ch.patient_id = p.patient_id AND ch.is_legacy = true;
 
-    -- Combine headers, children, and prior provenance losslessly
-    all_prov := all_headers || all_children || existing_prov;
+    -- Combine headers, children, and prior provenance losslessly, deduplicating identical JSON objects
+    SELECT COALESCE(jsonb_agg(DISTINCT elem), '[]'::jsonb)
+    INTO all_prov
+    FROM jsonb_array_elements(all_headers || all_children || existing_prov) AS elem;
 
     -- Step C: If duplicate legacy charts exist, consolidate child teeth and remove duplicate headers
     FOR dup IN (
