@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -758,6 +759,11 @@ func (s Store) SetToothCondition(ctx context.Context, a domain.Actor, patientID 
 	}
 	defer tx.Rollback(ctx)
 
+	// Shared lock on legend row to coordinate with concurrent legend mutations (G2)
+	if err := lockAndValidateLegendCodes(ctx, tx, []string{input.Condition}); err != nil {
+		return domain.OdontogramEntry{}, err
+	}
+
 	var chartID string
 	if input.ChartID != nil && *input.ChartID != "" {
 		// Parent-first lock: lock odontogram_chart before touching any child rows
@@ -862,8 +868,10 @@ func (s Store) CreateOdontogramChart(ctx context.Context, a domain.Actor, input 
 	}
 
 	strMap := make(map[string]string, len(input.Odontogram))
+	var condCodes []string
 	for k, v := range input.Odontogram {
 		strMap[strconv.Itoa(k)] = v
+		condCodes = append(condCodes, v)
 	}
 	jsonBytes, err := json.Marshal(strMap)
 	if err != nil {
@@ -875,6 +883,11 @@ func (s Store) CreateOdontogramChart(ctx context.Context, a domain.Actor, input 
 		return domain.OdontogramChart{}, err
 	}
 	defer tx.Rollback(ctx)
+
+	// Acquire FOR SHARE locks on all referenced condition codes to coordinate with concurrent legend operations (G2)
+	if err := lockAndValidateLegendCodes(ctx, tx, condCodes); err != nil {
+		return domain.OdontogramChart{}, err
+	}
 
 	var chartID string
 	var encID *string
@@ -928,8 +941,10 @@ func (s Store) UpdateOdontogramChart(ctx context.Context, a domain.Actor, id str
 	}
 
 	strMap := make(map[string]string, len(input.Odontogram))
+	var condCodes []string
 	for k, v := range input.Odontogram {
 		strMap[strconv.Itoa(k)] = v
+		condCodes = append(condCodes, v)
 	}
 	jsonBytes, err := json.Marshal(strMap)
 	if err != nil {
@@ -941,6 +956,11 @@ func (s Store) UpdateOdontogramChart(ctx context.Context, a domain.Actor, id str
 		return domain.OdontogramChart{}, err
 	}
 	defer tx.Rollback(ctx)
+
+	// Acquire FOR SHARE locks on all referenced condition codes to coordinate with concurrent legend operations (G2)
+	if err := lockAndValidateLegendCodes(ctx, tx, condCodes); err != nil {
+		return domain.OdontogramChart{}, err
+	}
 
 	var currentVersion int
 	var patientID string
@@ -1278,6 +1298,121 @@ func (s Store) CreateOdontogramLegend(ctx context.Context, a domain.Actor, input
 	return l, nil
 }
 
+// lockAndValidateLegendCodes acquires a FOR SHARE lock on each referenced legend row
+// and validates that every custom condition code exists in odontogram_legend (G2).
+func lockAndValidateLegendCodes(ctx context.Context, tx pgx.Tx, codes []string) error {
+	if len(codes) == 0 {
+		return nil
+	}
+	// Check if odontogram_legend table exists in current search path
+	var tableExists bool
+	err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_name = 'odontogram_legend'
+		)
+	`).Scan(&tableExists)
+	if err != nil || !tableExists {
+		return nil
+	}
+
+	unique := make(map[string]bool, len(codes))
+	var sortedCodes []string
+	for _, c := range codes {
+		c = strings.TrimSpace(c)
+		if c != "" && !unique[c] {
+			unique[c] = true
+			sortedCodes = append(sortedCodes, c)
+		}
+	}
+	if len(sortedCodes) == 0 {
+		return nil
+	}
+	sort.Strings(sortedCodes)
+
+	rows, err := tx.Query(ctx, `
+		SELECT code FROM odontogram_legend
+		WHERE code = ANY($1)
+		ORDER BY code
+		FOR SHARE
+	`, sortedCodes)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	found := make(map[string]bool, len(sortedCodes))
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return err
+		}
+		found[code] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	var legacyConditions = map[string]bool{
+		"healthy":    true,
+		"caries":     true,
+		"missing":    true,
+		"filled":     true,
+		"crown":      true,
+		"implant":    true,
+		"extracted":  true,
+		"root_canal": true,
+	}
+
+	for _, c := range sortedCodes {
+		if !found[c] {
+			if legacyConditions[strings.ToLower(c)] {
+				continue
+			}
+			return fmt.Errorf("%w: unknown or unseeded clinical condition code '%s'", domain.ErrValidation, c)
+		}
+	}
+	return nil
+}
+
+// isLegendCodeInUse checks whether a condition code is referenced in active child entries,
+// chart odontogram JSON values, or legacy provenance entries (G2).
+func isLegendCodeInUse(ctx context.Context, tx pgx.Tx, code string) (bool, error) {
+	var inUse bool
+	err := tx.QueryRow(ctx, `
+		SELECT (
+			EXISTS(
+				SELECT 1 FROM patient_odontogram_entry
+				WHERE condition = $1
+			)
+			OR EXISTS(
+				SELECT 1 FROM odontogram_chart c,
+				LATERAL jsonb_each_text(c.odontogram) AS kv
+				WHERE kv.value = $1
+			)
+			OR EXISTS(
+				SELECT 1 FROM odontogram_chart c,
+				LATERAL jsonb_array_elements(
+					CASE
+						WHEN c.legacy_provenance IS NOT NULL AND jsonb_typeof(c.legacy_provenance) = 'array'
+						THEN c.legacy_provenance
+						ELSE '[]'::jsonb
+					END
+				) AS elem
+				WHERE elem->>'condition' = $1
+				   OR (
+						elem ? 'odontogram'
+						AND EXISTS (
+							SELECT 1 FROM jsonb_each_text(elem->'odontogram') AS okv
+							WHERE okv.value = $1
+						)
+				   )
+			)
+		)
+	`, code).Scan(&inUse)
+	return inUse, err
+}
+
 func (s Store) UpdateOdontogramLegend(ctx context.Context, a domain.Actor, id string, input domain.SaveOdontogramLegendInput) (domain.OdontogramLegend, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -1309,17 +1444,8 @@ func (s Store) UpdateOdontogramLegend(ctx context.Context, a domain.Actor, id st
 		}
 	}
 
-	// Check if this legend is referenced in any clinical records or charts
-	var inUse bool
-	err = tx.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM patient_odontogram_entry WHERE condition = $1
-		) OR EXISTS(
-			SELECT 1 FROM odontogram_chart
-			WHERE odontogram ? $1
-			   OR (legacy_provenance IS NOT NULL AND legacy_provenance::text LIKE '%' || $1 || '%')
-		)
-	`, existing.Code).Scan(&inUse)
+	// Check if this legend is referenced in any clinical records or charts (G2 exact value check)
+	inUse, err := isLegendCodeInUse(ctx, tx, existing.Code)
 	if err != nil {
 		return domain.OdontogramLegend{}, err
 	}
@@ -1380,16 +1506,7 @@ func (s Store) DeleteOdontogramLegend(ctx context.Context, a domain.Actor, id st
 		return domain.ErrForbidden
 	}
 
-	var inUse bool
-	err = tx.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM patient_odontogram_entry WHERE condition = $1
-		) OR EXISTS(
-			SELECT 1 FROM odontogram_chart
-			WHERE odontogram ? $1
-			   OR (legacy_provenance IS NOT NULL AND legacy_provenance::text LIKE '%' || $1 || '%')
-		)
-	`, code).Scan(&inUse)
+	inUse, err := isLegendCodeInUse(ctx, tx, code)
 	if err != nil {
 		return err
 	}

@@ -321,6 +321,18 @@ func TestOdontogram_LosslessCodeRoundTrip(t *testing.T) {
 	standardCodes := []string{"Healthy", "K", "C", "Ce", "D", "KR", "PS", "IP", "X", "F", "B"}
 	customCodes := []string{"CUSTOM_VENEER", "IMPL_ZIR"}
 
+	for _, code := range customCodes {
+		_, err := store.CreateOdontogramLegend(ctx, admin, domain.SaveOdontogramLegendInput{
+			Code:        code,
+			Name:        "Custom " + code,
+			Color:       "#4ade80",
+			Description: "Custom fidelity test code",
+		})
+		if err != nil {
+			t.Fatalf("failed to create custom legend %s: %v", code, err)
+		}
+	}
+
 	inputOdonto := make(map[int]string)
 	for i, code := range standardCodes {
 		inputOdonto[i+1] = code
@@ -1695,5 +1707,579 @@ func TestOdontogram_F4_PDFTextMetricsBoundsAndWrapping(t *testing.T) {
 		t.Errorf("expected multi-page PDF output")
 	}
 }
+
+// G1: Duplicate-chart reconciliation captures complete history before deleting duplicate rows
+func TestOdontogram_G1_DuplicateChartConflictingTeethHistoryPreserved(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 59)
+	defer cleanup()
+
+	patientID := helperCreatePatient(t, ctx, db, "Selam", "Tesfaye")
+
+	// Create two distinct clinical encounters for two different doctors
+	var case1ID, enc1ID string
+	err := db.QueryRow(ctx, `
+		INSERT INTO patient_case (patient_id, doctor_id, created_by)
+		VALUES ($1::uuid, 'doctor-user-1', 'admin-user')
+		RETURNING id::text
+	`, patientID).Scan(&case1ID)
+	if err != nil {
+		t.Fatalf("failed to insert case 1: %v", err)
+	}
+
+	err = db.QueryRow(ctx, `
+		INSERT INTO encounter (kind, case_id, patient_id, doctor_id, admitted_at, created_by, request_key)
+		VALUES ('opd', $1::uuid, $2::uuid, 'doctor-user-1', clock_timestamp(), 'admin-user', 'req-enc-g1-1')
+		RETURNING id::text
+	`, case1ID, patientID).Scan(&enc1ID)
+	if err != nil {
+		t.Fatalf("failed to insert encounter 1: %v", err)
+	}
+
+	var case2ID, enc2ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO patient_case (patient_id, doctor_id, created_by)
+		VALUES ($1::uuid, 'doctor-user-2', 'admin-user')
+		RETURNING id::text
+	`, patientID).Scan(&case2ID)
+	if err != nil {
+		t.Fatalf("failed to insert case 2: %v", err)
+	}
+
+	err = db.QueryRow(ctx, `
+		INSERT INTO encounter (kind, case_id, patient_id, doctor_id, admitted_at, created_by, request_key)
+		VALUES ('opd', $1::uuid, $2::uuid, 'doctor-user-2', clock_timestamp(), 'admin-user', 'req-enc-g1-2')
+		RETURNING id::text
+	`, case2ID, patientID).Scan(&enc2ID)
+	if err != nil {
+		t.Fatalf("failed to insert encounter 2: %v", err)
+	}
+
+	// Apply migration 060 (clean 060 schema)
+	m60Path := "../../../../../db/migrations/060_odontogram_chart_parity.sql"
+	sql60, err := os.ReadFile(m60Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 060: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql60)); err != nil {
+		t.Fatalf("failed to execute migration 060: %v", err)
+	}
+
+	t1 := time.Date(2026, 1, 10, 8, 30, 0, 0, time.UTC)
+	t2 := time.Date(2026, 2, 14, 11, 15, 0, 0, time.UTC)
+
+	// Simulate duplicate legacy charts created under 9eaa114 compatibility writes
+	// Chart 1: Dr. Alice examination (Tooth 1 caries + Tooth 14 crown)
+	var chart1ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, encounter_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy
+		) VALUES (
+			$1::uuid, 'doctor-user-1', $2::uuid, 'Dr. Alice comprehensive OPD charting',
+			'{"1": "caries", "14": "crown"}'::jsonb, 1, 'doctor-user-1', 'doctor-user-1',
+			$3, $3, true
+		)
+		RETURNING id::text
+	`, patientID, enc1ID, t1).Scan(&chart1ID)
+	if err != nil {
+		t.Fatalf("failed to insert legacy chart 1: %v", err)
+	}
+
+	// Also simulate an existing provenance snapshot on chart 1 prior to running migration 061
+	_, err = db.Exec(ctx, `ALTER TABLE odontogram_chart ADD COLUMN IF NOT EXISTS legacy_provenance jsonb DEFAULT NULL`)
+	if err != nil {
+		t.Fatalf("failed to add legacy_provenance column: %v", err)
+	}
+	_, err = db.Exec(ctx, `
+		UPDATE odontogram_chart
+		SET legacy_provenance = '[{"tooth_number": 5, "condition": "filling", "procedure_notes": "Prior childhood composite restoration", "diagnosed_by": "doctor-prior"}]'::jsonb
+		WHERE id = $1::uuid
+	`, chart1ID)
+	if err != nil {
+		t.Fatalf("failed to add existing provenance: %v", err)
+	}
+
+	_, err = db.Exec(ctx, `
+		INSERT INTO patient_odontogram_entry (
+			patient_id, chart_id, encounter_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES
+		($1::uuid, $2::uuid, $3::uuid, 1, 'caries', 'Deep distal caries with pulpal involvement', 'doctor-user-1', $4, $4),
+		($1::uuid, $2::uuid, $3::uuid, 14, 'crown', 'Ceramic crown seated well', 'doctor-user-1', $4, $4)
+	`, patientID, chart1ID, enc1ID, t1)
+	if err != nil {
+		t.Fatalf("failed to insert chart 1 entries: %v", err)
+	}
+
+	// Chart 2: Dr. Bob emergency evaluation (Tooth 1 ROOT CANAL - conflicting observation with different note & author! + Tooth 8 bridge)
+	var chart2ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, encounter_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy
+		) VALUES (
+			$1::uuid, 'doctor-user-2', $2::uuid, 'Dr. Bob emergency pulpectomy and bridge evaluation',
+			'{"1": "root_canal", "8": "bridge"}'::jsonb, 2, 'doctor-user-2', 'doctor-user-2',
+			$3, $3, true
+		)
+		RETURNING id::text
+	`, patientID, enc2ID, t2).Scan(&chart2ID)
+	if err != nil {
+		t.Fatalf("failed to insert legacy chart 2: %v", err)
+	}
+
+	_, err = db.Exec(ctx, `
+		INSERT INTO patient_odontogram_entry (
+			patient_id, chart_id, encounter_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES
+		($1::uuid, $2::uuid, $3::uuid, 1, 'root_canal', 'Emergency pulpectomy performed and canal obturated', 'doctor-user-2', $4, $4),
+		($1::uuid, $2::uuid, $3::uuid, 8, 'bridge', 'Three unit anterior bridge placed', 'doctor-user-2', $4, $4)
+	`, patientID, chart2ID, enc2ID, t2)
+	if err != nil {
+		t.Fatalf("failed to insert chart 2 entries: %v", err)
+	}
+
+	// Now run corrective migration 061
+	m61Path := "../../../../../db/migrations/061_odontogram_parity_upgrade.sql"
+	sql61, err := os.ReadFile(m61Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 061: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql61)); err != nil {
+		t.Fatalf("failed to execute migration 061: %v", err)
+	}
+
+	// 1. Verify exactly one legacy chart exists for patient
+	var legacyCount int
+	err = db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM odontogram_chart WHERE patient_id = $1::uuid AND is_legacy = true
+	`, patientID).Scan(&legacyCount)
+	if err != nil || legacyCount != 1 {
+		t.Fatalf("expected exactly 1 legacy chart after deduplication, got count=%d, err=%v", legacyCount, err)
+	}
+
+	// 2. Fetch keeper chart
+	admin := domain.Actor{ID: "admin-user", Role: "admin"}
+	app := application.ClinicalCareService{Store: store}
+	charts, total, err := app.ListOdontogramCharts(ctx, admin, patientID, "", 1, 10)
+	if err != nil || total != 1 {
+		t.Fatalf("failed to list keeper chart: total=%d err=%v", total, err)
+	}
+	keeper := charts[0]
+
+	// 3. Inspect legacy_provenance: ZERO clinical history lost!
+	if len(keeper.LegacyProvenance) == 0 {
+		t.Fatalf("expected legacy_provenance to be populated on keeper chart")
+	}
+
+	var provItems []map[string]any
+	if err = json.Unmarshal(keeper.LegacyProvenance, &provItems); err != nil {
+		t.Fatalf("failed to unmarshal legacy_provenance: %v", err)
+	}
+
+	var foundAliceTooth1, foundBobTooth1, foundCrownTooth14, foundBridgeTooth8, foundPreSnapshotTooth5 bool
+	for _, item := range provItems {
+		note, _ := item["procedure_notes"].(string)
+		cond, _ := item["condition"].(string)
+		author, _ := item["diagnosed_by"].(string)
+
+		if note == "Deep distal caries with pulpal involvement" && cond == "caries" && author == "doctor-user-1" {
+			foundAliceTooth1 = true
+		}
+		if note == "Emergency pulpectomy performed and canal obturated" && cond == "root_canal" && author == "doctor-user-2" {
+			foundBobTooth1 = true
+		}
+		if note == "Ceramic crown seated well" && cond == "crown" {
+			foundCrownTooth14 = true
+		}
+		if note == "Three unit anterior bridge placed" && cond == "bridge" {
+			foundBridgeTooth8 = true
+		}
+		if note == "Prior childhood composite restoration" && cond == "filling" {
+			foundPreSnapshotTooth5 = true
+		}
+	}
+
+	if !foundAliceTooth1 {
+		t.Errorf("HISTORICAL LOSS: Dr. Alice tooth 1 caries note was lost during deduplication!")
+	}
+	if !foundBobTooth1 {
+		t.Errorf("HISTORICAL LOSS: Dr. Bob tooth 1 root canal note was lost during deduplication!")
+	}
+	if !foundCrownTooth14 {
+		t.Errorf("HISTORICAL LOSS: Tooth 14 crown note was lost!")
+	}
+	if !foundBridgeTooth8 {
+		t.Errorf("HISTORICAL LOSS: Tooth 8 bridge note was lost!")
+	}
+	if !foundPreSnapshotTooth5 {
+		t.Errorf("HISTORICAL LOSS: Pre-existing snapshot provenance item was lost!")
+	}
+
+	// 4. Verify keeper chart's current child entries in patient_odontogram_entry (exactly 1 active child per tooth)
+	var activeChildCount int
+	err = db.QueryRow(ctx, `SELECT COUNT(*) FROM patient_odontogram_entry WHERE chart_id = $1::uuid`, keeper.ID).Scan(&activeChildCount)
+	if err != nil || activeChildCount != 3 {
+		t.Errorf("expected exactly 3 consolidated active teeth in keeper chart, got %d (err: %v)", activeChildCount, err)
+	}
+
+	// 5. Verify odontogram JSON matches active teeth
+	if len(keeper.Odontogram) != 3 {
+		t.Errorf("expected keeper.Odontogram to have 3 teeth, got %d: %+v", len(keeper.Odontogram), keeper.Odontogram)
+	}
+}
+
+// G2: Concurrency coordination between chart saves and legend operations with deterministic barriers
+func TestOdontogram_G2_ConcurrentChartAndLegendMutationsWithBarriers(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 0)
+	defer cleanup()
+
+	adminActor := domain.Actor{ID: "admin-user", Role: "admin"}
+	docActor := domain.Actor{ID: "doctor-user-1", Role: "doctor"}
+	patientID := helperCreatePatient(t, ctx, db, "Abebe", "G2Patient")
+
+	// ─── Barrier Order 1: Chart Save holds FOR SHARE -> Concurrent Legend Rename BLOCKS -> Chart commits -> Rename fails with ErrConflict ───
+	custA, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        "CUST-LOCK-A",
+		Name:        "Barrier Test Legend A",
+		Color:       "#10b981",
+		Description: "Testing order 1 barrier",
+	})
+	if err != nil {
+		t.Fatalf("failed to create custom legend A: %v", err)
+	}
+
+	chartLockedChan := make(chan struct{})
+	renameResultChan := make(chan error, 1)
+
+	// Goroutine 1: Admin trying to rename CUST-LOCK-A to CUST-LOCK-B
+	go func() {
+		<-chartLockedChan
+		// In Postgres, UpdateOdontogramLegend requests FOR UPDATE on custA.
+		// Because the chart transaction in Goroutine 2 holds FOR SHARE, this blocks in the database!
+		_, rErr := store.UpdateOdontogramLegend(ctx, adminActor, custA.ID, domain.SaveOdontogramLegendInput{
+			Code:        "CUST-LOCK-B",
+			Name:        "Renamed B",
+			Color:       "#10b981",
+			Description: "Renamed",
+		})
+		renameResultChan <- rErr
+	}()
+
+	// Goroutine 2: Doctor starts transaction, acquires FOR SHARE on CUST-LOCK-A, inserts chart, then waits
+	tx1, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatalf("failed to begin tx1: %v", err)
+	}
+	defer tx1.Rollback(ctx)
+
+	if err = lockAndValidateLegendCodes(ctx, tx1, []string{"CUST-LOCK-A"}); err != nil {
+		t.Fatalf("failed to lock legend codes: %v", err)
+	}
+
+	var chart1ID string
+	err = tx1.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy
+		) VALUES (
+			$1::uuid, 'doctor-user-1', 'Order 1 barrier chart',
+			'{"14": "CUST-LOCK-A"}'::jsonb, 1, 'doctor-user-1', 'doctor-user-1',
+			clock_timestamp(), clock_timestamp(), false
+		)
+		RETURNING id::text
+	`, patientID).Scan(&chart1ID)
+	if err != nil {
+		t.Fatalf("failed to insert chart1: %v", err)
+	}
+
+	_, err = tx1.Exec(ctx, `
+		INSERT INTO patient_odontogram_entry (
+			patient_id, chart_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES ($1::uuid, $2::uuid, 14, 'CUST-LOCK-A', 'Charted with custom lock A', 'doctor-user-1', clock_timestamp(), clock_timestamp())
+	`, patientID, chart1ID)
+	if err != nil {
+		t.Fatalf("failed to insert entry: %v", err)
+	}
+
+	// Signal Admin Goroutine to attempt rename while we hold FOR SHARE
+	close(chartLockedChan)
+
+	// Ensure Admin goroutine is blocked waiting for lock
+	time.Sleep(150 * time.Millisecond)
+
+	// Doctor commits transaction, releasing FOR SHARE lock
+	if err = tx1.Commit(ctx); err != nil {
+		t.Fatalf("failed to commit tx1: %v", err)
+	}
+
+	// Admin unblocks, evaluates isLegendCodeInUse, and MUST detect newly committed reference -> ErrConflict
+	renameErr := <-renameResultChan
+	if !errors.Is(renameErr, domain.ErrConflict) {
+		t.Errorf("ORDER 1 FAILURE: expected ErrConflict when renaming concurrently referenced legend, got: %v", renameErr)
+	}
+
+	// ─── Barrier Order 2: Legend Mutation holds FOR UPDATE -> Concurrent Chart Save BLOCKS -> Legend commits -> Chart fails with ErrValidation ───
+	custX, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        "CUST-LOCK-X",
+		Name:        "Barrier Test Legend X",
+		Color:       "#3b82f6",
+		Description: "Testing order 2 barrier",
+	})
+	if err != nil {
+		t.Fatalf("failed to create custom legend X: %v", err)
+	}
+
+	legendLockedChan := make(chan struct{})
+	allowLegendCommitChan := make(chan struct{})
+	chartResultChan := make(chan error, 1)
+
+	// Goroutine 1: Admin begins transaction and holds FOR UPDATE on CUST-LOCK-X
+	go func() {
+		txAdmin, aErr := db.Begin(ctx)
+		if aErr != nil {
+			chartResultChan <- aErr
+			return
+		}
+		defer txAdmin.Rollback(ctx)
+
+		var legID string
+		aErr = txAdmin.QueryRow(ctx, `SELECT id FROM odontogram_legend WHERE id = $1 FOR UPDATE`, custX.ID).Scan(&legID)
+		if aErr != nil {
+			chartResultChan <- aErr
+			return
+		}
+
+		close(legendLockedChan)
+		<-allowLegendCommitChan
+
+		_, aErr = txAdmin.Exec(ctx, `UPDATE odontogram_legend SET code = 'CUST-LOCK-Y' WHERE id = $1`, custX.ID)
+		if aErr != nil {
+			chartResultChan <- aErr
+			return
+		}
+		_ = txAdmin.Commit(ctx)
+	}()
+
+	<-legendLockedChan
+
+	// Goroutine 2: Doctor calls CreateOdontogramChart with old code CUST-LOCK-X (must block until Admin commits, then fail)
+	go func() {
+		_, cErr := store.CreateOdontogramChart(ctx, docActor, domain.SaveOdontogramChartInput{
+			PatientID:   patientID,
+			DoctorID:    "doctor-user-1",
+			Description: "Order 2 chart with old code",
+			Odontogram:  map[int]string{8: "CUST-LOCK-X"},
+		})
+		chartResultChan <- cErr
+	}()
+
+	// Wait 150ms to ensure Doctor is blocked on legend row
+	time.Sleep(150 * time.Millisecond)
+
+	// Allow Admin to commit rename to CUST-LOCK-Y
+	close(allowLegendCommitChan)
+
+	// Doctor unblocks: CUST-LOCK-X is gone -> MUST fail with ErrValidation
+	chartErr := <-chartResultChan
+	if !errors.Is(chartErr, domain.ErrValidation) {
+		t.Errorf("ORDER 2 FAILURE: expected ErrValidation when saving chart with renamed/deleted code, got: %v", chartErr)
+	}
+
+	// ─── Exact Condition Matching Tests (Fix for 'odontogram ? $1' and 'LIKE %$1%') ───
+	// 1. Create a legend whose code is "14" (matches tooth key "14", but not condition value)
+	leg14, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        "14",
+		Name:        "Tooth Key Colliding Code",
+		Color:       "#abcdef",
+		Description: "Should not collide with tooth key 14",
+	})
+	if err != nil {
+		t.Fatalf("failed to create legend 14: %v", err)
+	}
+
+	// Chart has tooth 14 with condition "Healthy" (key is "14", condition value is "Healthy")
+	_, err = store.CreateOdontogramChart(ctx, docActor, domain.SaveOdontogramChartInput{
+		PatientID:   patientID,
+		DoctorID:    "doctor-user-1",
+		Description: "Testing tooth key collision",
+		Odontogram:  map[int]string{14: "Healthy"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create chart with tooth 14: %v", err)
+	}
+
+	// Rename legend "14" to "14-RENAMED" -> MUST SUCCEED (because tooth 14's condition is Healthy, NOT 14!)
+	_, err = store.UpdateOdontogramLegend(ctx, adminActor, leg14.ID, domain.SaveOdontogramLegendInput{
+		Code:        "14-RENAMED",
+		Name:        "Tooth Key Colliding Code Renamed",
+		Color:       "#abcdef",
+		Description: "Renamed",
+	})
+	if err != nil {
+		t.Errorf("KEY-VS-VALUE FIX FAILURE: legend code '14' was falsely blocked by tooth key 14: %v", err)
+	}
+
+	// 2. Substring matching fix in legacy_provenance:
+	// Verify that code "KASSA" is NOT falsely blocked when provenance note contains "Dr. Kassahun"
+	legKassa, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        "KASSA",
+		Name:        "Kassa Custom Fixture",
+		Color:       "#445566",
+		Description: "Unreferenced",
+	})
+	if err != nil {
+		t.Fatalf("failed to create legend KASSA: %v", err)
+	}
+
+	// Insert chart with provenance having diagnosed_by = 'Kassahun' and condition = 'Healthy'
+	_, err = db.Exec(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy, legacy_provenance
+		) VALUES (
+			$1::uuid, 'doctor-user-1', 'Provenance substring test',
+			'{}'::jsonb, 1, 'doctor-user-1', 'doctor-user-1',
+			clock_timestamp(), clock_timestamp(), false,
+			'[{"tooth_number": 1, "condition": "Healthy", "procedure_notes": "Sound tooth surface", "diagnosed_by": "Dr. Kassahun"}]'::jsonb
+		)
+	`, patientID)
+	if err != nil {
+		t.Fatalf("failed to insert provenance test chart: %v", err)
+	}
+
+	// Renaming KASSA must succeed (exact condition match: 'Healthy' != 'KASSA')
+	_, err = store.UpdateOdontogramLegend(ctx, adminActor, legKassa.ID, domain.SaveOdontogramLegendInput{
+		Code:        "KASSA-2",
+		Name:        "Kassa Renamed",
+		Color:       "#445566",
+		Description: "Still unreferenced",
+	})
+	if err != nil {
+		t.Errorf("SUBSTRING FIX FAILURE: legend KASSA was falsely blocked by substring match on Dr. Kassahun: %v", err)
+	}
+}
+
+// G3: Intermediate migration 060 schema reconciliation and boundary-length support
+func TestOdontogram_G3_Intermediate060UpgradeReconciliation(t *testing.T) {
+	ctx := context.Background()
+	db, store, _, cleanup := setupOdontogramTestDB(t, 59)
+	defer cleanup()
+
+	adminActor := domain.Actor{ID: "admin-user", Role: "admin"}
+
+	// Apply migration 060
+	m60Path := "../../../../../db/migrations/060_odontogram_chart_parity.sql"
+	sql60, err := os.ReadFile(m60Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 060: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql60)); err != nil {
+		t.Fatalf("failed to execute migration 060: %v", err)
+	}
+
+	// 1. Manually create the intermediate 060 schema from d89af48 (varchar(16) / varchar(100))
+	_, err = db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS odontogram_legend (
+			id text PRIMARY KEY,
+			code varchar(16) NOT NULL UNIQUE,
+			name varchar(100) NOT NULL,
+			color varchar(7) NOT NULL,
+			description text NOT NULL DEFAULT '',
+			is_default boolean NOT NULL DEFAULT false,
+			created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+			updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+		);
+	`)
+	if err != nil {
+		t.Fatalf("failed to create intermediate table: %v", err)
+	}
+
+	// Seed the wrong intermediate seeds + 1 user customized default legend + 1 user custom legend
+	_, err = db.Exec(ctx, `
+		INSERT INTO odontogram_legend (id, code, name, color, description, is_default) VALUES
+		('leg-kr', 'KR', 'Radicular Cyst', '#795548', 'Periapical / radicular cyst', true),
+		('leg-ce', 'Ce', 'Cervical Caries', '#e91e63', 'Cervical / root caries', true),
+		('leg-d',  'D',  'Decayed / Denture', '#ffc107', 'Enamel demineralization', true),
+		('leg-ps', 'PS', 'Post & Core', '#009688', 'Endodontic post and core', true),
+		('leg-b',  'B',  'Bridge', '#990000', 'Hospital customized pontic unit', true),
+		('leg-pre-cust', 'PRE-CUSTOM', 'Pre Custom Legend', '#334455', 'User created custom definition', false);
+	`)
+	if err != nil {
+		t.Fatalf("failed to seed intermediate legends: %v", err)
+	}
+
+	// 2. Run corrective migration 061
+	m61Path := "../../../../../db/migrations/061_odontogram_parity_upgrade.sql"
+	sql61, err := os.ReadFile(m61Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 061: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql61)); err != nil {
+		t.Fatalf("failed to execute migration 061: %v", err)
+	}
+
+	// 3. Test boundary-length custom code (64 characters) and name (128 characters)
+	// On intermediate 060 (varchar(16)/varchar(100)), this would fail with PostgreSQL error 22001
+	longCode := strings.Repeat("A", 64)   // exactly 64 chars
+	longName := strings.Repeat("B", 128)  // exactly 128 chars
+
+	boundaryLeg, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+		Code:        longCode,
+		Name:        longName,
+		Color:       "#059669",
+		Description: "Testing widened 64-char code and 128-char name on upgraded database",
+	})
+	if err != nil {
+		t.Fatalf("WIDENING FIX FAILURE: failed to insert 64-char code on upgraded database: %v", err)
+	}
+	if boundaryLeg.Code != longCode || boundaryLeg.Name != longName {
+		t.Errorf("unexpected boundary legend values: %+v", boundaryLeg)
+	}
+
+	// 4. Verify wrong intermediate seeds were corrected to established clinical definitions
+	type legendCheck struct {
+		code, expectedName, expectedColor string
+	}
+	checks := []legendCheck{
+		{"KR", "Root Canal (Karies Radix)", "#607d8b"},
+		{"Ce", "Pulpitis / Deep Caries", "#009688"},
+		{"D", "Decayed / Denture", "#795548"},
+		{"PS", "Porcelain / Prosthetic", "#ffc107"},
+	}
+	for _, chk := range checks {
+		var name, color string
+		err = db.QueryRow(ctx, `SELECT name, color FROM odontogram_legend WHERE code = $1`, chk.code).Scan(&name, &color)
+		if err != nil {
+			t.Errorf("failed to query legend %s: %v", chk.code, err)
+			continue
+		}
+		if name != chk.expectedName {
+			t.Errorf("legend %s: expected name '%s', got '%s'", chk.code, chk.expectedName, name)
+		}
+		if color != chk.expectedColor {
+			t.Errorf("legend %s: expected color '%s', got '%s'", chk.code, chk.expectedColor, color)
+		}
+	}
+
+	// 5. Verify user customization on default legend 'B' was PRESERVED
+	var bridgeColor, bridgeDesc string
+	err = db.QueryRow(ctx, `SELECT color, description FROM odontogram_legend WHERE code = 'B'`).Scan(&bridgeColor, &bridgeDesc)
+	if err != nil {
+		t.Fatalf("failed to query bridge legend: %v", err)
+	}
+	if bridgeColor != "#990000" || bridgeDesc != "Hospital customized pontic unit" {
+		t.Errorf("RECONCILIATION FAILURE: user customization on legend B was overwritten! color=%s, desc=%s", bridgeColor, bridgeDesc)
+	}
+
+	// 6. Verify pre-upgrade custom legend PRE-CUSTOM still exists untouched
+	var preCustomColor string
+	err = db.QueryRow(ctx, `SELECT color FROM odontogram_legend WHERE code = 'PRE-CUSTOM'`).Scan(&preCustomColor)
+	if err != nil || preCustomColor != "#334455" {
+		t.Errorf("pre-upgrade custom legend PRE-CUSTOM was lost or modified: err=%v, color=%s", err, preCustomColor)
+	}
+}
+
 
 
