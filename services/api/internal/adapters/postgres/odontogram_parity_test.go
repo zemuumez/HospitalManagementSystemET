@@ -1839,14 +1839,14 @@ func TestOdontogram_G1_DuplicateChartConflictingTeethHistoryPreserved(t *testing
 		t.Fatalf("failed to insert chart 2 entries: %v", err)
 	}
 
-	// Now run corrective migration 061
-	m61Path := "../../../../../db/migrations/061_odontogram_parity_upgrade.sql"
-	sql61, err := os.ReadFile(m61Path)
+	// Now run corrective migration 062
+	m62Path := "../../../../../db/migrations/062_odontogram_upgrade_reconciliation.sql"
+	sql62, err := os.ReadFile(m62Path)
 	if err != nil {
-		t.Fatalf("failed to read migration 061: %v", err)
+		t.Fatalf("failed to read migration 062: %v", err)
 	}
-	if _, err = db.Exec(ctx, string(sql61)); err != nil {
-		t.Fatalf("failed to execute migration 061: %v", err)
+	if _, err = db.Exec(ctx, string(sql62)); err != nil {
+		t.Fatalf("failed to execute migration 062: %v", err)
 	}
 
 	// 1. Verify exactly one legacy chart exists for patient
@@ -2210,7 +2210,7 @@ func TestOdontogram_G3_Intermediate060UpgradeReconciliation(t *testing.T) {
 		t.Fatalf("failed to seed intermediate legends: %v", err)
 	}
 
-	// 2. Run corrective migration 061
+	// 2. Run migration 061 followed by corrective migration 062
 	m61Path := "../../../../../db/migrations/061_odontogram_parity_upgrade.sql"
 	sql61, err := os.ReadFile(m61Path)
 	if err != nil {
@@ -2218,6 +2218,15 @@ func TestOdontogram_G3_Intermediate060UpgradeReconciliation(t *testing.T) {
 	}
 	if _, err = db.Exec(ctx, string(sql61)); err != nil {
 		t.Fatalf("failed to execute migration 061: %v", err)
+	}
+
+	m62Path := "../../../../../db/migrations/062_odontogram_upgrade_reconciliation.sql"
+	sql62, err := os.ReadFile(m62Path)
+	if err != nil {
+		t.Fatalf("failed to read migration 062: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql62)); err != nil {
+		t.Fatalf("failed to execute migration 062: %v", err)
 	}
 
 	// 3. Test boundary-length custom code (64 characters) and name (128 characters)
@@ -2280,6 +2289,490 @@ func TestOdontogram_G3_Intermediate060UpgradeReconciliation(t *testing.T) {
 		t.Errorf("pre-upgrade custom legend PRE-CUSTOM was lost or modified: err=%v, color=%s", err, preCustomColor)
 	}
 }
+
+// ─── H1, H2, H3 Comprehensive Regressions ───
+
+func runNormalMigrationRunner(t *testing.T, ctx context.Context, db *pgxpool.Pool) {
+	t.Helper()
+	if _, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		t.Fatalf("failed to create schema_migration table: %v", err)
+	}
+	files, err := filepath.Glob("../../../../../db/migrations/*.sql")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("failed to glob migration files: %v", err)
+	}
+	sort.Strings(files)
+	for _, f := range files {
+		base := filepath.Base(f)
+		var exists bool
+		err = db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migration WHERE name=$1)`, base).Scan(&exists)
+		if err != nil {
+			t.Fatalf("failed checking schema_migration for %s: %v", base, err)
+		}
+		if exists {
+			continue
+		}
+		sqlBytes, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("failed reading migration %s: %v", f, err)
+		}
+		if _, err = db.Exec(ctx, string(sqlBytes)); err != nil {
+			t.Fatalf("normal migration runner failed applying %s: %v", base, err)
+		}
+		if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1)`, base); err != nil {
+			t.Fatalf("failed recording %s in schema_migration: %v", base, err)
+		}
+	}
+}
+
+// H1: Corrective migration 062 executes on already-applied 061 databases, intermediate 060, original 060, and fresh installs
+func TestOdontogram_H1_UpgradeScenariosWithNormalRunner(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("AlreadyApplied061_Skips061AndApplies062", func(t *testing.T) {
+		db, store, _, cleanup := setupOdontogramTestDB(t, 59)
+		defer cleanup()
+		adminActor := domain.Actor{ID: "admin-user", Role: "admin"}
+
+		// Apply migration 060
+		sql60, err := os.ReadFile("../../../../../db/migrations/060_odontogram_chart_parity.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = db.Exec(ctx, string(sql60)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create intermediate 060 legend schema with narrow varchar columns
+		_, err = db.Exec(ctx, `
+			CREATE TABLE IF NOT EXISTS odontogram_legend (
+				id text PRIMARY KEY,
+				code varchar(16) NOT NULL UNIQUE,
+				name varchar(100) NOT NULL,
+				color varchar(7) NOT NULL,
+				description text NOT NULL DEFAULT '',
+				is_default boolean NOT NULL DEFAULT false,
+				created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+				updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+			);
+		`)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Apply migration 061 (as published in 796bfc4)
+		sql61, err := os.ReadFile("../../../../../db/migrations/061_odontogram_parity_upgrade.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = db.Exec(ctx, string(sql61)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Record migrations 001 through 061 in schema_migration tracking table
+		if _, err = db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+			t.Fatal(err)
+		}
+		files, _ := filepath.Glob("../../../../../db/migrations/*.sql")
+		for _, f := range files {
+			base := filepath.Base(f)
+			if base <= "061_odontogram_parity_upgrade.sql" {
+				_, _ = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1) ON CONFLICT DO NOTHING`, base)
+			}
+		}
+
+		// Confirm 061 is recorded
+		var count061 int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='061_odontogram_parity_upgrade.sql'`).Scan(&count061)
+		if count061 != 1 {
+			t.Fatalf("expected 061 in schema_migration")
+		}
+
+		// Execute normal migration runner: MUST skip 061 and execute 062
+		runNormalMigrationRunner(t, ctx, db)
+
+		// Confirm 062 was applied and recorded
+		var count062 int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM schema_migration WHERE name='062_odontogram_upgrade_reconciliation.sql'`).Scan(&count062)
+		if count062 != 1 {
+			t.Fatalf("expected 062 to be applied and recorded in schema_migration")
+		}
+
+		// Verify column widening allows 64-char code and 128-char name
+		longCode := strings.Repeat("X", 64)
+		longName := strings.Repeat("Y", 128)
+		created, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+			Code:        longCode,
+			Name:        longName,
+			Color:       "#0284c7",
+			Description: "Widened columns verified on already-applied 061 upgraded DB",
+		})
+		if err != nil {
+			t.Fatalf("failed to insert boundary length legend after 062: %v", err)
+		}
+		if created.Code != longCode || created.Name != longName {
+			t.Fatalf("unexpected legend values: %+v", created)
+		}
+	})
+
+	t.Run("Intermediate060_UpgradedTo062", func(t *testing.T) {
+		db, store, _, cleanup := setupOdontogramTestDB(t, 59)
+		defer cleanup()
+		adminActor := domain.Actor{ID: "admin-user", Role: "admin"}
+
+		sql60, _ := os.ReadFile("../../../../../db/migrations/060_odontogram_chart_parity.sql")
+		_, _ = db.Exec(ctx, string(sql60))
+		_, _ = db.Exec(ctx, `
+			CREATE TABLE IF NOT EXISTS odontogram_legend (
+				id text PRIMARY KEY,
+				code varchar(16) NOT NULL UNIQUE,
+				name varchar(100) NOT NULL,
+				color varchar(7) NOT NULL,
+				description text NOT NULL DEFAULT '',
+				is_default boolean NOT NULL DEFAULT false,
+				created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+				updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+			);
+		`)
+
+		if _, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+			t.Fatal(err)
+		}
+		files, _ := filepath.Glob("../../../../../db/migrations/*.sql")
+		for _, f := range files {
+			base := filepath.Base(f)
+			if base <= "060_odontogram_chart_parity.sql" {
+				_, _ = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1) ON CONFLICT DO NOTHING`, base)
+			}
+		}
+
+		// Normal runner executes 061 and 062
+		runNormalMigrationRunner(t, ctx, db)
+
+		longCode := strings.Repeat("M", 64)
+		longName := strings.Repeat("N", 128)
+		_, err := store.CreateOdontogramLegend(ctx, adminActor, domain.SaveOdontogramLegendInput{
+			Code:        longCode,
+			Name:        longName,
+			Color:       "#10b981",
+			Description: "Intermediate 060 upgraded cleanly through 062",
+		})
+		if err != nil {
+			t.Fatalf("failed inserting boundary legend on intermediate-060 upgraded DB: %v", err)
+		}
+	})
+
+	t.Run("Original060_UpgradedTo062", func(t *testing.T) {
+		db, _, _, cleanup := setupOdontogramTestDB(t, 60)
+		defer cleanup()
+
+		if _, err := db.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migration(name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+			t.Fatal(err)
+		}
+		files, _ := filepath.Glob("../../../../../db/migrations/*.sql")
+		for _, f := range files {
+			base := filepath.Base(f)
+			if base <= "060_odontogram_chart_parity.sql" {
+				_, _ = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1) ON CONFLICT DO NOTHING`, base)
+			}
+		}
+
+		// Normal runner executes 061 and 062
+		runNormalMigrationRunner(t, ctx, db)
+
+		var countLegends int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM odontogram_legend WHERE is_default = true`).Scan(&countLegends)
+		if countLegends < 11 {
+			t.Fatalf("expected at least 11 default legends, got %d", countLegends)
+		}
+	})
+
+	t.Run("FreshInstallation_AppliesAllThrough062", func(t *testing.T) {
+		db, _, _, cleanup := setupOdontogramTestDB(t, 0)
+		defer cleanup()
+
+		var countLegends int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM odontogram_legend WHERE is_default = true`).Scan(&countLegends)
+		if countLegends < 11 {
+			t.Fatalf("expected 11 default legends on fresh install, got %d", countLegends)
+		}
+	})
+}
+
+// H2: Complete standalone chart headers and child identities archived before deduplication
+func TestOdontogram_H2_CompleteChartHeaderAndToothProvenancePreservation(t *testing.T) {
+	ctx := context.Background()
+	db, _, _, cleanup := setupOdontogramTestDB(t, 59)
+	defer cleanup()
+
+	patientID := helperCreatePatient(t, ctx, db, "Abebe", "H2Patient")
+
+	// Apply migration 060
+	sql60, err := os.ReadFile("../../../../../db/migrations/060_odontogram_chart_parity.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, string(sql60)); err != nil {
+		t.Fatal(err)
+	}
+
+	tHeader1 := time.Date(2026, 1, 5, 9, 0, 0, 0, time.UTC)
+	tHeader2 := time.Date(2026, 2, 20, 14, 30, 0, 0, time.UTC)
+	tChild1 := time.Date(2026, 2, 20, 14, 45, 0, 0, time.UTC) // differing child timestamp!
+	tChild2 := time.Date(2026, 2, 20, 15, 10, 0, 0, time.UTC) // differing child timestamp!
+
+	_, err = db.Exec(ctx, `ALTER TABLE odontogram_chart ADD COLUMN IF NOT EXISTS legacy_provenance jsonb DEFAULT NULL`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Chart 1: Standalone EMPTY duplicate chart with unique notes & attribution but NO child rows!
+	var chart1ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy, legacy_provenance
+		) VALUES (
+			$1::uuid, 'doctor-user-1', 'Initial triage examination - completely asymptomatic, no treatment required',
+			'{}'::jsonb, 1, 'doctor-user-1', 'doctor-user-1',
+			$2, $2, true,
+			'[{"tooth_number": 19, "condition": "healthy", "procedure_notes": "Prior clinic checkup", "diagnosed_by": "dr-prior"}]'::jsonb
+		)
+		RETURNING id::text
+	`, patientID, tHeader1).Scan(&chart1ID)
+	if err != nil {
+		t.Fatalf("failed to insert empty duplicate chart 1: %v", err)
+	}
+
+	// Chart 2: Clinical procedure chart with tooth rows, differing child timestamps and authors
+	var chart2ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO odontogram_chart (
+			patient_id, doctor_id, description, odontogram,
+			version, created_by, updated_by, created_at, updated_at, is_legacy
+		) VALUES (
+			$1::uuid, 'doctor-user-2', 'Operative procedure: tooth 1 caries excavation and tooth 14 crown fitting',
+			'{"1": "caries", "14": "crown"}'::jsonb, 2, 'doctor-user-2', 'doctor-user-2',
+			$2, $2, true
+		)
+		RETURNING id::text
+	`, patientID, tHeader2).Scan(&chart2ID)
+	if err != nil {
+		t.Fatalf("failed to insert chart 2: %v", err)
+	}
+
+	var entry1ID, entry2ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO patient_odontogram_entry (
+			patient_id, chart_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES
+		($1::uuid, $2::uuid, 1, 'caries', 'Extensive occlusal caries excavated', 'doctor-user-2', $3, $3)
+		RETURNING id::text
+	`, patientID, chart2ID, tChild1).Scan(&entry1ID)
+	if err != nil {
+		t.Fatalf("failed to insert entry 1: %v", err)
+	}
+
+	err = db.QueryRow(ctx, `
+		INSERT INTO patient_odontogram_entry (
+			patient_id, chart_id, tooth_number, condition, procedure_notes, diagnosed_by, created_at, updated_at
+		) VALUES
+		($1::uuid, $2::uuid, 14, 'crown', 'Full ceramic crown margins verified', 'doctor-user-1', $3, $3)
+		RETURNING id::text
+	`, patientID, chart2ID, tChild2).Scan(&entry2ID)
+	if err != nil {
+		t.Fatalf("failed to insert entry 2: %v", err)
+	}
+
+	// Run migration 062 (corrective consolidation)
+	sql62, err := os.ReadFile("../../../../../db/migrations/062_odontogram_upgrade_reconciliation.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, string(sql62)); err != nil {
+		t.Fatalf("failed to execute migration 062: %v", err)
+	}
+
+	// 1. Verify exactly 1 legacy chart header remains
+	var count int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM odontogram_chart WHERE patient_id = $1::uuid AND is_legacy = true`, patientID).Scan(&count)
+	if count != 1 {
+		t.Fatalf("expected exactly 1 legacy chart after deduplication, got %d", count)
+	}
+
+	// 2. Fetch keeper chart
+	var keeperID string
+	var provBytes []byte
+	err = db.QueryRow(ctx, `SELECT id::text, legacy_provenance FROM odontogram_chart WHERE patient_id = $1::uuid AND is_legacy = true`, patientID).Scan(&keeperID, &provBytes)
+	if err != nil {
+		t.Fatalf("failed to query keeper: %v", err)
+	}
+
+	var provItems []map[string]any
+	if err = json.Unmarshal(provBytes, &provItems); err != nil {
+		t.Fatalf("failed to unmarshal legacy_provenance: %v", err)
+	}
+
+	// 3. Assert standalone EMPTY chart header is preserved as typed record
+	var foundEmptyHeader, foundActiveHeader, foundChild1, foundChild2, foundPreSnapshot bool
+	for _, item := range provItems {
+		itemType, _ := item["type"].(string)
+
+		if itemType == "chart_header" {
+			cid, _ := item["chart_id"].(string)
+			desc, _ := item["description"].(string)
+			doc, _ := item["doctor_id"].(string)
+			if cid == chart1ID && strings.Contains(desc, "Initial triage examination") && doc == "doctor-user-1" {
+				foundEmptyHeader = true
+			}
+			if cid == chart2ID && strings.Contains(desc, "Operative procedure") && doc == "doctor-user-2" {
+				foundActiveHeader = true
+			}
+		}
+
+		if itemType == "tooth_entry" {
+			eid, _ := item["id"].(string)
+			toothNum, _ := item["tooth_number"].(float64)
+			diagBy, _ := item["diagnosed_by"].(string)
+
+			if eid == entry1ID && toothNum == 1 && diagBy == "doctor-user-2" {
+				foundChild1 = true
+			}
+			if eid == entry2ID && toothNum == 14 && diagBy == "doctor-user-1" {
+				foundChild2 = true
+			}
+		}
+
+		// Prior snapshot item
+		toothNum, _ := item["tooth_number"].(float64)
+		if toothNum == 19 {
+			foundPreSnapshot = true
+		}
+	}
+
+	if !foundEmptyHeader {
+		t.Errorf("H2 LOSS: Standalone empty duplicate chart header was omitted from provenance!")
+	}
+	if !foundActiveHeader {
+		t.Errorf("H2 LOSS: Active chart header was omitted from provenance!")
+	}
+	if !foundChild1 {
+		t.Errorf("H2 LOSS: Child entry 1 identity or attribution was omitted!")
+	}
+	if !foundChild2 {
+		t.Errorf("H2 LOSS: Child entry 2 identity or attribution was omitted!")
+	}
+	if !foundPreSnapshot {
+		t.Errorf("H2 LOSS: Prior snapshot tooth 19 was omitted!")
+	}
+}
+
+// H3: Field-aware seed reconciliation preserves user customizations on name, color, and description
+func TestOdontogram_H3_FieldAwareSeedReconciliationPreservesUserCustomizations(t *testing.T) {
+	ctx := context.Background()
+	db, _, _, cleanup := setupOdontogramTestDB(t, 59)
+	defer cleanup()
+
+	// Apply migration 060
+	sql60, _ := os.ReadFile("../../../../../db/migrations/060_odontogram_chart_parity.sql")
+	_, _ = db.Exec(ctx, string(sql60))
+
+	// Create legend table with intermediate columns
+	_, _ = db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS odontogram_legend (
+			id text PRIMARY KEY,
+			code varchar(16) NOT NULL UNIQUE,
+			name varchar(100) NOT NULL,
+			color varchar(7) NOT NULL,
+			description text NOT NULL DEFAULT '',
+			is_default boolean NOT NULL DEFAULT false,
+			created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+			updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+		);
+	`)
+
+	// Seed 4 test cases for the 4 reconciled codes + 1 custom row:
+	// 1. KR: User customized NAME ("Hospital Endodontic Therapy"), kept old color & description
+	// 2. Ce: User customized COLOR ("#112233"), kept old name & description
+	// 3. D: User customized DESCRIPTION ("Hospital specific decalcification protocol"), kept old name & color
+	// 4. PS: Completely untouched old default ("Post & Core", "#6366f1", "Endodontic post and foundation core restoration")
+	// 5. CUST-KR: Custom non-default row (is_default = false) with same name as old default
+	_, err := db.Exec(ctx, `
+		INSERT INTO odontogram_legend (id, code, name, color, description, is_default) VALUES
+		('leg-kr', 'KR', 'Hospital Endodontic Therapy', '#8b5cf6', 'Periapical / radicular odontogenic cystic lesion', true),
+		('leg-ce', 'Ce', 'Cervical Caries', '#112233', 'Cervical / root surface carious lesion at gingival margin', true),
+		('leg-d',  'D',  'Decalcification', '#eab308', 'Hospital specific decalcification protocol', true),
+		('leg-ps', 'PS', 'Post & Core', '#6366f1', 'Endodontic post and foundation core restoration', true),
+		('leg-custom-kr', 'CUST-KR', 'Radicular Cyst', '#8b5cf6', 'User created custom cystic definition', false);
+	`)
+	if err != nil {
+		t.Fatalf("failed seeding intermediate test legends: %v", err)
+	}
+
+	// Run migration 062
+	sql62, err := os.ReadFile("../../../../../db/migrations/062_odontogram_upgrade_reconciliation.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, string(sql62)); err != nil {
+		t.Fatalf("failed executing migration 062: %v", err)
+	}
+
+	// 1. Verify KR: Customized NAME preserved, Color & Description updated to established
+	var krName, krColor, krDesc string
+	_ = db.QueryRow(ctx, `SELECT name, color, description FROM odontogram_legend WHERE code = 'KR'`).Scan(&krName, &krColor, &krDesc)
+	if krName != "Hospital Endodontic Therapy" {
+		t.Errorf("KR NAME OVERWRITTEN: expected 'Hospital Endodontic Therapy', got '%s'", krName)
+	}
+	if krColor != "#607d8b" {
+		t.Errorf("KR COLOR NOT RECONCILED: expected '#607d8b', got '%s'", krColor)
+	}
+	if krDesc != "Endodontic therapy / Root canal treated" {
+		t.Errorf("KR DESC NOT RECONCILED: expected 'Endodontic therapy / Root canal treated', got '%s'", krDesc)
+	}
+
+	// 2. Verify Ce: Customized COLOR preserved, Name & Description updated to established
+	var ceName, ceColor, ceDesc string
+	_ = db.QueryRow(ctx, `SELECT name, color, description FROM odontogram_legend WHERE code = 'Ce'`).Scan(&ceName, &ceColor, &ceDesc)
+	if ceColor != "#112233" {
+		t.Errorf("Ce COLOR OVERWRITTEN: expected '#112233', got '%s'", ceColor)
+	}
+	if ceName != "Pulpitis / Deep Caries" {
+		t.Errorf("Ce NAME NOT RECONCILED: expected 'Pulpitis / Deep Caries', got '%s'", ceName)
+	}
+	if ceDesc != "Extensive caries with pulpal involvement" {
+		t.Errorf("Ce DESC NOT RECONCILED: expected 'Extensive caries with pulpal involvement', got '%s'", ceDesc)
+	}
+
+	// 3. Verify D: Customized DESCRIPTION preserved, Name & Color updated to established
+	var dName, dColor, dDesc string
+	_ = db.QueryRow(ctx, `SELECT name, color, description FROM odontogram_legend WHERE code = 'D'`).Scan(&dName, &dColor, &dDesc)
+	if dDesc != "Hospital specific decalcification protocol" {
+		t.Errorf("D DESC OVERWRITTEN: expected 'Hospital specific decalcification protocol', got '%s'", dDesc)
+	}
+	if dName != "Decayed / Denture" {
+		t.Errorf("D NAME NOT RECONCILED: expected 'Decayed / Denture', got '%s'", dName)
+	}
+	if dColor != "#795548" {
+		t.Errorf("D COLOR NOT RECONCILED: expected '#795548', got '%s'", dColor)
+	}
+
+	// 4. Verify PS: Untouched old default -> all 3 fields updated to established definitions
+	var psName, psColor, psDesc string
+	_ = db.QueryRow(ctx, `SELECT name, color, description FROM odontogram_legend WHERE code = 'PS'`).Scan(&psName, &psColor, &psDesc)
+	if psName != "Porcelain / Prosthetic" || psColor != "#ffc107" || psDesc != "Porcelain veneer or prosthetic replacement" {
+		t.Errorf("PS UNTOUCHED DEFAULT NOT RECONCILED: name=%s color=%s desc=%s", psName, psColor, psDesc)
+	}
+
+	// 5. Verify CUST-KR: Custom non-default row was NOT modified
+	var custName, custColor, custDesc string
+	var isDef bool
+	_ = db.QueryRow(ctx, `SELECT name, color, description, is_default FROM odontogram_legend WHERE code = 'CUST-KR'`).Scan(&custName, &custColor, &custDesc, &isDef)
+	if isDef || custName != "Radicular Cyst" || custColor != "#8b5cf6" || custDesc != "User created custom cystic definition" {
+		t.Errorf("CUSTOM ROW OVERWRITTEN: name=%s color=%s desc=%s is_default=%v", custName, custColor, custDesc, isDef)
+	}
+}
+
 
 
 
