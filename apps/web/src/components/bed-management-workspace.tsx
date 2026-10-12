@@ -63,6 +63,7 @@ export interface ApiBedAssignment {
   bedId: string;
   bedName: string;
   encounterId: string;
+  encounterVersion?: number;
   ipdNo: string;
   patientId: string;
   patientName: string;
@@ -88,10 +89,11 @@ interface BedStatusItem {
   id: string;
   name: string;
   isAvailable: boolean;
+  state: "available" | "occupied" | "maintenance";
   patientName?: string;
   phone?: string;
   admissionDate?: string;
-  gender?: "Male" | "Female";
+  gender?: string;
 }
 
 interface WardGroup {
@@ -105,6 +107,7 @@ interface BedAssignRow {
   ipdNo: string;
   patientId: string;
   encounterId: string;
+  encounterVersion: number;
   patientName: string;
   patientEmail: string;
   initials: string;
@@ -147,7 +150,7 @@ const initialBeds: BedRow[] = [];
 const initialBedTypes: BedTypeRow[] = [];
 
 export function BedManagementWorkspace({ id }: { id: string }) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const router = useRouter();
 
   // Normalize slug to tab
@@ -218,6 +221,16 @@ export function BedManagementWorkspace({ id }: { id: string }) {
   const [formAssignEncounterId, setFormAssignEncounterId] = useState("");
   const [formAssignBedId, setFormAssignBedId] = useState("");
   const [formAssignDescription, setFormAssignDescription] = useState("");
+  const [patientSearch, setPatientSearch] = useState("");
+  const [encounterSearch, setEncounterSearch] = useState("");
+
+  function formatCurrency(amount: number) {
+    const formatted = amount.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return locale === "am" ? `ብር ${formatted}` : `ETB ${formatted}`;
+  }
 
   // Main loader: connects to Go API and loads persistent data for current tab
   const loadBedManagementData = useCallback(async () => {
@@ -326,8 +339,9 @@ export function BedManagementWorkspace({ id }: { id: string }) {
               ipdNo: ba.ipdNo || ba.encounterId.slice(0, 8).toUpperCase(),
               patientId: ba.patientId,
               encounterId: ba.encounterId,
+              encounterVersion: ba.encounterVersion || 1,
               patientName: ba.patientName,
-              patientEmail: ba.patientEmail || `${ba.patientName.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+              patientEmail: ba.patientEmail || "-",
               initials,
               avatarColor: "#3b82f6",
               bedId: ba.bedId,
@@ -346,10 +360,26 @@ export function BedManagementWorkspace({ id }: { id: string }) {
         }
       }
 
-      // 3. For Bed Status tab (or dropdowns), fetch live beds and build ward groups dynamically
-      const allBedsRes = await api<{ beds: ApiBed[] }>("beds?page=1&pageSize=100");
-      if (allBedsRes?.beds && Array.isArray(allBedsRes.beds)) {
-        const loadedBeds: BedRow[] = allBedsRes.beds.map((b) => ({
+      // 3. For Bed Status tab (or dropdowns), fetch ALL live beds across pages
+      let allLoadedBeds: ApiBed[] = [];
+      let bedPage = 1;
+      while (true) {
+        const pagedBedsRes = await api<{ beds: ApiBed[]; total: number }>(
+          `beds?page=${bedPage}&pageSize=200`,
+        );
+        if (!pagedBedsRes?.beds || pagedBedsRes.beds.length === 0) break;
+        allLoadedBeds.push(...pagedBedsRes.beds);
+        if (
+          allLoadedBeds.length >= (pagedBedsRes.total || 0) ||
+          pagedBedsRes.beds.length < 200
+        ) {
+          break;
+        }
+        bedPage++;
+      }
+
+      if (allLoadedBeds.length > 0) {
+        const loadedBeds: BedRow[] = allLoadedBeds.map((b) => ({
           id: b.id,
           bedId: b.id.slice(0, 8).toUpperCase(),
           bedName: b.name,
@@ -368,7 +398,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
 
         // Group beds by wardName or bedType dynamically
         const wardMap = new Map<string, BedStatusItem[]>();
-        for (const b of allBedsRes.beds) {
+        for (const b of allLoadedBeds) {
           const ward = (b.wardName || b.type || "General Ward").trim();
           if (!wardMap.has(ward)) wardMap.set(ward, []);
 
@@ -386,14 +416,21 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                 });
           }
 
+          const rawState = (b.state || "").toLowerCase();
+          const bedState: "available" | "occupied" | "maintenance" =
+            rawState === "maintenance"
+              ? "maintenance"
+              : (!b.available || b.occupiedBy || b.patientName ? "occupied" : "available");
+
           wardMap.get(ward)!.push({
             id: b.id,
             name: b.name,
-            isAvailable: b.available,
+            isAvailable: bedState === "available",
+            state: bedState,
             patientName: b.patientName || b.occupiedBy?.patientName,
-            phone: b.patientPhone || b.occupiedBy?.phone,
-            admissionDate: b.admissionDate || admissionDateStr,
-            gender: (b.patientGender?.toLowerCase() === "female" || b.occupiedBy?.gender?.toLowerCase() === "female" ? "Female" : "Male") as "Male" | "Female",
+            phone: b.patientPhone || b.occupiedBy?.phone || "-",
+            admissionDate: b.admissionDate || admissionDateStr || "-",
+            gender: b.patientGender || b.occupiedBy?.gender || "-",
           });
         }
 
@@ -409,23 +446,32 @@ export function BedManagementWorkspace({ id }: { id: string }) {
         setWards([]);
       }
 
-      // 4. Fetch live occupancy report
+      // 4. Fetch live occupancy report, patients, and encounters without swallowing errors
+      const auxErrors: string[] = [];
       try {
         const rep = await api<ApiBedOccupancyReport>("bed-occupancy/report");
         if (rep) setOccupancyReport(rep);
-      } catch {}
+      } catch (err: any) {
+        auxErrors.push(`Occupancy report: ${err?.message || "fetch failed"}`);
+      }
 
-      // 5. Fetch patients for assignment dropdown
       try {
-        const patRes = await api<{ patients: Patient[] }>("patients?page=1&pageSize=100");
+        const patRes = await api<{ patients: Patient[] }>("patients?page=1&pageSize=200");
         if (patRes?.patients) setRemotePatients(patRes.patients);
-      } catch {}
+      } catch (err: any) {
+        auxErrors.push(`Patients: ${err?.message || "fetch failed"}`);
+      }
 
-      // 6. Fetch encounters for assignment dropdown
       try {
-        const encRes = await api<{ encounters: any[] }>("encounters?kind=ipd&page=1&pageSize=100");
+        const encRes = await api<{ encounters: any[] }>("encounters?kind=ipd&page=1&pageSize=200");
         if (encRes?.encounters) setRemoteEncounters(encRes.encounters);
-      } catch {}
+      } catch (err: any) {
+        auxErrors.push(`Encounters: ${err?.message || "fetch failed"}`);
+      }
+
+      if (auxErrors.length > 0) {
+        setApiErrorBanner(auxErrors.join("; "));
+      }
 
       setApiConnected(true);
     } catch (err: any) {
@@ -611,7 +657,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
     }
   }, [formAssignPatientId, remoteEncounters]);
 
-  // Save Bed Assign (Persistent UUID validation on backend)
+  // Save Bed Assign (Persistent UUID validation & positive version contract)
   async function handleSaveBedAssign(e: React.FormEvent) {
     e.preventDefault();
     if (!formAssignPatientId || !formAssignEncounterId || !formAssignBedId) {
@@ -620,6 +666,13 @@ export function BedManagementWorkspace({ id }: { id: string }) {
       );
       return;
     }
+    const selectedEnc = remoteEncounters.find((enc) => enc.id === formAssignEncounterId);
+    const encVersion = selectedEnc?.version || 1;
+    if (encVersion <= 0) {
+      setApiErrorBanner(t("A positive encounter version is required"));
+      return;
+    }
+
     setIsSubmitting(true);
     setApiErrorBanner("");
 
@@ -631,6 +684,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
           encounterId: formAssignEncounterId,
           bedId: formAssignBedId,
           notes: formAssignDescription.trim(),
+          version: encVersion,
         }),
       });
 
@@ -654,10 +708,16 @@ export function BedManagementWorkspace({ id }: { id: string }) {
     setDischargeModalOpen(true);
   }
 
-  // Submit Discharge (Atomic status update & occupancy release)
+  // Submit Discharge (Atomic status update, occupancy release & positive version contract)
   async function handleConfirmDischarge(e: React.FormEvent) {
     e.preventDefault();
     if (!assignmentToDischarge) return;
+    const encVersion = assignmentToDischarge.encounterVersion || 1;
+    if (encVersion <= 0) {
+      setApiErrorBanner(t("A positive encounter version is required"));
+      return;
+    }
+
     setIsSubmitting(true);
     setApiErrorBanner("");
 
@@ -665,7 +725,8 @@ export function BedManagementWorkspace({ id }: { id: string }) {
       await api(`bed-assignments/${assignmentToDischarge.id}/discharge`, {
         method: "POST",
         body: JSON.stringify({
-          notes: dischargeNotes.trim() || "Discharged from Bed Management Workspace",
+          version: encVersion,
+          dischargeNotes: dischargeNotes.trim() || t("Discharged from Bed Management Workspace"),
         }),
       });
       setApiSuccessBanner(
@@ -689,7 +750,11 @@ export function BedManagementWorkspace({ id }: { id: string }) {
 
     try {
       if (itemToDelete.type === "bed-types") {
-        await api(`bed-types/${itemToDelete.id}?version=${itemToDelete.version || 1}`, {
+        const btVersion = itemToDelete.version || 1;
+        if (btVersion <= 0) {
+          throw new Error(t("A positive bed type version is required"));
+        }
+        await api(`bed-types/${itemToDelete.id}?version=${btVersion}`, {
           method: "DELETE",
         });
         setApiSuccessBanner(t("Bed type deleted successfully."));
@@ -722,7 +787,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
         b.bedId,
         b.bedName,
         b.bedType,
-        `$${b.charge.toFixed(2)}`,
+        formatCurrency(b.charge),
         b.available ? "Yes" : "No",
         b.state || "available",
       ]);
@@ -762,6 +827,30 @@ export function BedManagementWorkspace({ id }: { id: string }) {
     if (!formAssignPatientId) return remoteEncounters;
     return remoteEncounters.filter((e) => e.patientId === formAssignPatientId);
   }, [formAssignPatientId, remoteEncounters]);
+
+  const filteredPatients = useMemo(() => {
+    if (!patientSearch.trim()) return remotePatients;
+    const q = patientSearch.toLowerCase().trim();
+    return remotePatients.filter(
+      (p) =>
+        p.givenName?.toLowerCase().includes(q) ||
+        p.familyName?.toLowerCase().includes(q) ||
+        p.mrn?.toLowerCase().includes(q) ||
+        p.id.toLowerCase().includes(q),
+    );
+  }, [remotePatients, patientSearch]);
+
+  const filteredEncounters = useMemo(() => {
+    const list = eligibleEncounters;
+    if (!encounterSearch.trim()) return list;
+    const q = encounterSearch.toLowerCase().trim();
+    return list.filter(
+      (e) =>
+        e.id.toLowerCase().includes(q) ||
+        (e.patientName && e.patientName.toLowerCase().includes(q)) ||
+        (e.status && e.status.toLowerCase().includes(q)),
+    );
+  }, [eligibleEncounters, encounterSearch]);
 
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
 
@@ -900,21 +989,60 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                     ) : (
                       <div className="ward-beds-container">
                         {ward.beds.map((bed) => {
-                          const isOccupied = !bed.isAvailable;
+                          const isOccupied = bed.state === "occupied";
+                          const isMaintenance = bed.state === "maintenance";
+                          const isAvailable = bed.state === "available";
+
+                          const stateClass = isMaintenance
+                            ? "maintenance"
+                            : isOccupied
+                              ? "occupied"
+                              : "available";
+
+                          const labelColorClass = isMaintenance
+                            ? "text-warning"
+                            : isOccupied
+                              ? "text-danger"
+                              : "text-success";
+
                           return (
                             <div
                               key={bed.id}
-                              className={`bed-status-item ${isOccupied ? "occupied" : "available"}`}
+                              className={`bed-status-item ${stateClass}`}
                               onMouseEnter={() => isOccupied && setHoveredBed(bed)}
                               onMouseLeave={() => setHoveredBed(null)}
                               onClick={() => {
-                                if (!isOccupied) {
+                                if (isAvailable) {
                                   handleOpenNewBedAssign(bed.id);
                                 }
                               }}
                             >
                               <div className="bed-icon-wrapper">
-                                {isOccupied ? (
+                                {isMaintenance ? (
+                                  <svg
+                                    className="bed-maintenance-svg text-warning"
+                                    viewBox="0 0 64 64"
+                                    width="48"
+                                    height="48"
+                                    fill="none"
+                                    stroke="#fbbf24"
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M6 48V28" />
+                                    <path d="M58 48V36" />
+                                    <path d="M6 42h52" />
+                                    <circle cx="18" cy="26" r="6" fill="#fbbf24" opacity="0.3" stroke="#fbbf24" />
+                                    <path
+                                      d="M26 32h26a6 6 0 0 1 6 6v4H16v-4a6 6 0 0 1 10-6z"
+                                      fill="#fbbf24"
+                                      opacity="0.3"
+                                    />
+                                    <path d="M36 14l6 6-4 4-6-6 4-4z" stroke="#fbbf24" strokeWidth="2.5" />
+                                    <path d="M38 16l-10 10" stroke="#f59e0b" strokeWidth="2.5" />
+                                  </svg>
+                                ) : isOccupied ? (
                                   <svg
                                     className="bed-pulse-svg text-danger"
                                     viewBox="0 0 64 64"
@@ -966,10 +1094,12 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                                 )}
                               </div>
 
-                              <span
-                                className={`bed-status-label ${isOccupied ? "text-danger" : "text-success"}`}
-                              >
-                                {isOccupied ? bed.patientName : bed.name}
+                              <span className={`bed-status-label ${labelColorClass}`}>
+                                {isMaintenance
+                                  ? `${bed.name} (${t("Maintenance")})`
+                                  : isOccupied
+                                    ? (bed.patientName || bed.name)
+                                    : bed.name}
                               </span>
 
                               {/* Hover tooltip for occupied bed */}
@@ -981,19 +1111,19 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                                   </div>
                                   <div className="popover-row">
                                     <span className="popover-label">{t("Patient")} :</span>
-                                    <span className="popover-val">{bed.patientName}</span>
+                                    <span className="popover-val">{bed.patientName || "-"}</span>
                                   </div>
                                   <div className="popover-row">
                                     <span className="popover-label">{t("Phone")} :</span>
-                                    <span className="popover-val">{bed.phone || "N/A"}</span>
+                                    <span className="popover-val">{bed.phone || "-"}</span>
                                   </div>
                                   <div className="popover-row">
                                     <span className="popover-label">{t("Admission Date")} :</span>
-                                    <span className="popover-val">{bed.admissionDate || "N/A"}</span>
+                                    <span className="popover-val">{bed.admissionDate || "-"}</span>
                                   </div>
                                   <div className="popover-row">
                                     <span className="popover-label">{t("Gender")} :</span>
-                                    <span className="popover-val">{bed.gender || "Male"}</span>
+                                    <span className="popover-val">{bed.gender || "-"}</span>
                                   </div>
                                 </div>
                               )}
@@ -1384,21 +1514,17 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                       {/* Charge */}
                       <td>
                         <span className="currency-amount">
-                          $
-                          {row.charge.toLocaleString("en-US", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
+                          {formatCurrency(row.charge)}
                         </span>
                       </td>
                       {/* Available status badge */}
                       <td>
                         {row.available ? (
                           <span className="badge-available-yes">{t("Available")}</span>
+                        ) : row.state === "maintenance" ? (
+                          <span className="badge-available-maintenance">{t("Maintenance")}</span>
                         ) : (
-                          <span className="badge-available-no">
-                            {row.state === "maintenance" ? t("Maintenance") : t("Occupied")}
-                          </span>
+                          <span className="badge-available-no">{t("Occupied")}</span>
                         )}
                       </td>
                       {/* Actions */}
@@ -1943,6 +2069,14 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                   <label className="form-label-custom">
                     {t("Patient")}: <span className="text-danger">*</span>
                   </label>
+                  <input
+                    type="text"
+                    placeholder={t("Search patients")}
+                    className="form-input-custom mb-1"
+                    value={patientSearch}
+                    onChange={(e) => setPatientSearch(e.target.value)}
+                    aria-label={t("Search patients")}
+                  />
                   <select
                     required
                     className="form-select-custom"
@@ -1950,7 +2084,7 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                     onChange={(e) => setFormAssignPatientId(e.target.value)}
                   >
                     <option value="">{t("Select Patient")}</option>
-                    {remotePatients.map((p) => (
+                    {filteredPatients.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.givenName} {p.familyName} ({p.mrn})
                       </option>
@@ -1962,6 +2096,14 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                   <label className="form-label-custom">
                     {t("IPD Encounter")}: <span className="text-danger">*</span>
                   </label>
+                  <input
+                    type="text"
+                    placeholder={t("Search")}
+                    className="form-input-custom mb-1"
+                    value={encounterSearch}
+                    onChange={(e) => setEncounterSearch(e.target.value)}
+                    aria-label={t("Search")}
+                  />
                   <select
                     required
                     className="form-select-custom"
@@ -1969,9 +2111,9 @@ export function BedManagementWorkspace({ id }: { id: string }) {
                     onChange={(e) => setFormAssignEncounterId(e.target.value)}
                   >
                     <option value="">{t("Select IPD Encounter")}</option>
-                    {eligibleEncounters.map((enc) => (
+                    {filteredEncounters.map((enc) => (
                       <option key={enc.id} value={enc.id}>
-                        {enc.id.slice(0, 8).toUpperCase()} - {enc.patientName || "IPD Patient"} ({enc.status})
+                        {enc.id.slice(0, 8).toUpperCase()} - {enc.patientName || "IPD Patient"} (v{enc.version || 1}) [{enc.status}]
                       </option>
                     ))}
                   </select>

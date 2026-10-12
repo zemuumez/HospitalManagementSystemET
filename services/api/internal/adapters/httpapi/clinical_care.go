@@ -70,8 +70,10 @@ func (s Server) clinicalCare(w http.ResponseWriter, r *http.Request, a domain.Ac
 	case strings.HasPrefix(r.URL.Path, "/v1/bed-assignments/") && strings.HasSuffix(r.URL.Path, "/discharge") && r.Method == "POST":
 		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/bed-assignments/"), "/discharge")
 		var input domain.DischargeBedAssignmentInput
-		_ = json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&input)
-		assign, err := s.ClinicalCare.DischargeBedAssignment(r.Context(), a, id, input.DischargeNotes)
+		if !decode(w, r, &input) {
+			return true
+		}
+		assign, err := s.ClinicalCare.DischargeBedAssignment(r.Context(), a, id, input)
 		if err != nil {
 			fail(w, err)
 			return true

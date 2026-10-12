@@ -102,7 +102,7 @@ func (s Store) AssignBed(ctx context.Context, a domain.Actor, input domain.Assig
 	if encStatus != "active" {
 		return domain.BedAssignment{}, domain.ErrConflict
 	}
-	if input.Version > 0 && encVersion != input.Version {
+	if input.Version <= 0 || encVersion != input.Version {
 		return domain.BedAssignment{}, domain.ErrStale
 	}
 
@@ -231,13 +231,15 @@ func (s Store) AssignBed(ctx context.Context, a domain.Actor, input domain.Assig
 		return domain.BedAssignment{}, err
 	}
 
+	assign.EncounterVersion = encVersion + 1
+
 	if err := tx.Commit(ctx); err != nil {
 		return domain.BedAssignment{}, err
 	}
 	return assign, nil
 }
 
-func (s Store) ListAllBedAssignments(ctx context.Context, search, status string, page, pageSize int) ([]domain.BedAssignment, int, error) {
+func (s Store) ListAllBedAssignments(ctx context.Context, a domain.Actor, search, status string, page, pageSize int) ([]domain.BedAssignment, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -253,10 +255,22 @@ func (s Store) ListAllBedAssignments(ctx context.Context, search, status string,
 		JOIN patient p ON p.id = ba.patient_id
 		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
 		JOIN encounter e ON e.id = ba.encounter_id
-		WHERE 1=1
+		WHERE (
+			$1 = 'admin' OR $1 = 'receptionist'
+			OR ($1 = 'doctor' AND (
+				p.clinician_user_id = $2
+				OR e.doctor_id = $2
+				OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)
+			))
+			OR ($1 = 'nurse' AND (
+				EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)
+				OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)
+			))
+			OR ($1 = 'patient' AND patient_portal_owner(p.id) = $2)
+		)
 	`
-	args := []any{}
-	argIdx := 1
+	args := []any{a.Role, a.ID}
+	argIdx := 3
 
 	if status == "active" {
 		baseQuery += ` AND ba.assigned_to IS NULL`
@@ -290,7 +304,7 @@ func (s Store) ListAllBedAssignments(ctx context.Context, search, status string,
 		       COALESCE(pp.email, '') AS patient_email, COALESCE(p.phone, '') AS patient_phone,
 		       COALESCE(pp.gender, '') AS patient_gender,
 		       ba.assigned_from, ba.assigned_to, ba.notes, ba.assigned_by,
-		       (ba.assigned_to IS NULL) AS status, ba.created_at
+		       (ba.assigned_to IS NULL) AS status, ba.created_at, e.version
 		%s
 		ORDER BY ba.assigned_from DESC, ba.id
 		LIMIT $%d OFFSET $%d
@@ -313,7 +327,7 @@ func (s Store) ListAllBedAssignments(ctx context.Context, search, status string,
 			&a.PatientEmail, &a.PatientPhone,
 			&a.PatientGender,
 			&a.AssignedFrom, &a.AssignedTo, &a.Notes, &a.AssignedBy,
-			&a.Status, &a.CreatedAt,
+			&a.Status, &a.CreatedAt, &a.EncounterVersion,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -367,7 +381,7 @@ func (s Store) ListBedAssignments(ctx context.Context, encounterID string) ([]do
 	return list, nil
 }
 
-func (s Store) DischargeBedAssignment(ctx context.Context, a domain.Actor, id string, notes string) (domain.BedAssignment, error) {
+func (s Store) DischargeBedAssignment(ctx context.Context, a domain.Actor, id string, input domain.DischargeBedAssignmentInput) (domain.BedAssignment, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return domain.BedAssignment{}, err
@@ -377,24 +391,64 @@ func (s Store) DischargeBedAssignment(ctx context.Context, a domain.Actor, id st
 	var assign domain.BedAssignment
 	var bedID, encID string
 	var assignedTo *time.Time
-	var encNumber int64
 	err = tx.QueryRow(ctx, `
-		SELECT ba.id, ba.bed_id, ba.encounter_id, ba.patient_id, ba.assigned_to, ba.notes,
-		       b.name, bt.name, COALESCE(b.ward_name, 'General Ward'),
-		       (p.given_name || ' ' || p.family_name), COALESCE(pp.email, ''), COALESCE(p.phone, ''),
-		       COALESCE(pp.gender, ''), ba.assigned_from, ba.created_at, e.number
-		FROM bed_assignment ba
-		JOIN hospital_bed b ON b.id = ba.bed_id
+		SELECT bed_id, encounter_id, patient_id, assigned_to
+		FROM bed_assignment
+		WHERE id = $1
+	`, id).Scan(&bedID, &encID, &assign.PatientID, &assignedTo)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+	if assignedTo != nil {
+		return domain.BedAssignment{}, domain.ErrConflict
+	}
+
+	// Canonical clinical record authorization (unrelated staff forbidden)
+	if err := s.AuthorizeClinicalRecord(ctx, a, assign.PatientID, encID, "admission"); err != nil {
+		return domain.BedAssignment{}, err
+	}
+
+	// Enforce deadlock-free lock order: encounter -> hospital_bed -> bed_assignment
+	// 1. Lock encounter FOR UPDATE
+	var encVersion int
+	var encStatus string
+	var encNumber int64
+	var encBedID *string
+	err = tx.QueryRow(ctx, `
+		SELECT version, status, number, bed_id
+		FROM encounter
+		WHERE id = $1 FOR UPDATE OF encounter
+	`, encID).Scan(&encVersion, &encStatus, &encNumber, &encBedID)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+	if input.Version <= 0 || encVersion != input.Version {
+		return domain.BedAssignment{}, domain.ErrStale
+	}
+
+	// 2. Lock hospital_bed FOR UPDATE
+	var bedName, bedType, bedWard string
+	err = tx.QueryRow(ctx, `
+		SELECT b.name, bt.name, COALESCE(b.ward_name, 'General Ward')
+		FROM hospital_bed b
 		JOIN bed_type bt ON bt.id = b.type_id
+		WHERE b.id = $1 FOR UPDATE OF b
+	`, bedID).Scan(&bedName, &bedType, &bedWard)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
+
+	// 3. Lock bed_assignment FOR UPDATE
+	err = tx.QueryRow(ctx, `
+		SELECT ba.notes, (p.given_name || ' ' || p.family_name), COALESCE(pp.email, ''), COALESCE(p.phone, ''),
+		       COALESCE(pp.gender, ''), ba.assigned_from, ba.created_at, ba.assigned_to
+		FROM bed_assignment ba
 		JOIN patient p ON p.id = ba.patient_id
 		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
-		JOIN encounter e ON e.id = ba.encounter_id
 		WHERE ba.id = $1 FOR UPDATE OF ba
 	`, id).Scan(
-		&assign.ID, &bedID, &encID, &assign.PatientID, &assignedTo, &assign.Notes,
-		&assign.BedName, &assign.BedType, &assign.WardName,
-		&assign.PatientName, &assign.PatientEmail, &assign.PatientPhone,
-		&assign.PatientGender, &assign.AssignedFrom, &assign.CreatedAt, &encNumber,
+		&assign.Notes, &assign.PatientName, &assign.PatientEmail, &assign.PatientPhone,
+		&assign.PatientGender, &assign.AssignedFrom, &assign.CreatedAt, &assignedTo,
 	)
 	if err != nil {
 		return domain.BedAssignment{}, clinicalError(err)
@@ -405,7 +459,7 @@ func (s Store) DischargeBedAssignment(ctx context.Context, a domain.Actor, id st
 
 	now := time.Now().UTC()
 	appendNote := assign.Notes
-	if notes = strings.TrimSpace(notes); notes != "" {
+	if notes := strings.TrimSpace(input.DischargeNotes); notes != "" {
 		if appendNote != "" {
 			appendNote += " | " + notes
 		} else {
@@ -422,37 +476,41 @@ func (s Store) DischargeBedAssignment(ctx context.Context, a domain.Actor, id st
 		return domain.BedAssignment{}, err
 	}
 
-	// Update encounter to release bed
-	var encVersion int
-	err = tx.QueryRow(ctx, `SELECT version FROM encounter WHERE id = $1 FOR UPDATE`, encID).Scan(&encVersion)
-	if err == nil {
-		_, _ = tx.Exec(ctx, `
-			UPDATE encounter 
-			SET bed_id = NULL, version = version + 1 
-			WHERE id = $1 AND bed_id = $2
-		`, encID, bedID)
+	// Update encounter to release bed and increment version
+	_, err = tx.Exec(ctx, `
+		UPDATE encounter 
+		SET bed_id = NULL, version = version + 1 
+		WHERE id = $1 AND bed_id = $2
+	`, encID, bedID)
+	if err != nil {
+		return domain.BedAssignment{}, clinicalError(err)
+	}
 
-		_, _ = tx.Exec(ctx, `
-			INSERT INTO bed_event (encounter_id, kind, from_bed_id, charge_minor, actor_id, reason, encounter_version)
-			VALUES ($1, 'discharge', $2, 0, $3, $4, $5)
-		`, encID, bedID, a.ID, notes, encVersion+1)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO bed_event (encounter_id, kind, from_bed_id, charge_minor, actor_id, reason, encounter_version)
+		VALUES ($1, 'discharge', $2, 0, $3, $4, $5)
+	`, encID, bedID, a.ID, input.DischargeNotes, encVersion+1)
+	if err != nil {
+		return domain.BedAssignment{}, err
 	}
 
 	if err = pharmacyAudit(ctx, tx, a, "bed.discharged", id); err != nil {
 		return domain.BedAssignment{}, err
 	}
 
+	assign.ID = id
 	assign.BedID = bedID
+	assign.BedName = bedName
+	assign.BedType = bedType
+	assign.WardName = bedWard
 	assign.EncounterID = encID
 	assign.IPDNo = fmt.Sprintf("IPD-%d", encNumber)
 	assign.AssignedTo = &now
 	assign.Notes = appendNote
 	assign.Status = false
+	assign.EncounterVersion = encVersion + 1
 
-	if err := tx.Commit(ctx); err != nil {
-		return domain.BedAssignment{}, err
-	}
-	return assign, nil
+	return assign, tx.Commit(ctx)
 }
 
 // ─── Care Team Delegation ─────────────────────────────────────────────────────

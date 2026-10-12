@@ -23,13 +23,13 @@ type ClinicalRepository interface {
 	TransferBed(context.Context, domain.Actor, string, domain.BedTransfer) (domain.Encounter, error)
 	BedHistory(context.Context, domain.Actor, string, int) ([]domain.BedEvent, error)
 	Beds(context.Context, int) ([]domain.Bed, error)
-	SearchBeds(context.Context, string, string, string, *bool, int, int) ([]domain.Bed, int, error)
+	SearchBeds(context.Context, domain.Actor, string, string, string, *bool, int, int) ([]domain.Bed, int, error)
 	CreateBed(context.Context, domain.Actor, domain.BedInput) (domain.Bed, error)
 	UpdateBed(context.Context, domain.Actor, string, domain.UpdateBedInput) (domain.Bed, error)
 	DeleteBed(context.Context, domain.Actor, string) error
 	Cases(context.Context, domain.Actor, int) ([]domain.Case, error)
 	CreateCase(context.Context, domain.Actor, domain.CaseInput) (domain.Case, error)
-	Encounters(context.Context, domain.Actor, string, int) ([]domain.Encounter, error)
+	Encounters(context.Context, domain.Actor, string, int, int) ([]domain.Encounter, error)
 	Admit(context.Context, domain.Actor, domain.EncounterInput, string) (domain.Encounter, error)
 	Discharge(context.Context, domain.Actor, string, domain.Discharge, time.Time) (domain.Encounter, error)
 	Notes(context.Context, domain.Actor, string) ([]domain.ClinicalNote, error)
@@ -54,10 +54,10 @@ func (c Clinical) SearchBeds(ctx context.Context, a domain.Actor, search, ward, 
 	if !a.Can("beds.read") {
 		return nil, 0, domain.ErrForbidden
 	}
-	if page < 1 || page > 1000 || pageSize < 1 || pageSize > 100 {
+	if page < 1 || page > 1000 || pageSize < 1 || pageSize > 200 {
 		return nil, 0, domain.ErrValidation
 	}
-	return c.Store.SearchBeds(ctx, search, ward, bedType, available, page, pageSize)
+	return c.Store.SearchBeds(ctx, a, search, ward, bedType, available, page, pageSize)
 }
 func (c Clinical) CreateBed(ctx context.Context, a domain.Actor, b domain.BedInput) (domain.Bed, error) {
 	if a.Role != "admin" {
@@ -110,14 +110,14 @@ func (c Clinical) CreateCase(ctx context.Context, a domain.Actor, i domain.CaseI
 	}
 	return c.Store.CreateCase(ctx, a, i)
 }
-func (c Clinical) Encounters(ctx context.Context, a domain.Actor, kind string, page int) ([]domain.Encounter, error) {
+func (c Clinical) Encounters(ctx context.Context, a domain.Actor, kind string, page, pageSize int) ([]domain.Encounter, error) {
 	if !a.Can("clinical.read") {
 		return nil, domain.ErrForbidden
 	}
-	if (kind != "ipd" && kind != "opd") || page < 1 || page > 1000 {
+	if (kind != "ipd" && kind != "opd") || page < 1 || page > 1000 || pageSize < 1 || pageSize > 200 {
 		return nil, domain.ErrValidation
 	}
-	return c.Store.Encounters(ctx, a, kind, page)
+	return c.Store.Encounters(ctx, a, kind, page, pageSize)
 }
 func (c Clinical) Admit(ctx context.Context, a domain.Actor, i domain.EncounterInput, key string) (domain.Encounter, error) {
 	if !a.Can("clinical.admit") {
@@ -225,7 +225,7 @@ func (c Clinical) DeleteBedType(ctx context.Context, a domain.Actor, id string, 
 	if a.Role != "admin" {
 		return domain.ErrForbidden
 	}
-	if !domain.UUIDPattern.MatchString(id) {
+	if !domain.UUIDPattern.MatchString(id) || version <= 0 {
 		return domain.ErrValidation
 	}
 	return c.Store.DeleteBedType(ctx, a, id, version)

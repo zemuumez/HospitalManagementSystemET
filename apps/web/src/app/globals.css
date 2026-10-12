@@ -3084,7 +3084,7 @@ html[lang="am"] .label {
   align-items: center;
 }
 .no-bed-message {
-  color: #64748b;
+  color: #94a3b8;
   font-size: 14px;
   font-weight: 500;
 }
@@ -3101,6 +3101,9 @@ html[lang="am"] .label {
   align-items: center;
   cursor: pointer;
   min-width: 90px;
+}
+.bed-status-item.maintenance {
+  cursor: default;
 }
 .bed-icon-wrapper {
   margin-bottom: 8px;
@@ -3122,6 +3125,9 @@ html[lang="am"] .label {
 }
 .bed-status-label.text-success {
   color: #34d399 !important;
+}
+.bed-status-label.text-warning {
+  color: #fbbf24 !important;
 }
 .bed-hover-popover {
   position: absolute;
@@ -3202,7 +3208,7 @@ input:checked + .slider:before {
 .bed-name-link,
 .bed-type-link,
 .bed-type-title-link {
-  color: #5b73e8;
+  color: #818cf8;
   text-decoration: none;
   font-weight: 500;
 }
@@ -3220,7 +3226,11 @@ input:checked + .slider:before {
   font-weight: 600;
 }
 .badge-available-no {
-  color: #ef4444;
+  color: #f87171;
+  font-weight: 600;
+}
+.badge-available-maintenance {
+  color: #fbbf24;
   font-weight: 600;
 }
 

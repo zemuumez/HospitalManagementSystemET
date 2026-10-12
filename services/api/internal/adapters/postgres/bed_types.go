@@ -119,7 +119,7 @@ func (s Store) DeleteBedType(ctx context.Context, a domain.Actor, id string, ver
 	if err != nil {
 		return clinicalError(err)
 	}
-	if version > 0 && currentVersion != version {
+	if version <= 0 || currentVersion != version {
 		return domain.ErrStale
 	}
 

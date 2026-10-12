@@ -39,11 +39,11 @@ func (s Store) Beds(ctx context.Context, page int) ([]domain.Bed, error) {
 	return out, rows.Err()
 }
 
-func (s Store) SearchBeds(ctx context.Context, search, ward, bedType string, available *bool, page, pageSize int) ([]domain.Bed, int, error) {
+func (s Store) SearchBeds(ctx context.Context, a domain.Actor, search, ward, bedType string, available *bool, page, pageSize int) ([]domain.Bed, int, error) {
 	if page < 1 {
 		page = 1
 	}
-	if pageSize < 1 || pageSize > 100 {
+	if pageSize < 1 || pageSize > 200 {
 		pageSize = 25
 	}
 	offset := (page - 1) * pageSize
@@ -55,18 +55,23 @@ func (s Store) SearchBeds(ctx context.Context, search, ward, bedType string, ava
 		LEFT JOIN encounter e ON (e.id = ba.encounter_id OR (e.bed_id = b.id AND e.status = 'active'))
 		LEFT JOIN patient p ON p.id = COALESCE(e.patient_id, (SELECT patient_id FROM encounter WHERE id = ba.encounter_id))
 		LEFT JOIN patient_profile pp ON pp.patient_id = p.id
-		WHERE b.active = true
+		WHERE ($1 = $1 AND $2 = $2) AND b.active = true
 	`
-	args := []any{}
-	argIdx := 1
+	args := []any{a.Role, a.ID}
+	argIdx := 3
 
 	if search = strings.TrimSpace(search); search != "" {
 		baseQuery += fmt.Sprintf(` AND (
 			b.name ILIKE $%d 
 			OR t.name ILIKE $%d 
 			OR b.ward_name ILIKE $%d 
-			OR (p.given_name || ' ' || p.family_name) ILIKE $%d
 			OR b.description ILIKE $%d
+			OR (
+				($1 = 'admin' OR $1 = 'receptionist'
+				 OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+				 OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
+				) AND (p.given_name || ' ' || p.family_name) ILIKE $%d
+			)
 		)`, argIdx, argIdx, argIdx, argIdx, argIdx)
 		args = append(args, "%"+search+"%")
 		argIdx++
@@ -105,11 +110,26 @@ func (s Store) SearchBeds(ctx context.Context, search, ward, bedType string, ava
 		       COALESCE(b.ward_name, 'General Ward') AS ward_name,
 		       COALESCE(b.description, '') AS description,
 		       b.active,
-		       COALESCE(p.given_name || ' ' || p.family_name, '') AS patient_name,
-		       COALESCE(p.phone, '') AS patient_phone,
-		       COALESCE(pp.gender, '') AS patient_gender,
-		       COALESCE(TO_CHAR(COALESCE(ba.assigned_from, e.admitted_at), 'DDth Mon, YYYY HH12:MI:SS AM'), '') AS admission_date,
-		       COALESCE(COALESCE(ba.encounter_id::text, e.id::text), '') AS encounter_id
+		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
+		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
+		       ) THEN COALESCE(p.given_name || ' ' || p.family_name, '') ELSE '' END AS patient_name,
+		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
+		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
+		       ) THEN COALESCE(p.phone, '') ELSE '' END AS patient_phone,
+		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
+		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
+		       ) THEN COALESCE(pp.gender, '') ELSE '' END AS patient_gender,
+		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
+		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
+		       ) THEN COALESCE(TO_CHAR(COALESCE(ba.assigned_from, e.admitted_at), 'DDth Mon, YYYY HH12:MI:SS AM'), '') ELSE '' END AS admission_date,
+		       CASE WHEN ($1 = 'admin' OR $1 = 'receptionist'
+		         OR ($1 = 'doctor' AND (p.clinician_user_id = $2 OR e.doctor_id = $2 OR EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL)))
+		         OR ($1 = 'nurse' AND (EXISTS (SELECT 1 FROM encounter_care_team ect WHERE ect.encounter_id = e.id AND ect.staff_id = $2 AND ect.revoked_at IS NULL) OR EXISTS (SELECT 1 FROM encounter_nurse en WHERE en.encounter_id = e.id AND en.nurse_id = $2 AND en.active)))
+		       ) THEN COALESCE(COALESCE(ba.encounter_id::text, e.id::text), '') ELSE '' END AS encounter_id
 		%s
 		ORDER BY b.ward_name, b.name, b.id
 		LIMIT $%d OFFSET $%d
@@ -241,13 +261,20 @@ func scanEncounter(row pgx.Row) (domain.Encounter, error) {
 	err := row.Scan(&e.ID, &e.Number, &e.Kind, &e.CaseID, &e.BedID, &e.AdmittedAt, &e.Symptoms, &e.PatientID, &e.PatientName, &e.DoctorID, &e.DoctorName, &e.BedName, &e.Status, &e.Version, &e.DischargedAt, &e.DischargeSummary, &e.Intake, &e.PatientEmail, &e.DoctorEmail, &e.BillStatus, &e.TotalVisits)
 	return e, clinicalError(err)
 }
-func (s Store) Encounters(ctx context.Context, a domain.Actor, kind string, page int) ([]domain.Encounter, error) {
+func (s Store) Encounters(ctx context.Context, a domain.Actor, kind string, page, pageSize int) ([]domain.Encounter, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 25
+	}
+	offset := (page - 1) * pageSize
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE `+encounterScope+` AND e.kind=$3 ORDER BY e.admitted_at DESC,e.id LIMIT 25 OFFSET $4`, a.Role, a.ID, kind, (page-1)*25)
+	rows, err := tx.Query(ctx, `SELECT `+encounterFields+encounterFrom+` WHERE `+encounterScope+` AND e.kind=$3 ORDER BY e.admitted_at DESC,e.id LIMIT $4 OFFSET $5`, a.Role, a.ID, kind, pageSize, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -341,11 +368,20 @@ func (s Store) Discharge(ctx context.Context, a domain.Actor, id string, d domai
 	if now.Before(out.AdmittedAt) {
 		return out, domain.ErrValidation
 	}
-	if _, err = tx.Exec(ctx, `UPDATE encounter SET status='discharged',discharged_at=$2,discharge_summary=$3,version=version+1 WHERE id=$1`, id, now, d.Summary); err != nil {
+	if out.BedID != "" {
+		// Lock hospital bed
+		var dummy string
+		_ = tx.QueryRow(ctx, `SELECT id FROM hospital_bed WHERE id=$1 FOR UPDATE`, out.BedID).Scan(&dummy)
+		// Close any open bed_assignment
+		if _, err = tx.Exec(ctx, `UPDATE bed_assignment SET assigned_to=$2 WHERE encounter_id=$1 AND assigned_to IS NULL`, id, now); err != nil {
+			return out, err
+		}
+	}
+	if _, err = tx.Exec(ctx, `UPDATE encounter SET status='discharged',discharged_at=$2,discharge_summary=$3,bed_id=NULL,version=version+1 WHERE id=$1`, id, now, d.Summary); err != nil {
 		return out, err
 	}
 	if out.Kind == "ipd" {
-		if _, err = tx.Exec(ctx, `INSERT INTO bed_event(encounter_id,kind,from_bed_id,charge_minor,actor_id,encounter_version) SELECT id,'discharge',bed_id,COALESCE((SELECT charge_minor FROM bed_event WHERE encounter_id=encounter.id ORDER BY encounter_version DESC LIMIT 1),bed_charge_minor),$2,version FROM encounter WHERE id=$1`, id, a.ID); err != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO bed_event(encounter_id,kind,from_bed_id,charge_minor,actor_id,reason,encounter_version) VALUES($1,'discharge',$2,COALESCE((SELECT charge_minor FROM bed_event WHERE encounter_id=$1 ORDER BY encounter_version DESC LIMIT 1),0),$3,$4,$5)`, id, out.BedID, a.ID, d.Summary, out.Version+1); err != nil {
 			return out, err
 		}
 	}
@@ -355,6 +391,8 @@ func (s Store) Discharge(ctx context.Context, a domain.Actor, id string, d domai
 	out.Status = "discharged"
 	out.DischargedAt = &now
 	out.DischargeSummary = d.Summary
+	out.BedID = ""
+	out.BedName = ""
 	out.Version++
 	return out, tx.Commit(ctx)
 }

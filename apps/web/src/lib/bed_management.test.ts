@@ -63,6 +63,15 @@ test("saveBedType: editing uses PATCH with optimistic concurrency version", asyn
 });
 
 test("deleteBedType: sends DELETE with version and surfaces in-use conflicts", async () => {
+  await assert.rejects(
+    async () => deleteBedType("bt-uuid-1", 0),
+    /A positive bed type version is required/,
+  );
+  await assert.rejects(
+    async () => deleteBedType("bt-uuid-1", -1),
+    /A positive bed type version is required/,
+  );
+
   const successFetch = (async (url, init) => {
     assert.equal(url, "/api/hms/bed-types/bt-uuid-1?version=3");
     assert.equal(init?.method, "DELETE");
@@ -189,15 +198,38 @@ test("deleteBed: protects occupied beds against deletion", async () => {
   );
 });
 
-test("assignBed: validates persistent UUIDs and calls POST /bed-assignments", async () => {
+test("assignBed: validates persistent UUIDs, positive version, and calls POST /bed-assignments", async () => {
   await assert.rejects(
     async () =>
       assignBed({
         patientId: "",
         encounterId: "enc-uuid-1",
         bedId: "bed-uuid-1",
+        version: 1,
       }),
     /Patient ID, Encounter ID, and Bed ID are all required/,
+  );
+
+  await assert.rejects(
+    async () =>
+      assignBed({
+        patientId: "pat-uuid-1",
+        encounterId: "enc-uuid-1",
+        bedId: "bed-uuid-1",
+        version: 0,
+      }),
+    /A positive encounter version is required/,
+  );
+
+  await assert.rejects(
+    async () =>
+      assignBed({
+        patientId: "pat-uuid-1",
+        encounterId: "enc-uuid-1",
+        bedId: "bed-uuid-1",
+        version: -1,
+      }),
+    /A positive encounter version is required/,
   );
 
   const customFetch = (async (url, init) => {
@@ -207,6 +239,7 @@ test("assignBed: validates persistent UUIDs and calls POST /bed-assignments", as
     assert.equal(body.patientId, "pat-uuid-1");
     assert.equal(body.encounterId, "enc-uuid-1");
     assert.equal(body.bedId, "bed-uuid-1");
+    assert.equal(body.version, 1);
     return Response.json({
       id: "assign-uuid-1",
       patientId: body.patientId,
@@ -221,6 +254,7 @@ test("assignBed: validates persistent UUIDs and calls POST /bed-assignments", as
       patientId: "pat-uuid-1",
       encounterId: "enc-uuid-1",
       bedId: "bed-uuid-1",
+      version: 1,
       notes: "Post-op admission",
     },
     customFetch,
@@ -229,11 +263,22 @@ test("assignBed: validates persistent UUIDs and calls POST /bed-assignments", as
   assert.equal(res.isActive, true);
 });
 
-test("dischargeBed: calls discharge endpoint and releases bed", async () => {
+test("dischargeBed: validates positive version, calls discharge endpoint and releases bed", async () => {
+  await assert.rejects(
+    async () => dischargeBed("assign-uuid-1", 0, "notes"),
+    /A positive encounter version is required/,
+  );
+
+  await assert.rejects(
+    async () => dischargeBed("assign-uuid-1", -1, "notes"),
+    /A positive encounter version is required/,
+  );
+
   const customFetch = (async (url, init) => {
     assert.equal(url, "/api/hms/bed-assignments/assign-uuid-1/discharge");
     assert.equal(init?.method, "POST");
     const body = JSON.parse(String(init?.body));
+    assert.equal(body.version, 2);
     assert.equal(body.dischargeNotes, "Discharged home in stable condition");
     return Response.json({
       id: "assign-uuid-1",
@@ -244,6 +289,7 @@ test("dischargeBed: calls discharge endpoint and releases bed", async () => {
 
   const res = await dischargeBed(
     "assign-uuid-1",
+    2,
     "Discharged home in stable condition",
     customFetch,
   );
@@ -268,6 +314,11 @@ test("Amharic localization dictionary covers all bed management workspace keys",
     "No Bed Available",
     "Available",
     "Occupied",
+    "Maintenance",
+    "Discharged",
+    "Discharge Patient",
+    "Sync Backend",
+    "Syncing...",
     "IPD NO",
     "PATIENT",
     "BED",

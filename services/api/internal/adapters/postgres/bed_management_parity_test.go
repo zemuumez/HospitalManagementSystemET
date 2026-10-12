@@ -315,8 +315,8 @@ func TestBed_ConcurrentAssignmentRace(t *testing.T) {
 	results := make([]error, concurrency)
 
 	assignInputs := []domain.AssignBedInput{
-		{BedID: bed.ID, EncounterID: enc1ID, PatientID: patient1ID, Notes: "Patient 1 admission"},
-		{BedID: bed.ID, EncounterID: enc2ID, PatientID: patient2ID, Notes: "Patient 2 admission"},
+		{BedID: bed.ID, EncounterID: enc1ID, PatientID: patient1ID, Notes: "Patient 1 admission", Version: 1},
+		{BedID: bed.ID, EncounterID: enc2ID, PatientID: patient2ID, Notes: "Patient 2 admission", Version: 1},
 	}
 
 	startGate := make(chan struct{})
@@ -391,6 +391,7 @@ func TestBed_EncounterOwnershipValidation(t *testing.T) {
 		EncounterID: enc1ID,
 		PatientID:   patient2ID, // WRONG patient!
 		Notes:       "Forged ownership test",
+		Version:     1,
 	})
 
 	if !errors.Is(err, domain.ErrValidation) {
@@ -403,6 +404,7 @@ func TestBed_EncounterOwnershipValidation(t *testing.T) {
 		EncounterID: enc1ID,
 		PatientID:   patient1ID, // Correct patient!
 		Notes:       "Genuine ownership",
+		Version:     1,
 	})
 	if err != nil {
 		t.Fatalf("expected valid assignment to succeed, got: %v", err)
@@ -442,6 +444,7 @@ func TestBed_MaintenanceStateWorkflow(t *testing.T) {
 		EncounterID: encID,
 		PatientID:   patientID,
 		Notes:       "Should fail on maintenance bed",
+		Version:     1,
 	})
 	if !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("expected ErrConflict when assigning bed under maintenance, got: %v", err)
@@ -466,6 +469,7 @@ func TestBed_MaintenanceStateWorkflow(t *testing.T) {
 		EncounterID: encID,
 		PatientID:   patientID,
 		Notes:       "Assignment after repair",
+		Version:     1,
 	})
 	if err != nil {
 		t.Fatalf("assignment failed on ready bed: %v", err)
@@ -500,6 +504,7 @@ func TestBed_TransferAtomicity(t *testing.T) {
 		EncounterID: encID,
 		PatientID:   patientID,
 		Notes:       "Initial Bed A",
+		Version:     1,
 	})
 	if err != nil {
 		t.Fatalf("failed initial assignment to Bed A: %v", err)
@@ -520,6 +525,7 @@ func TestBed_TransferAtomicity(t *testing.T) {
 		EncounterID: encID,
 		PatientID:   patientID,
 		Notes:       "Transfer from Bed A to Bed B",
+		Version:     assignA.EncounterVersion,
 	})
 	if err != nil {
 		t.Fatalf("failed transfer to Bed B: %v", err)
@@ -539,7 +545,7 @@ func TestBed_TransferAtomicity(t *testing.T) {
 	}
 
 	// Verify Bed A is now available in listing
-	beds, total, err := store.SearchBeds(ctx, "", "", "", nil, 1, 10)
+	beds, total, err := store.SearchBeds(ctx, admin, "", "", "", nil, 1, 10)
 	if err != nil {
 		t.Fatalf("failed to list beds: %v", err)
 	}
@@ -573,6 +579,7 @@ func TestBed_DischargeLifecycle(t *testing.T) {
 		EncounterID: encID,
 		PatientID:   patientID,
 		Notes:       "Admitted for observation",
+		Version:     1,
 	})
 	if err != nil {
 		t.Fatalf("failed to assign bed: %v", err)
@@ -584,7 +591,10 @@ func TestBed_DischargeLifecycle(t *testing.T) {
 	}
 
 	// Discharge bed assignment
-	dischargedAssign, err := store.DischargeBedAssignment(ctx, admin, assign.ID, "Patient stabilized, discharged home")
+	dischargedAssign, err := store.DischargeBedAssignment(ctx, admin, assign.ID, domain.DischargeBedAssignmentInput{
+		Version:        assign.EncounterVersion,
+		DischargeNotes: "Patient stabilized, discharged home",
+	})
 	if err != nil {
 		t.Fatalf("failed to discharge bed assignment: %v", err)
 	}
@@ -596,7 +606,10 @@ func TestBed_DischargeLifecycle(t *testing.T) {
 	}
 
 	// Second discharge attempt must fail with conflict
-	_, err = store.DischargeBedAssignment(ctx, admin, assign.ID, "Duplicate discharge attempt")
+	_, err = store.DischargeBedAssignment(ctx, admin, assign.ID, domain.DischargeBedAssignmentInput{
+		Version:        dischargedAssign.EncounterVersion,
+		DischargeNotes: "Duplicate discharge attempt",
+	})
 	if !errors.Is(err, domain.ErrConflict) {
 		t.Fatalf("expected ErrConflict on duplicate discharge, got: %v", err)
 	}
@@ -763,3 +776,456 @@ func TestBed_PopulatedUpgradeSafety(t *testing.T) {
 	_ = schema
 	_ = store
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Independent Review Findings Regressions (R1 - R5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// R1: Role access scoping & capacity-only bed redaction
+func TestBed_ReviewR1_RoleAccessScopeAndRedaction(t *testing.T) {
+	_, store, _, cleanup := setupBedTestDB(t, 0)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin, doctor, _, patientID, encID, _ := seedBedStaffAndPatient(ctx, t, store.DB)
+
+	// Create unrelated doctor and unrelated nurse
+	unrelatedDoc := domain.Actor{ID: "usr-unrelated-doc", Role: "doctor"}
+	unrelatedNurse := domain.Actor{ID: "usr-unrelated-nurse", Role: "nurse"}
+	receptionist := domain.Actor{ID: "usr-receptionist-test", Role: "receptionist"}
+
+	_, err := store.DB.Exec(ctx, `
+		INSERT INTO "user"(id, email, name)
+		VALUES
+			($1, 'unrelated_doc@hospital.test', 'Unrelated Doctor'),
+			($2, 'unrelated_nurse@hospital.test', 'Unrelated Nurse'),
+			($3, 'receptionist_bed@hospital.test', 'Receptionist Bed')
+		ON CONFLICT(id) DO NOTHING
+	`, unrelatedDoc.ID, unrelatedNurse.ID, receptionist.ID)
+	if err != nil {
+		t.Fatalf("failed to insert unrelated users: %v", err)
+	}
+	_, err = store.DB.Exec(ctx, `
+		INSERT INTO staff_access(user_id, role, active)
+		VALUES
+			($1, 'doctor', true),
+			($2, 'nurse', true),
+			($3, 'receptionist', true)
+		ON CONFLICT(user_id) DO NOTHING
+	`, unrelatedDoc.ID, unrelatedNurse.ID, receptionist.ID)
+	if err != nil {
+		t.Fatalf("failed to insert unrelated staff_access: %v", err)
+	}
+
+	bt, _ := store.SaveBedType(ctx, admin, "", domain.BedTypeInput{Name: "R1 Bed Type", Active: true})
+	bed, _ := store.CreateBed(ctx, admin, domain.BedInput{TypeID: bt.ID, Name: "R1-BED-01", WardName: "Private ICU", ChargeMinor: 120000})
+
+	assign, err := store.AssignBed(ctx, admin, domain.AssignBedInput{
+		BedID:       bed.ID,
+		EncounterID: encID,
+		PatientID:   patientID,
+		Notes:       "R1 Protected Patient Admission",
+		Version:     1,
+	})
+	if err != nil {
+		t.Fatalf("failed to assign bed: %v", err)
+	}
+
+	// 1. Unrelated nurse must NOT see this assignment in ListAllBedAssignments
+	unrelatedNurseList, total, err := store.ListAllBedAssignments(ctx, unrelatedNurse, "", "active", 1, 25)
+	if err != nil {
+		t.Fatalf("unrelated nurse ListAllBedAssignments failed: %v", err)
+	}
+	if total != 0 || len(unrelatedNurseList) != 0 {
+		t.Fatalf("security violation: unrelated nurse saw %d assignments (expected 0)", total)
+	}
+
+	// 2. Unrelated doctor must NOT see this assignment in ListAllBedAssignments
+	unrelatedDocList, total, err := store.ListAllBedAssignments(ctx, unrelatedDoc, "", "active", 1, 25)
+	if err != nil {
+		t.Fatalf("unrelated doctor ListAllBedAssignments failed: %v", err)
+	}
+	if total != 0 || len(unrelatedDocList) != 0 {
+		t.Fatalf("security violation: unrelated doctor saw %d assignments (expected 0)", total)
+	}
+
+	// 3. Admin, receptionist, and assigned doctor MUST see the assignment
+	adminList, total, err := store.ListAllBedAssignments(ctx, admin, "", "active", 1, 25)
+	if err != nil || total != 1 || len(adminList) != 1 {
+		t.Fatalf("admin expected 1 assignment, got %d, err: %v", total, err)
+	}
+	recList, total, err := store.ListAllBedAssignments(ctx, receptionist, "", "active", 1, 25)
+	if err != nil || total != 1 || len(recList) != 1 {
+		t.Fatalf("receptionist expected 1 assignment, got %d, err: %v", total, err)
+	}
+	docList, total, err := store.ListAllBedAssignments(ctx, doctor, "", "active", 1, 25)
+	if err != nil || total != 1 || len(docList) != 1 {
+		t.Fatalf("assigned doctor expected 1 assignment, got %d, err: %v", total, err)
+	}
+	if docList[0].EncounterVersion <= 0 {
+		t.Fatalf("expected positive encounter version in listing, got: %d", docList[0].EncounterVersion)
+	}
+
+	// 4. Unrelated nurse attempting to discharge assignment must be rejected with ErrForbidden
+	_, err = store.DischargeBedAssignment(ctx, unrelatedNurse, assign.ID, domain.DischargeBedAssignmentInput{
+		Version:        assign.EncounterVersion,
+		DischargeNotes: "Malicious discharge by unrelated nurse",
+	})
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("expected ErrForbidden when unrelated nurse attempts discharge, got: %v", err)
+	}
+
+	// 5. Redaction test in SearchBeds:
+	// Capacity-only viewer (unrelated nurse) sees bed occupied, but patient clinical details REDACTED
+	unrelatedBeds, _, err := store.SearchBeds(ctx, unrelatedNurse, "", "", "", nil, 1, 10)
+	if err != nil {
+		t.Fatalf("unrelated nurse SearchBeds failed: %v", err)
+	}
+	foundRedacted := false
+	for _, b := range unrelatedBeds {
+		if b.ID == bed.ID {
+			foundRedacted = true
+			if b.Available {
+				t.Fatalf("expected bed to be occupied (not available)")
+			}
+			if b.PatientName != "" || b.PatientPhone != "" || b.PatientGender != "" || b.EncounterID != "" {
+				t.Fatalf("security violation: patient details not redacted for capacity viewer: %+v", b)
+			}
+		}
+	}
+	if !foundRedacted {
+		t.Fatal("bed not found in capacity listing")
+	}
+
+	// Authorized viewer (admin) sees patient clinical details
+	adminBeds, _, err := store.SearchBeds(ctx, admin, "", "", "", nil, 1, 10)
+	if err != nil {
+		t.Fatalf("admin SearchBeds failed: %v", err)
+	}
+	foundAuthorized := false
+	for _, b := range adminBeds {
+		if b.ID == bed.ID {
+			foundAuthorized = true
+			if b.PatientName == "" || b.EncounterID == "" {
+				t.Fatalf("expected authorized viewer to see patient details, got empty: %+v", b)
+			}
+		}
+	}
+	if !foundAuthorized {
+		t.Fatal("bed not found in admin listing")
+	}
+}
+
+// R2: Canonical Store.TransferBed and Clinical.Discharge consistency
+func TestBed_ReviewR2_CanonicalTransferAndDischargeConsistency(t *testing.T) {
+	_, store, _, cleanup := setupBedTestDB(t, 0)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin, doctor, _, patientID, encID, _ := seedBedStaffAndPatient(ctx, t, store.DB)
+
+	bt, _ := store.SaveBedType(ctx, admin, "", domain.BedTypeInput{Name: "R2 Type", Active: true})
+	bedA, _ := store.CreateBed(ctx, admin, domain.BedInput{TypeID: bt.ID, Name: "R2-BED-A", WardName: "Ward A", ChargeMinor: 40000})
+	bedB, _ := store.CreateBed(ctx, admin, domain.BedInput{TypeID: bt.ID, Name: "R2-BED-B", WardName: "Ward B", ChargeMinor: 70000})
+
+	// Initial assignment to Bed A
+	assignA, err := store.AssignBed(ctx, admin, domain.AssignBedInput{
+		BedID:       bedA.ID,
+		EncounterID: encID,
+		PatientID:   patientID,
+		Notes:       "Initial Bed A",
+		Version:     1,
+	})
+	if err != nil {
+		t.Fatalf("failed initial assignment: %v", err)
+	}
+
+	// Query current encounter to get current version
+	var encVersion int
+	err = store.DB.QueryRow(ctx, `SELECT version FROM encounter WHERE id = $1`, encID).Scan(&encVersion)
+	if err != nil {
+		t.Fatalf("failed to query encounter version: %v", err)
+	}
+
+	// Transfer using canonical Store.TransferBed
+	transferredEnc, err := store.TransferBed(ctx, admin, encID, domain.BedTransfer{
+		BedID:   bedB.ID,
+		Version: encVersion,
+		Reason:  "Condition escalated, transferred to Ward B",
+	})
+	if err != nil {
+		t.Fatalf("Store.TransferBed failed: %v", err)
+	}
+	if transferredEnc.BedID != bedB.ID {
+		t.Fatalf("expected encounter bed_id to be Bed B, got: %s", transferredEnc.BedID)
+	}
+
+	// Verify Bed A assignment is now closed
+	var assignATo *time.Time
+	err = store.DB.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assignA.ID).Scan(&assignATo)
+	if err != nil || assignATo == nil {
+		t.Fatalf("expected Bed A assignment to be closed with assigned_to, got: %v", assignATo)
+	}
+
+	// Verify new assignment exists for Bed B and is open
+	var assignBID string
+	var assignBTo *time.Time
+	err = store.DB.QueryRow(ctx, `
+		SELECT id, assigned_to FROM bed_assignment 
+		WHERE encounter_id = $1 AND bed_id = $2
+	`, encID, bedB.ID).Scan(&assignBID, &assignBTo)
+	if err != nil {
+		t.Fatalf("failed to find new assignment for Bed B: %v", err)
+	}
+	if assignBTo != nil {
+		t.Fatalf("expected Bed B assignment to be active (assigned_to NULL), got: %v", assignBTo)
+	}
+
+	// Verify occupancy report: Bed A is available, Bed B is occupied
+	rep, _ := store.BedOccupancyReport(ctx)
+	if rep.OccupiedBeds != 1 || rep.AvailableBeds != 1 {
+		t.Fatalf("unexpected occupancy after transfer: %+v", rep)
+	}
+
+	// Now perform clinical discharge via clinical.go Discharge
+	now := time.Now().UTC()
+	dischargedEnc, err := store.Discharge(ctx, doctor, encID, domain.Discharge{
+		Version: transferredEnc.Version,
+		Summary: "Patient discharged successfully",
+	}, now)
+	if err != nil {
+		t.Fatalf("clinical.Discharge failed: %v", err)
+	}
+	if dischargedEnc.Status != "discharged" || dischargedEnc.BedID != "" {
+		t.Fatalf("expected discharged encounter with cleared bed_id, got: %+v", dischargedEnc)
+	}
+
+	// Verify Bed B assignment is now closed
+	err = store.DB.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assignBID).Scan(&assignBTo)
+	if err != nil || assignBTo == nil {
+		t.Fatalf("expected Bed B assignment to be closed on clinical discharge, got: %v", assignBTo)
+	}
+
+	// Verify Bed B is now available
+	repAfter, _ := store.BedOccupancyReport(ctx)
+	if repAfter.OccupiedBeds != 0 || repAfter.AvailableBeds != 2 {
+		t.Fatalf("expected 0 occupied and 2 available after clinical discharge, got: %+v", repAfter)
+	}
+}
+
+// R3: Mandatory positive optimistic version contracts
+func TestBed_ReviewR3_MandatoryPositiveVersionContracts(t *testing.T) {
+	_, store, _, cleanup := setupBedTestDB(t, 0)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin, _, _, patientID, encID, _ := seedBedStaffAndPatient(ctx, t, store.DB)
+
+	bt, _ := store.SaveBedType(ctx, admin, "", domain.BedTypeInput{Name: "R3 Type", Active: true})
+	bed, _ := store.CreateBed(ctx, admin, domain.BedInput{TypeID: bt.ID, Name: "R3-BED-01", WardName: "General", ChargeMinor: 50000})
+
+	// 1. AssignBed with Version <= 0 must fail validation
+	inv1 := domain.AssignBedInput{BedID: bed.ID, EncounterID: encID, PatientID: patientID, Version: 0}
+	if err := inv1.Validate(); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation on AssignBed with version 0, got: %v", err)
+	}
+	invNeg := domain.AssignBedInput{BedID: bed.ID, EncounterID: encID, PatientID: patientID, Version: -1}
+	if err := invNeg.Validate(); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation on AssignBed with version -1, got: %v", err)
+	}
+
+	// Stale version in AssignBed must return ErrStale
+	_, err := store.AssignBed(ctx, admin, domain.AssignBedInput{
+		BedID:       bed.ID,
+		EncounterID: encID,
+		PatientID:   patientID,
+		Version:     999, // Stale!
+	})
+	if !errors.Is(err, domain.ErrStale) {
+		t.Fatalf("expected ErrStale on mismatched version in AssignBed, got: %v", err)
+	}
+
+	// Correct version succeeds
+	assign, err := store.AssignBed(ctx, admin, domain.AssignBedInput{
+		BedID:       bed.ID,
+		EncounterID: encID,
+		PatientID:   patientID,
+		Version:     1,
+	})
+	if err != nil {
+		t.Fatalf("expected success with version 1, got: %v", err)
+	}
+
+	// 2. DischargeBedAssignmentInput with Version <= 0 must fail validation
+	discInv := domain.DischargeBedAssignmentInput{Version: 0}
+	if err := discInv.Validate(); !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation on DischargeBedAssignmentInput with version 0, got: %v", err)
+	}
+
+	// Stale version in DischargeBedAssignment must return ErrStale
+	_, err = store.DischargeBedAssignment(ctx, admin, assign.ID, domain.DischargeBedAssignmentInput{
+		Version: 999, // Stale!
+	})
+	if !errors.Is(err, domain.ErrStale) {
+		t.Fatalf("expected ErrStale on mismatched version in DischargeBedAssignment, got: %v", err)
+	}
+
+	// 3. DeleteBedType with version <= 0 or stale version must return ErrStale
+	err = store.DeleteBedType(ctx, admin, bt.ID, 0)
+	if !errors.Is(err, domain.ErrStale) && !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrStale or ErrValidation on DeleteBedType with version 0, got: %v", err)
+	}
+	err = store.DeleteBedType(ctx, admin, bt.ID, 999)
+	if !errors.Is(err, domain.ErrStale) {
+		t.Fatalf("expected ErrStale on DeleteBedType with mismatched version, got: %v", err)
+	}
+}
+
+// R4: Corrective migration 064 quarantine and reconciliation audit
+func TestBed_ReviewR4_Migration064QuarantineAndAudit(t *testing.T) {
+	db, store, _, cleanup := setupBedTestDB(t, 62)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin := domain.Actor{ID: "usr-admin-r4", Role: "admin"}
+	doctor := domain.Actor{ID: "usr-doc-r4", Role: "doctor"}
+
+	_, _ = db.Exec(ctx, `
+		INSERT INTO "user"(id, email, name) VALUES ($1, 'admin_r4@hospital.test', 'Admin R4'), ($2, 'doc_r4@hospital.test', 'Doc R4')
+		ON CONFLICT(id) DO NOTHING
+	`, admin.ID, doctor.ID)
+	_, _ = db.Exec(ctx, `
+		INSERT INTO staff_access(user_id, role, active) VALUES ($1, 'admin', true), ($2, 'doctor', true)
+		ON CONFLICT(user_id) DO NOTHING
+	`, admin.ID, doctor.ID)
+
+	var patientID, caseID, encID string
+	_ = db.QueryRow(ctx, `INSERT INTO patient(given_name, family_name, date_of_birth, phone) VALUES ('Derartu', 'Tulu', '1972-03-21', '+251911998877') RETURNING id::text`).Scan(&patientID)
+	_ = db.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case R4', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&caseID)
+
+	var typeID, bedID string
+	_ = db.QueryRow(ctx, `INSERT INTO bed_type(name, description, active) VALUES ('Type R4', 'Desc', true) RETURNING id::text`).Scan(&typeID)
+	_ = db.QueryRow(ctx, `INSERT INTO hospital_bed(name, bed_type, type_id, charge_minor, active, created_by, ward_name) VALUES ('R4-BED', 'Type R4', $1, 60000, true, $2, 'Ward R4') RETURNING id::text`, typeID, admin.ID).Scan(&bedID)
+	_ = db.QueryRow(ctx, `INSERT INTO encounter(kind, case_id, patient_id, doctor_id, bed_id, admitted_at, status, symptoms, created_by, request_key) VALUES ('ipd', $1, $2, $3, $4, clock_timestamp(), 'active', 'Fever', $5, 'req-r4') RETURNING id::text`, caseID, patientID, doctor.ID, bedID, admin.ID).Scan(&encID)
+
+	// Seed an assignment that was closed with fabricated created_at
+	var assignID string
+	createdAt := time.Now().Add(-2 * time.Hour).UTC()
+	_ = db.QueryRow(ctx, `
+		INSERT INTO bed_assignment(bed_id, encounter_id, patient_id, notes, assigned_by, assigned_from, assigned_to, created_at)
+		VALUES ($1, $2, $3, 'Erroneously closed assignment', $4, $5, $5, $5)
+		RETURNING id::text
+	`, bedID, encID, patientID, doctor.ID, createdAt).Scan(&assignID)
+
+	// Apply migration 063 and 064
+	sql63, err := os.ReadFile("../../../../../db/migrations/063_bed_management_parity.sql")
+	if err != nil {
+		t.Fatalf("failed to read migration 063: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql63)); err != nil {
+		t.Fatalf("failed to run migration 063: %v", err)
+	}
+
+	sql64, err := os.ReadFile("../../../../../db/migrations/064_bed_assignment_reconciliation_audit.sql")
+	if err != nil {
+		t.Fatalf("failed to read migration 064: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql64)); err != nil {
+		t.Fatalf("failed to run migration 064: %v", err)
+	}
+
+	// Verify that bed_assignment_migration_audit has archived the record and restored it to active
+	var auditCount int
+	var resolutionAction string
+	err = db.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(MAX(resolution_action), '')
+		FROM bed_assignment_migration_audit
+		WHERE bed_assignment_id = $1
+	`, assignID).Scan(&auditCount, &resolutionAction)
+	if err != nil {
+		t.Fatalf("failed to query migration audit table: %v", err)
+	}
+	if auditCount != 1 || resolutionAction != "restored_active" {
+		t.Fatalf("expected 1 audit record with resolution_action 'restored_active', got %d with '%s'", auditCount, resolutionAction)
+	}
+
+	// Verify the assignment is now active (assigned_to IS NULL)
+	var assignedTo *time.Time
+	_ = db.QueryRow(ctx, `SELECT assigned_to FROM bed_assignment WHERE id = $1`, assignID).Scan(&assignedTo)
+	if assignedTo != nil {
+		t.Fatalf("expected assignment to be restored with assigned_to NULL, got: %v", assignedTo)
+	}
+	_ = store
+}
+
+// R5: Pagination beyond 25 encounters and 100 beds
+func TestBed_ReviewR5_PaginationAndSelectors(t *testing.T) {
+	_, store, _, cleanup := setupBedTestDB(t, 0)
+	defer cleanup()
+	ctx := context.Background()
+
+	admin, doctor, _, patientID, _, _ := seedBedStaffAndPatient(ctx, t, store.DB)
+
+	var caseID string
+	_ = store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case R5', $3) RETURNING id::text`, patientID, doctor.ID, admin.ID).Scan(&caseID)
+
+	// Seed 30 active encounters across distinct patients
+	for i := 1; i <= 30; i++ {
+		var pID, cID string
+		err := store.DB.QueryRow(ctx, `
+			INSERT INTO patient(given_name, family_name, date_of_birth, phone)
+			VALUES ($1, 'Patient', '1990-01-01', $2)
+			RETURNING id::text
+		`, fmt.Sprintf("Bulk-%d", i), fmt.Sprintf("+251911%06d", i)).Scan(&pID)
+		if err != nil {
+			t.Fatalf("failed to insert bulk patient %d: %v", i, err)
+		}
+		err = store.DB.QueryRow(ctx, `INSERT INTO patient_case(patient_id, doctor_id, description, created_by) VALUES ($1, $2, 'Case R5', $3) RETURNING id::text`, pID, doctor.ID, admin.ID).Scan(&cID)
+		if err != nil {
+			t.Fatalf("failed to insert bulk case %d: %v", i, err)
+		}
+
+		reqKey := fmt.Sprintf("req-page-enc-%d", i)
+		_, err = store.DB.Exec(ctx, `
+			INSERT INTO encounter(kind, case_id, patient_id, doctor_id, admitted_at, status, symptoms, created_by, request_key)
+			VALUES ('ipd', $1, $2, $3, clock_timestamp() - make_interval(mins => $4), 'active', 'Symptoms', $5, $6)
+		`, cID, pID, doctor.ID, i, admin.ID, reqKey)
+		if err != nil {
+			t.Fatalf("failed to insert encounter %d: %v", i, err)
+		}
+	}
+
+	// Fetch encounters with pageSize = 50 -> must return all 31 (including seeded initial)
+	encList, err := store.Encounters(ctx, admin, "ipd", 1, 50)
+	if err != nil {
+		t.Fatalf("failed to query encounters: %v", err)
+	}
+	if len(encList) < 30 {
+		t.Fatalf("expected >= 30 encounters across page 1 with pageSize 50, got: %d", len(encList))
+	}
+
+	// Seed 110 beds across multiple bed types
+	bt, _ := store.SaveBedType(ctx, admin, "", domain.BedTypeInput{Name: "Bulk Type", Active: true})
+	for i := 1; i <= 110; i++ {
+		bedName := fmt.Sprintf("BULK-%03d", i)
+		_, err := store.CreateBed(ctx, admin, domain.BedInput{
+			TypeID:      bt.ID,
+			Name:        bedName,
+			WardName:    "Large Medical Ward",
+			ChargeMinor: 25000,
+		})
+		if err != nil {
+			t.Fatalf("failed to create bulk bed %d: %v", i, err)
+		}
+	}
+
+	// SearchBeds with pageSize = 150 must return all >100 beds in single query
+	allBeds, totalBeds, err := store.SearchBeds(ctx, admin, "", "", "", nil, 1, 150)
+	if err != nil {
+		t.Fatalf("failed to search beds: %v", err)
+	}
+	if totalBeds < 110 || len(allBeds) < 110 {
+		t.Fatalf("expected >= 110 beds with pageSize 150, got len=%d total=%d", len(allBeds), totalBeds)
+	}
+}
+

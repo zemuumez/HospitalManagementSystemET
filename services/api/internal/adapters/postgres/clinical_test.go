@@ -262,7 +262,7 @@ func TestClinicalTransactions(t *testing.T) {
 	if _, e = db.Exec(ctx, `DELETE FROM clinical_note WHERE id=$1`, note.ID); e == nil {
 		t.Fatal("signed note was deleted")
 	}
-	own, e := clinic.Encounters(ctx, actors[3], "ipd", 1)
+	own, e := clinic.Encounters(ctx, actors[3], "ipd", 1, 25)
 	if e != nil {
 		t.Fatal(e)
 	}

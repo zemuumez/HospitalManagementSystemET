@@ -202,9 +202,22 @@ func transferBedTx(ctx context.Context, tx pgx.Tx, a domain.Actor, id string, i 
 	if out.Kind != "ipd" || out.Status != "active" || out.Version != i.Version || out.BedID == i.BedID {
 		return out, domain.ErrStale
 	}
+
+	// Lock current and target beds in deterministic order to avoid deadlocks
+	bed1, bed2 := out.BedID, i.BedID
+	if bed1 != "" && bed2 != "" && bed1 != bed2 {
+		firstBed, secondBed := bed1, bed2
+		if firstBed > secondBed {
+			firstBed, secondBed = secondBed, firstBed
+		}
+		if _, err := tx.Exec(ctx, `SELECT id FROM hospital_bed WHERE id IN ($1, $2) FOR UPDATE`, firstBed, secondBed); err != nil {
+			return out, err
+		}
+	}
+
 	var charge int64
 	var name string
-	e = tx.QueryRow(ctx, `SELECT name,charge_minor FROM hospital_bed WHERE id=$1 AND active AND state='ready' FOR UPDATE`, i.BedID).Scan(&name, &charge)
+	e = tx.QueryRow(ctx, `SELECT name,charge_minor FROM hospital_bed WHERE id=$1 AND active AND state='ready'`, i.BedID).Scan(&name, &charge)
 	if e != nil {
 		return out, clinicalError(e)
 	}
@@ -215,9 +228,33 @@ func transferBedTx(ctx context.Context, tx pgx.Tx, a domain.Actor, id string, i 
 	if occupied {
 		return out, domain.ErrStale
 	}
-	if _, e = tx.Exec(ctx, `UPDATE encounter SET bed_id=$2,version=version+1 WHERE id=$1`, id, i.BedID); e != nil {
+	var occupiedInAssignment bool
+	if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bed_assignment WHERE bed_id=$1 AND assigned_to IS NULL AND encounter_id != $2)`, i.BedID, id).Scan(&occupiedInAssignment); e != nil {
+		return out, e
+	}
+	if occupiedInAssignment {
+		return out, domain.ErrStale
+	}
+
+	// 1. Close old assignment
+	if _, e = tx.Exec(ctx, `UPDATE bed_assignment SET assigned_to = clock_timestamp() WHERE encounter_id = $1 AND assigned_to IS NULL`, id); e != nil {
+		return out, e
+	}
+
+	// 2. Insert new assignment for target bed
+	if _, e = tx.Exec(ctx, `
+		INSERT INTO bed_assignment (bed_id, encounter_id, patient_id, notes, assigned_by)
+		VALUES ($1, $2, $3, $4, $5)
+	`, i.BedID, id, out.PatientID, i.Reason, a.ID); e != nil {
+		return out, e
+	}
+
+	// 3. Update encounter
+	if _, e = tx.Exec(ctx, `UPDATE encounter SET bed_id=$2, bed_charge_minor=$3, version=version+1 WHERE id=$1`, id, i.BedID, charge); e != nil {
 		return out, clinicalError(e)
 	}
+
+	// 4. Record bed transfer event
 	if _, e = tx.Exec(ctx, `INSERT INTO bed_event(encounter_id,kind,from_bed_id,to_bed_id,charge_minor,actor_id,reason,encounter_version) VALUES($1,'transfer',$2,$3,$4,$5,$6,$7)`, id, out.BedID, i.BedID, charge, a.ID, i.Reason, out.Version+1); e != nil {
 		return out, e
 	}

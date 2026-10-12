@@ -21,12 +21,13 @@ type BedAssignment struct {
 	PatientEmail  string     `json:"patientEmail,omitempty"`
 	PatientPhone  string     `json:"patientPhone,omitempty"`
 	PatientGender string     `json:"patientGender,omitempty"`
-	AssignedFrom  time.Time  `json:"assignedFrom"`
-	AssignedTo    *time.Time `json:"assignedTo,omitempty"`
-	Notes         string     `json:"notes"`
-	AssignedBy    string     `json:"assignedBy"`
-	Status        bool       `json:"status"` // true = active, false = discharged/inactive
-	CreatedAt     time.Time  `json:"createdAt"`
+	EncounterVersion int       `json:"encounterVersion,omitempty"`
+	AssignedFrom     time.Time  `json:"assignedFrom"`
+	AssignedTo       *time.Time `json:"assignedTo,omitempty"`
+	Notes            string     `json:"notes"`
+	AssignedBy       string     `json:"assignedBy"`
+	Status           bool       `json:"status"` // true = active, false = discharged/inactive
+	CreatedAt        time.Time  `json:"createdAt"`
 }
 
 type BedOccupancyReport struct {
@@ -48,6 +49,9 @@ type AssignBedInput struct {
 
 func (i *AssignBedInput) Validate() error {
 	i.Notes = strings.TrimSpace(i.Notes)
+	if i.Version <= 0 {
+		return ErrValidation
+	}
 	if !UUIDPattern.MatchString(i.BedID) || !UUIDPattern.MatchString(i.EncounterID) || !UUIDPattern.MatchString(i.PatientID) {
 		return ErrValidation
 	}
@@ -58,7 +62,19 @@ func (i *AssignBedInput) Validate() error {
 }
 
 type DischargeBedAssignmentInput struct {
+	Version        int    `json:"version"`
 	DischargeNotes string `json:"dischargeNotes,omitempty"`
+}
+
+func (i *DischargeBedAssignmentInput) Validate() error {
+	if i.Version <= 0 {
+		return ErrValidation
+	}
+	i.DischargeNotes = strings.TrimSpace(i.DischargeNotes)
+	if len(i.DischargeNotes) > 1000 {
+		return ErrValidation
+	}
+	return nil
 }
 
 // ─── Care Team Delegation ─────────────────────────────────────────────────────

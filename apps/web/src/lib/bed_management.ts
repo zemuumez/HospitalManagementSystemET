@@ -23,6 +23,7 @@ export interface AssignBedInput {
   encounterId: string;
   bedId: string;
   notes?: string;
+  version: number;
 }
 
 export async function saveBedType(
@@ -55,9 +56,12 @@ export async function saveBedType(
 
 export async function deleteBedType(
   id: string,
-  version: number = 1,
+  version: number,
   customFetch: typeof fetch = fetch,
 ) {
+  if (!version || version <= 0) {
+    throw new Error("A positive bed type version is required");
+  }
   const res = await customFetch(`/api/hms/bed-types/${id}?version=${version}`, {
     method: "DELETE",
   });
@@ -119,6 +123,9 @@ export async function assignBed(
   if (!input.patientId || !input.encounterId || !input.bedId) {
     throw new Error("Patient ID, Encounter ID, and Bed ID are all required");
   }
+  if (!input.version || input.version <= 0) {
+    throw new Error("A positive encounter version is required");
+  }
 
   const res = await customFetch(`/api/hms/bed-assignments`, {
     method: "POST",
@@ -128,6 +135,7 @@ export async function assignBed(
       encounterId: input.encounterId,
       bedId: input.bedId,
       notes: input.notes?.trim() || "",
+      version: input.version,
     }),
   });
   const data = await res.json();
@@ -139,13 +147,17 @@ export async function assignBed(
 
 export async function dischargeBed(
   assignmentId: string,
+  version: number,
   notes: string = "",
   customFetch: typeof fetch = fetch,
 ) {
+  if (!version || version <= 0) {
+    throw new Error("A positive encounter version is required");
+  }
   const res = await customFetch(`/api/hms/bed-assignments/${assignmentId}/discharge`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dischargeNotes: notes.trim() }),
+    body: JSON.stringify({ version, dischargeNotes: notes.trim() }),
   });
   const data = await res.json();
   if (!res.ok) {

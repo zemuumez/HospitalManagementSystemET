@@ -163,11 +163,20 @@ func (s Server) clinical(w http.ResponseWriter, r *http.Request, a domain.Actor)
 			write(w, 201, out)
 		}
 	case r.URL.Path == "/v1/encounters" && r.Method == "GET":
-		out, e := s.Clinical.Encounters(r.Context(), a, r.URL.Query().Get("kind"), page)
+		pageSize := 25
+		if raw := r.URL.Query().Get("pageSize"); raw != "" {
+			if ps, err := strconv.Atoi(raw); err == nil && ps > 0 {
+				pageSize = ps
+			}
+		}
+		if pageSize > 200 {
+			pageSize = 200
+		}
+		out, e := s.Clinical.Encounters(r.Context(), a, r.URL.Query().Get("kind"), page, pageSize)
 		if e != nil {
 			fail(w, e)
 		} else {
-			write(w, 200, map[string]any{"encounters": out, "page": page, "pageSize": 25})
+			write(w, 200, map[string]any{"encounters": out, "page": page, "pageSize": pageSize})
 		}
 	case r.URL.Path == "/v1/encounters" && r.Method == "POST":
 		var i domain.EncounterInput

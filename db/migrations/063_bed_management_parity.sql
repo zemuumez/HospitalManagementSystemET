@@ -11,23 +11,42 @@ CREATE INDEX IF NOT EXISTS idx_hospital_bed_active_state ON hospital_bed(active,
 CREATE INDEX IF NOT EXISTS idx_hospital_bed_type ON hospital_bed(type_id, active);
 
 -- 3. Reconcile any prior duplicate open assignments safely before creating unique constraints
+-- Note: Authoritative audit and retroactive reconciliation is performed by migration 064 (bed_assignment_migration_audit).
 WITH duplicate_bed_open AS (
-  SELECT id, ROW_NUMBER() OVER (PARTITION BY bed_id ORDER BY created_at DESC, id) AS rn
-  FROM bed_assignment
-  WHERE assigned_to IS NULL
+  SELECT ba.id, ROW_NUMBER() OVER (
+    PARTITION BY ba.bed_id 
+    ORDER BY 
+      CASE WHEN e.status = 'active' AND e.bed_id = ba.bed_id THEN 0 ELSE 1 END,
+      ba.created_at DESC, 
+      ba.id
+  ) AS rn,
+  COALESCE(e.discharged_at, ba.assigned_from + interval '1 hour', ba.created_at) AS resolved_end
+  FROM bed_assignment ba
+  LEFT JOIN encounter e ON e.id = ba.encounter_id
+  WHERE ba.assigned_to IS NULL
 )
-UPDATE bed_assignment
-SET assigned_to = created_at
-WHERE id IN (SELECT id FROM duplicate_bed_open WHERE rn > 1);
+UPDATE bed_assignment ba
+SET assigned_to = d.resolved_end
+FROM duplicate_bed_open d
+WHERE ba.id = d.id AND d.rn > 1;
 
 WITH duplicate_enc_open AS (
-  SELECT id, ROW_NUMBER() OVER (PARTITION BY encounter_id ORDER BY created_at DESC, id) AS rn
-  FROM bed_assignment
-  WHERE assigned_to IS NULL
+  SELECT ba.id, ROW_NUMBER() OVER (
+    PARTITION BY ba.encounter_id 
+    ORDER BY 
+      CASE WHEN e.status = 'active' AND e.bed_id = ba.bed_id THEN 0 ELSE 1 END,
+      ba.created_at DESC, 
+      ba.id
+  ) AS rn,
+  COALESCE(e.discharged_at, ba.assigned_from + interval '1 hour', ba.created_at) AS resolved_end
+  FROM bed_assignment ba
+  LEFT JOIN encounter e ON e.id = ba.encounter_id
+  WHERE ba.assigned_to IS NULL
 )
-UPDATE bed_assignment
-SET assigned_to = created_at
-WHERE id IN (SELECT id FROM duplicate_enc_open WHERE rn > 1);
+UPDATE bed_assignment ba
+SET assigned_to = d.resolved_end
+FROM duplicate_enc_open d
+WHERE ba.id = d.id AND d.rn > 1;
 
 -- 4. Unique partial indexes enforcing concurrency protection
 -- Exactly one active assignment per physical bed

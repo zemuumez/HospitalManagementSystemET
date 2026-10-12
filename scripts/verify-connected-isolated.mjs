@@ -36,7 +36,18 @@ const smartCardsWorkspaceMode = process.argv.includes(
 const odontogramWorkspaceMode = process.argv.includes(
   "--odontogram-workspace",
 );
-const dsn = new URL(process.env.DATABASE_URL);
+const bedManagementWorkspaceMode = process.argv.includes(
+  "--bed-management-workspace",
+);
+const rawDatabaseUrl =
+  process.env.DATABASE_URL?.trim() ||
+  process.env.HMS_TEST_DATABASE_URL?.trim();
+if (!rawDatabaseUrl) {
+  throw new Error(
+    "FATAL: DATABASE_URL is not set. Browser QA must fail closed without explicit database credentials.",
+  );
+}
+const dsn = new URL(rawDatabaseUrl);
 if (!["127.0.0.1", "localhost"].includes(dsn.hostname))
   throw Error("Browser QA requires a loopback PostgreSQL database");
 const token = randomBytes(12).toString("hex");
@@ -292,7 +303,8 @@ try {
     if (
       doctorWorkspaceMode ||
       settingsWorkspaceMode ||
-      odontogramWorkspaceMode
+      odontogramWorkspaceMode ||
+      bedManagementWorkspaceMode
     ) {
       const { hashPassword } = await import("better-auth/crypto");
       const email = `qa-admin-${token}@example.test`;
@@ -311,6 +323,7 @@ try {
       );
       env.ADMIN_EMAIL = email;
       env.ADMIN_PASSWORD = password;
+      env.ADMIN_ID = token;
     }
     await new Promise((ok, fail) => {
       const test = spawn(
@@ -342,7 +355,9 @@ try {
                                   ? "scripts/verify-smart-cards-workspace.mjs"
                                   : odontogramWorkspaceMode
                                     ? "scripts/verify-odontogram-workspace.mjs"
-                                    : "scripts/verify-connected.mjs",
+                                    : bedManagementWorkspaceMode
+                                      ? "scripts/verify-bed-management-workspace.mjs"
+                                      : "scripts/verify-connected.mjs",
         ],
         {
           cwd: root,
