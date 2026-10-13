@@ -11,29 +11,15 @@ CREATE INDEX IF NOT EXISTS idx_encounter_diagnosis_category ON encounter_diagnos
 CREATE INDEX IF NOT EXISTS idx_encounter_procedure_performed ON encounter_procedure(encounter_id, performed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_opd_follow_up_status ON opd_follow_up(encounter_id, status);
 
--- 3. Historical data repair: Reconcile beds whose active inpatient stay has concluded
--- If an encounter was marked discharged or has no active assignment holding the bed,
--- close any orphaned open bed assignments and reset the hospital_bed state back to 'ready'.
+-- 3. Historical data repair: Reconcile orphaned bed assignments for concluded stays
+-- If an encounter was marked discharged, close any orphaned open bed assignments.
+-- Preserves maintenance and unavailable states: lack of occupancy alone does not establish readiness.
 UPDATE bed_assignment
 SET assigned_to = COALESCE(e.discharged_at, clock_timestamp())
 FROM encounter e
 WHERE bed_assignment.encounter_id = e.id
   AND bed_assignment.assigned_to IS NULL
   AND e.status = 'discharged';
-
-UPDATE hospital_bed
-SET state = 'ready'
-WHERE state <> 'ready'
-  AND NOT EXISTS (
-    SELECT 1 FROM bed_assignment ba 
-    WHERE ba.bed_id = hospital_bed.id 
-      AND ba.assigned_to IS NULL
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM encounter e 
-    WHERE e.bed_id = hospital_bed.id 
-      AND e.status = 'active'
-  );
 
 -- 4. Enable ON UPDATE CASCADE for doctor reassignment across case and encounters
 ALTER TABLE encounter DROP CONSTRAINT IF EXISTS encounter_case_id_patient_id_doctor_id_fkey;

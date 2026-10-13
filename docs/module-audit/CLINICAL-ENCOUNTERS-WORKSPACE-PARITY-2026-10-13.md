@@ -316,18 +316,24 @@ To achieve full parity, eliminate all mock fallbacks, and satisfy the user accep
 
 ### 9.1 PostgreSQL Integration Test Suite (`encounter_parity_test.go`)
 Executed against live isolated PostgreSQL schemas (`hms.local/api/internal/adapters/postgres`):
-- `TestEncounter_SchemaUpgradeAnd067Repair` — **PASS (3.33s)**
-  - Validates migration `067_clinical_encounter_parity_and_discharge_repair.sql` schema application, index creation, historical discharged encounter closure, and automatic bed repair back to `ready` status.
-- `TestEncounter_GetByID_ScopingAndCareTeam` — **PASS (3.00s)**
+- `TestEncounter_PopulatedUpgrade_PreservesBedStates` — **PASS (3.36s)**
+  - Validates populated schema upgrades from migration 066 through 067 and corrective migration 068 across 6 real-world bed states:
+    1. **Bed 1 (Maintenance, unoccupied):** Retains `'maintenance'` status across migration 067; lack of occupancy does not force readiness.
+    2. **Bed 2 (Unavailable, unoccupied):** Retains `'unavailable'` status across migration 067.
+    3. **Bed 3 (Ready, unoccupied):** Remains `'ready'`.
+    4. **Bed 4 (Active Inpatient, occupied):** Remains `'ready'` with active encounter stay.
+    5. **Bed 5 (Discharged Inpatient with orphaned open assignment):** Migration 067 safely closes open `bed_assignment.assigned_to` while preserving bed state.
+    6. **Bed 6 (Simulated prior 067 regression):** Simulates an environment where pre-corrected 067 erroneously set a maintenance bed to `ready`. Corrective migration `068_bed_state_preservation_and_repair.sql` deterministically recovers the bed back to `'maintenance'` using trigger-protected, immutable `bed_state_event` audit records rather than guessing.
+- `TestEncounter_GetByID_ScopingAndCareTeam` — **PASS (5.34s)**
   - Validates canonical actor scoping: Admin and assigned primary doctor can read; unassigned secondary doctor is hidden (`ErrNotFound`); care team delegation dynamically grants read access.
-- `TestEncounter_Update_ConcurrencyAndOwnership` — **PASS (2.93s)**
+- `TestEncounter_Update_ConcurrencyAndOwnership` — **PASS (5.85s)**
   - Validates optimistic locking version checks: mutations with stale version reject with `ErrStale` (HTTP 409); unassigned doctor mutations reject with `ErrForbidden` (HTTP 403); successful mutations increment `version` and update composite case doctor.
-- `TestEncounter_Discharge_AtomicBedReleaseAndConcurrency` — **PASS (3.00s)**
-  - Validates that patient discharge atomically updates `encounter.status='discharged'`, clears `bed_id`, closes active `bed_assignment`, and restores `hospital_bed.state='ready'`.
-- `TestEncounter_Discharge_AdminPermission` — **PASS (3.11s)**
+- `TestEncounter_Discharge_AtomicBedReleaseAndConcurrency` — **PASS (6.26s)**
+  - Validates that patient discharge atomically updates `encounter.status='discharged'`, clears `bed_id`, closes active `bed_assignment`, and preserves valid bed states without blanket state overwrite.
+- `TestEncounter_Discharge_AdminPermission` — **PASS (5.60s)**
   - Validates administrative override allowing hospital administrators to discharge inpatients.
 
-**Overall Result:** **5 / 5 suites PASS (16.93s)**.
+**Overall Result:** **5 / 5 suites PASS (28.67s)**. All 17 `TestBed_` suites also verified PASS (83.85s).
 
 ### 9.2 Playwright Browser QA Suite (`scripts/verify-clinical-encounters-workspace.mjs`)
 Executed via isolated integration runner `npm run test:clinical-encounters`:

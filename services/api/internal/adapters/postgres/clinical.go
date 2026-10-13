@@ -452,10 +452,6 @@ func (s Store) Discharge(ctx context.Context, a domain.Actor, id string, d domai
 		if _, err = tx.Exec(ctx, `UPDATE bed_assignment SET assigned_to=$2 WHERE encounter_id=$1 AND assigned_to IS NULL`, id, now); err != nil {
 			return out, err
 		}
-		// Reset hospital_bed state to 'ready'
-		if _, err = tx.Exec(ctx, `UPDATE hospital_bed SET state='ready' WHERE id=$1`, out.BedID); err != nil {
-			return out, err
-		}
 	}
 	if _, err = tx.Exec(ctx, `UPDATE encounter SET status='discharged',discharged_at=$2,discharge_summary=$3,bed_id=NULL,version=version+1 WHERE id=$1`, id, now, d.Summary); err != nil {
 		return out, err

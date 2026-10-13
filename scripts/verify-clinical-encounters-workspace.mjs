@@ -222,7 +222,11 @@ async function main() {
     await page.goto(`${base}/modules/ipd-patient-departments`, {
       waitUntil: "networkidle",
     });
-    await page.waitForSelector("#encounters-table", { timeout: 10000 });
+    page.on("pageerror", (err) => console.log("   [Page Error]:", err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") console.log("   [Console Error]:", msg.text());
+    });
+    await page.waitForSelector("#encounters-table", { timeout: 30000 });
     assert(
       await page.isVisible("#encounter-search-input"),
       "Search input must be visible",

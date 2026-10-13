@@ -177,79 +177,194 @@ func seedEncounterActors(ctx context.Context, t *testing.T, db *pgxpool.Pool) (d
 	return admin, doc1, doc2, nurse, patientUser, patientID, caseID
 }
 
-// 1. Verify schema upgrade path and 067 parity migration
-func TestEncounter_SchemaUpgradeAnd067Repair(t *testing.T) {
+// 1. Verify populated upgrade preserves maintenance/unavailable states and 068 recovers prior states
+func TestEncounter_PopulatedUpgrade_PreservesBedStates(t *testing.T) {
 	db, store, _, cleanup := setupEncounterTestDB(t, 66)
 	defer cleanup()
 	ctx := context.Background()
 
-	admin, _, _, _, _, patientID, caseID := seedEncounterActors(ctx, t, db)
+	admin, doc1, _, _, _, patientID, caseID := seedEncounterActors(ctx, t, db)
 
-	// Create bed type & bed
-	bedType, err := store.SaveBedType(ctx, admin, "", domain.BedTypeInput{Name: "General ICU", Active: true})
+	// Create bed type
+	bedType, err := store.SaveBedType(ctx, admin, "", domain.BedTypeInput{Name: "Trauma Ward", Active: true})
 	if err != nil {
 		t.Fatalf("SaveBedType: %v", err)
 	}
-	bed, err := store.CreateBed(ctx, admin, domain.BedInput{
-		Name:        "ICU-01",
-		TypeID:      bedType.ID,
-		WardName:    "ICU Ward",
-		ChargeMinor: 150000,
+
+	// Bed 1: Intentionally in 'maintenance' (unoccupied)
+	bedMaint, err := store.CreateBed(ctx, admin, domain.BedInput{
+		Name: "BED-MAINT", TypeID: bedType.ID, WardName: "Trauma Wing A", ChargeMinor: 50000,
 	})
 	if err != nil {
-		t.Fatalf("CreateBed: %v", err)
+		t.Fatalf("CreateBed 1: %v", err)
+	}
+	_, err = db.Exec(ctx, `UPDATE hospital_bed SET state='maintenance' WHERE id=$1`, bedMaint.ID)
+	if err != nil {
+		t.Fatalf("set maintenance: %v", err)
+	}
+	_, err = db.Exec(ctx, `INSERT INTO bed_state_event(bed_id, from_state, to_state, actor_id, reason, version) VALUES($1, 'ready', 'maintenance', $2, 'Telemetry calibration', 2)`, bedMaint.ID, admin.ID)
+	if err != nil {
+		t.Fatalf("record state event maint: %v", err)
 	}
 
-	// Admit an IPD encounter
+	// Bed 2: Intentionally in 'unavailable' (unoccupied)
+	bedUnavail, err := store.CreateBed(ctx, admin, domain.BedInput{
+		Name: "BED-UNAVAIL", TypeID: bedType.ID, WardName: "Trauma Wing B", ChargeMinor: 50000,
+	})
+	if err != nil {
+		t.Fatalf("CreateBed 2: %v", err)
+	}
+	_, err = db.Exec(ctx, `UPDATE hospital_bed SET state='unavailable' WHERE id=$1`, bedUnavail.ID)
+	if err != nil {
+		t.Fatalf("set unavailable: %v", err)
+	}
+	_, err = db.Exec(ctx, `INSERT INTO bed_state_event(bed_id, from_state, to_state, actor_id, reason, version) VALUES($1, 'ready', 'unavailable', $2, 'Sanitization underway', 2)`, bedUnavail.ID, admin.ID)
+	if err != nil {
+		t.Fatalf("record state event unavail: %v", err)
+	}
+
+	// Bed 3: Normal 'ready' bed (unoccupied)
+	bedReady, err := store.CreateBed(ctx, admin, domain.BedInput{
+		Name: "BED-READY", TypeID: bedType.ID, WardName: "Trauma Wing C", ChargeMinor: 50000,
+	})
+	if err != nil {
+		t.Fatalf("CreateBed 3: %v", err)
+	}
+
+	// Bed 4: Active inpatient bed (occupied)
+	bedOccupied, err := store.CreateBed(ctx, admin, domain.BedInput{
+		Name: "BED-OCCUPIED", TypeID: bedType.ID, WardName: "Trauma Wing D", ChargeMinor: 50000,
+	})
+	if err != nil {
+		t.Fatalf("CreateBed 4: %v", err)
+	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	key := "admit-key-01-abcdef"
-	enc, err := store.Admit(ctx, admin, domain.EncounterInput{
-		Kind:       "ipd",
-		CaseID:     caseID,
-		BedID:      bed.ID,
-		AdmittedAt: now,
-		Symptoms:   "Chest tightness",
-	}, key)
+	activeEnc, err := store.Admit(ctx, admin, domain.EncounterInput{
+		Kind: "ipd", CaseID: caseID, BedID: bedOccupied.ID, AdmittedAt: now, Symptoms: "Acute trauma",
+	}, "admit-occupied-key-1")
 	if err != nil {
-		t.Fatalf("Admit: %v", err)
+		t.Fatalf("Admit active encounter: %v", err)
 	}
 
-	// Simulate a historical discharged encounter that left the bed in 'occupied' state prior to 067
-	_, err = db.Exec(ctx, `
-		UPDATE encounter 
-		SET status='discharged', discharged_at=clock_timestamp(), discharge_summary='Recovered', bed_id=NULL 
-		WHERE id=$1
-	`, enc.ID)
+	// Bed 5: Historical discharged encounter with orphaned open bed_assignment
+	var patient2ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO patient(given_name, family_name, phone)
+		VALUES('Tirunesh', 'Dibaba', '+251922334455')
+		RETURNING id
+	`).Scan(&patient2ID)
 	if err != nil {
-		t.Fatalf("manual discharge simulation: %v", err)
-	}
-	_, err = db.Exec(ctx, `
-		UPDATE hospital_bed SET state='unavailable' WHERE id=$1
-	`, bed.ID)
-	if err != nil {
-		t.Fatalf("manual bed occupied simulation: %v", err)
+		t.Fatalf("failed to create patient 2: %v", err)
 	}
 
-	// Apply migration 067 to verify data repair
+	var case2ID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO patient_case(patient_id, doctor_id, description, created_by)
+		VALUES($1, $2, 'Prior fracture repair', $3)
+		RETURNING id
+	`, patient2ID, doc1.ID, admin.ID).Scan(&case2ID)
+	if err != nil {
+		t.Fatalf("failed to create case 2: %v", err)
+	}
+
+	bedOrphaned, err := store.CreateBed(ctx, admin, domain.BedInput{
+		Name: "BED-ORPHANED", TypeID: bedType.ID, WardName: "Trauma Wing E", ChargeMinor: 50000,
+	})
+	if err != nil {
+		t.Fatalf("CreateBed 5: %v", err)
+	}
+	dischargedEnc, err := store.Admit(ctx, admin, domain.EncounterInput{
+		Kind: "ipd", CaseID: case2ID, BedID: bedOrphaned.ID, AdmittedAt: now.Add(-48 * time.Hour), Symptoms: "Prior trauma",
+	}, "admit-discharged-key-2")
+	if err != nil {
+		t.Fatalf("Admit discharged encounter: %v", err)
+	}
+	// Simulate historical unclosed assignment
+	_, err = db.Exec(ctx, `UPDATE encounter SET status='discharged', discharged_at=clock_timestamp(), discharge_summary='Healed fully', bed_id=NULL WHERE id=$1`, dischargedEnc.ID)
+	if err != nil {
+		t.Fatalf("mark discharged: %v", err)
+	}
+
+	// Bed 6: Regression scenario where buggy 067 ran previously and set a maintenance bed to ready
+	bedBuggy067, err := store.CreateBed(ctx, admin, domain.BedInput{
+		Name: "BED-BUGGY-067", TypeID: bedType.ID, WardName: "Trauma Wing F", ChargeMinor: 50000,
+	})
+	if err != nil {
+		t.Fatalf("CreateBed 6: %v", err)
+	}
+	// Record that staff placed Bed 6 into 'maintenance'
+	_, err = db.Exec(ctx, `INSERT INTO bed_state_event(bed_id, from_state, to_state, actor_id, reason, version) VALUES($1, 'ready', 'maintenance', $2, 'Physical damage repair', 2)`, bedBuggy067.ID, admin.ID)
+	if err != nil {
+		t.Fatalf("record state event for bed 6: %v", err)
+	}
+	// Simulate buggy 067 erroneously setting Bed 6 state to 'ready'
+	_, err = db.Exec(ctx, `UPDATE hospital_bed SET state='ready' WHERE id=$1`, bedBuggy067.ID)
+	if err != nil {
+		t.Fatalf("simulate buggy 067: %v", err)
+	}
+
+	// Apply migration 067
 	mig067Path := "../../../../../db/migrations/067_clinical_encounter_parity_and_discharge_repair.sql"
-	sqlBytes, err := os.ReadFile(mig067Path)
+	sql067, err := os.ReadFile(mig067Path)
 	if err != nil {
 		t.Fatalf("read 067: %v", err)
 	}
-	if _, err = db.Exec(ctx, string(sqlBytes)); err != nil {
+	if _, err = db.Exec(ctx, string(sql067)); err != nil {
 		t.Fatalf("apply 067: %v", err)
 	}
 
-	// Verify bed is now repaired to 'ready'
-	var bedState string
-	err = db.QueryRow(ctx, `SELECT state FROM hospital_bed WHERE id=$1`, bed.ID).Scan(&bedState)
-	if err != nil {
-		t.Fatalf("query bed state: %v", err)
+	// ASSERTION 1: 067 did NOT flip Bed 1 ('maintenance') or Bed 2 ('unavailable')
+	var state1, state2, state3, state4, state5 string
+	_ = db.QueryRow(ctx, `SELECT state FROM hospital_bed WHERE id=$1`, bedMaint.ID).Scan(&state1)
+	_ = db.QueryRow(ctx, `SELECT state FROM hospital_bed WHERE id=$1`, bedUnavail.ID).Scan(&state2)
+	_ = db.QueryRow(ctx, `SELECT state FROM hospital_bed WHERE id=$1`, bedReady.ID).Scan(&state3)
+	_ = db.QueryRow(ctx, `SELECT state FROM hospital_bed WHERE id=$1`, bedOccupied.ID).Scan(&state4)
+	_ = db.QueryRow(ctx, `SELECT state FROM hospital_bed WHERE id=$1`, bedOrphaned.ID).Scan(&state5)
+
+	if state1 != "maintenance" {
+		t.Fatalf("migration 067 regressed maintenance bed to %q, expected 'maintenance'", state1)
 	}
-	if bedState != "ready" {
-		t.Fatalf("expected bed state 'ready' after 067 repair, got %q", bedState)
+	if state2 != "unavailable" {
+		t.Fatalf("migration 067 regressed unavailable bed to %q, expected 'unavailable'", state2)
+	}
+	if state3 != "ready" {
+		t.Fatalf("expected ready bed to remain ready, got %q", state3)
+	}
+	if state4 != "ready" {
+		t.Fatalf("expected occupied bed to remain ready, got %q", state4)
+	}
+	if state5 != "ready" {
+		t.Fatalf("expected orphaned discharged bed to remain ready, got %q", state5)
 	}
 
+	// ASSERTION 2: Orphaned open assignment on Bed 5 was closed by 067
+	var openAssignments int
+	_ = db.QueryRow(ctx, `SELECT count(*) FROM bed_assignment WHERE encounter_id=$1 AND assigned_to IS NULL`, dischargedEnc.ID).Scan(&openAssignments)
+	if openAssignments != 0 {
+		t.Fatalf("expected 0 open assignments for discharged encounter, got %d", openAssignments)
+	}
+
+	// Apply corrective migration 068
+	mig068Path := "../../../../../db/migrations/068_bed_state_preservation_and_repair.sql"
+	sql068, err := os.ReadFile(mig068Path)
+	if err != nil {
+		t.Fatalf("read 068: %v", err)
+	}
+	if _, err = db.Exec(ctx, string(sql068)); err != nil {
+		t.Fatalf("apply 068: %v", err)
+	}
+
+	// ASSERTION 3: Migration 068 recovered Bed 6 back to 'maintenance' from reliable evidence
+	var state6 string
+	err = db.QueryRow(ctx, `SELECT state FROM hospital_bed WHERE id=$1`, bedBuggy067.ID).Scan(&state6)
+	if err != nil {
+		t.Fatalf("query bed 6: %v", err)
+	}
+	if state6 != "maintenance" {
+		t.Fatalf("migration 068 failed to recover bed 6 to 'maintenance' from bed_state_event, got %q", state6)
+	}
+
+	_ = activeEnc
 	_ = patientID
 }
 
