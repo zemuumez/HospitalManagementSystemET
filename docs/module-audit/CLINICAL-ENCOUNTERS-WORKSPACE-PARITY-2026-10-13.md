@@ -317,14 +317,22 @@ To achieve full parity, eliminate all mock fallbacks, and satisfy the user accep
 ### 9.1 PostgreSQL Integration Test Suite (`encounter_parity_test.go`)
 Executed against live isolated PostgreSQL schemas (`hms.local/api/internal/adapters/postgres`):
 - `TestEncounter_PopulatedUpgrade_PreservesBedStates` — **PASS (2.48s)**
-  - Validates populated schema upgrades from migration 066 through 067, 068, and 069 across 7 real-world bed states:
+  - Validates populated schema upgrades from migration 066 through 067, 068, 069, and 070 across 7 real-world bed states:
     1. **Bed 1 (Maintenance, unoccupied):** Retains `'maintenance'` status across migration 067; lack of occupancy does not force readiness.
     2. **Bed 2 (Unavailable, unoccupied):** Retains `'unavailable'` status across migration 067.
     3. **Bed 3 (Ready, unoccupied):** Remains `'ready'`.
     4. **Bed 4 (Active Inpatient, occupied):** Remains `'ready'` with active encounter stay.
     5. **Bed 5 (Discharged Inpatient with orphaned open assignment):** Migration 067 safely closes open `bed_assignment.assigned_to` while preserving bed state.
-    6. **Bed 6 (Migration 068 Already-Applied & 069 Upgrade Runner Invalidation):** Simulates an environment where original 068 already executed, restored Bed 6 to `'maintenance'`, and was recorded in `schema_migration`. Upgrading through the standard migration runner skips 068 and executes new corrective migration `069_bed_version_concurrency_repair.sql`, which invalidates stale bed versions by incrementing `version = version + 1` without overwriting operational state `'maintenance'`. Verified that pre-repair form submissions receive `ErrStale` (HTTP 409 Conflict) on both `SetBedState` and `UpdateBed`, while post-repair version submissions succeed.
-    7. **Bed 7 (Later Intentional Ready Event Preservation):** Bed was placed in maintenance, then subsequently returned to ready by staff via `bed_state_event`. Verified that migration 068 and 069 respect the later intentional ready event and strictly avoid erroneously restoring the older maintenance event. Bed remains `'ready'` at its intact version.
+    6. **Bed 6 (Configuration-Only Edit Edge Case & Migration 070 Durable Repair Marker):** Simulates the uncovered edge sequence:
+       - Maintenance event recorded at version 2.
+       - Configuration-only edit via `UpdateBed` bumped version to 3 without creating a state event (latest state event remained 2).
+       - Buggy 067 reset state to `'ready'` (version remained 3).
+       - Original 068 restored state to `'maintenance'` without incrementing version 3.
+       - Migration 069 skipped the bed because `3 <= 2` was false.
+       - Corrective migration `070_bed_concurrency_repair_marker.sql` establishes a durable `bed_concurrency_repair_marker` table, detects the bed, increments version from 3 to 4, records it in the marker table, and strictly preserves operational state `'maintenance'`.
+       - Verified that pre-repair form submissions with cached version 3 receive `ErrStale` (HTTP 409 Conflict) on both `SetBedState` and `UpdateBed`.
+       - Verified that post-repair submissions with version 4 succeed, and re-running 070 is an idempotent no-op due to the durable marker.
+    7. **Bed 7 (Later Intentional Ready Event Preservation):** Bed was placed in maintenance, then subsequently returned to ready by staff via `bed_state_event`. Verified that migrations 068, 069, and 070 respect the later intentional ready event and strictly avoid erroneously restoring the older maintenance event. Bed remains `'ready'` at its intact version.
 - `TestEncounter_GetByID_ScopingAndCareTeam` — **PASS (5.34s)**
   - Validates canonical actor scoping: Admin and assigned primary doctor can read; unassigned secondary doctor is hidden (`ErrNotFound`); care team delegation dynamically grants read access.
 - `TestEncounter_Update_ConcurrencyAndOwnership` — **PASS (5.85s)**
