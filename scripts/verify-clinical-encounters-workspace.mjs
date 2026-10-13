@@ -224,7 +224,8 @@ async function main() {
     });
     page.on("pageerror", (err) => console.log("   [Page Error]:", err.message));
     page.on("console", (msg) => {
-      if (msg.type() === "error") console.log("   [Console Error]:", msg.text());
+      if (msg.type() === "error")
+        console.log("   [Console Error]:", msg.text());
     });
     await page.waitForSelector("#encounters-table", { timeout: 30000 });
     assert(
@@ -325,7 +326,9 @@ async function main() {
     await context2.close();
 
     // ─── Journey 4: Clinical Register: Vitals & Diagnoses (ICD-10) ───────────
-    console.log("4. Journey 4: Clinical Register Updates: Vitals & Diagnoses...");
+    console.log(
+      "4. Journey 4: Clinical Register Updates: Vitals & Diagnoses...",
+    );
     const detailsBtn = page.locator(
       `#btn-view-encounter-${createdEncounterId}`,
     );
@@ -450,7 +453,9 @@ async function main() {
       403,
       "Unauthorized doctor mutation must be rejected with HTTP 403 Forbidden",
     );
-    console.log("   Verified unassigned Doctor 2 receives 403 Forbidden on mutation.");
+    console.log(
+      "   Verified unassigned Doctor 2 receives 403 Forbidden on mutation.",
+    );
 
     // Doctor 2 also cannot view the patient encounter (scoped lookup returns 404)
     const unauthorizedRead = await pageDoc2.evaluate(async (encId) => {
@@ -462,7 +467,9 @@ async function main() {
       404,
       "Unassigned doctor read must be hidden (404 Not Found)",
     );
-    console.log("   Verified unassigned Doctor 2 read is hidden (404 Not Found).");
+    console.log(
+      "   Verified unassigned Doctor 2 read is hidden (404 Not Found).",
+    );
 
     // Admin delegates Doctor 2 to care team
     await page.click("#tab-care-team");
@@ -506,7 +513,9 @@ async function main() {
       404,
       "Revoked care team doctor must lose access (404 Not Found)",
     );
-    console.log("   Verified revoking care team member denies read access (404).");
+    console.log(
+      "   Verified revoking care team member denies read access (404).",
+    );
     await contextDoc2.close();
 
     const shot6 = resolve(
@@ -518,7 +527,9 @@ async function main() {
     console.log("   Saved 06_care_team_delegation_revocation.png");
 
     // ─── Journey 7: Bed Transfer & Atomic Bed Release on Discharge ───────────
-    console.log("7. Journey 7: Bed Transfer & Atomic Bed Release on Discharge...");
+    console.log(
+      "7. Journey 7: Bed Transfer & Atomic Bed Release on Discharge...",
+    );
     await page.click("#tab-bed");
     await page.waitForSelector("#select-transfer-bed", { timeout: 5000 });
 
