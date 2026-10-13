@@ -376,7 +376,7 @@ func TestEncounter_PopulatedUpgrade_PreservesBedStates(t *testing.T) {
 		t.Fatalf("expected 0 open assignments for discharged encounter, got %d", openAssignments)
 	}
 
-	// Apply corrective migration 068
+	// 1. Apply original migration 068 (without version increment) and record in schema_migration
 	mig068Path := "../../../../../db/migrations/068_bed_state_preservation_and_repair.sql"
 	sql068, err := os.ReadFile(mig068Path)
 	if err != nil {
@@ -385,8 +385,54 @@ func TestEncounter_PopulatedUpgrade_PreservesBedStates(t *testing.T) {
 	if _, err = db.Exec(ctx, string(sql068)); err != nil {
 		t.Fatalf("apply 068: %v", err)
 	}
+	// Record 068 in schema_migration, exactly as databases that already applied 068 have it
+	if _, err = db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES('068_bed_state_preservation_and_repair.sql') ON CONFLICT DO NOTHING`); err != nil {
+		t.Fatalf("record 068 in schema_migration: %v", err)
+	}
 
-	// ASSERTION 3: Migration 068 recovered Bed 6 back to 'maintenance' and incremented version
+	// Verify that original 068 restored Bed 6 state to 'maintenance', but left version unincremented at preRepairVersion6
+	var state6PreUpgrade string
+	var ver6PreUpgrade int
+	_ = db.QueryRow(ctx, `SELECT state, version FROM hospital_bed WHERE id=$1`, bedBuggy067.ID).Scan(&state6PreUpgrade, &ver6PreUpgrade)
+	if state6PreUpgrade != "maintenance" {
+		t.Fatalf("expected bed 6 state 'maintenance' after 068, got %q", state6PreUpgrade)
+	}
+	if ver6PreUpgrade != preRepairVersion6 {
+		t.Fatalf("expected original 068 to leave version at %d, got %d", preRepairVersion6, ver6PreUpgrade)
+	}
+
+	// 2. Upgrade through the normal migration runner (simulating scripts/migrate.ts or app startup)
+	// The runner must skip 068 (already in schema_migration) and apply pending migration 069
+	allMigrations, err := filepath.Glob("../../../../../db/migrations/*.sql")
+	if err != nil {
+		t.Fatalf("glob migrations: %v", err)
+	}
+	sort.Strings(allMigrations)
+
+	for _, file := range allMigrations {
+		base := filepath.Base(file)
+		var alreadyApplied bool
+		err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_migration WHERE name=$1)`, base).Scan(&alreadyApplied)
+		if err != nil {
+			t.Fatalf("check schema_migration for %s: %v", base, err)
+		}
+		if alreadyApplied {
+			continue // Skip already applied migrations (e.g. 068)
+		}
+
+		sql, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read pending migration %s: %v", file, err)
+		}
+		if _, err := db.Exec(ctx, string(sql)); err != nil {
+			t.Fatalf("apply pending migration %s: %v", file, err)
+		}
+		if _, err := db.Exec(ctx, `INSERT INTO schema_migration(name) VALUES($1)`, base); err != nil {
+			t.Fatalf("record pending migration %s: %v", file, err)
+		}
+	}
+
+	// ASSERTION 3: Migration 069 invalidated stale version for Bed 6 (incremented) while preserving operational state 'maintenance'
 	var state6 string
 	var postRepairVersion6 int
 	err = db.QueryRow(ctx, `SELECT state, version FROM hospital_bed WHERE id=$1`, bedBuggy067.ID).Scan(&state6, &postRepairVersion6)
@@ -394,20 +440,20 @@ func TestEncounter_PopulatedUpgrade_PreservesBedStates(t *testing.T) {
 		t.Fatalf("query bed 6: %v", err)
 	}
 	if state6 != "maintenance" {
-		t.Fatalf("migration 068 failed to recover bed 6 to 'maintenance' from bed_state_event, got %q", state6)
+		t.Fatalf("migration 069 modified operational state of bed 6, expected 'maintenance', got %q", state6)
 	}
 	if postRepairVersion6 != preRepairVersion6+1 {
-		t.Fatalf("expected version increment upon repair from %d to %d, got %d", preRepairVersion6, preRepairVersion6+1, postRepairVersion6)
+		t.Fatalf("expected version increment from %d to %d by migration 069, got %d", preRepairVersion6, preRepairVersion6+1, postRepairVersion6)
 	}
 
-	// ASSERTION 4: Pre-repair edit receives stale-version conflict (ErrStale)
+	// ASSERTION 4: Pre-repair edit receives stale-version conflict (ErrStale) on both SetBedState and UpdateBed
 	_, err = store.SetBedState(ctx, admin, bedBuggy067.ID, domain.BedStateInput{
 		State:   "ready",
 		Reason:  "Stale form submission attempting to overwrite restored state",
 		Version: preRepairVersion6, // stale version!
 	})
 	if !errors.Is(err, domain.ErrStale) {
-		t.Fatalf("expected ErrStale on SaveBedState with pre-repair version, got %v", err)
+		t.Fatalf("expected ErrStale on SetBedState with pre-repair version, got %v", err)
 	}
 
 	_, err = store.UpdateBed(ctx, admin, bedBuggy067.ID, domain.UpdateBedInput{

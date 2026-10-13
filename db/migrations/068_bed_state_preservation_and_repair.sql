@@ -13,8 +13,7 @@ WITH latest_bed_state AS (
   ORDER BY bed_id, recorded_at DESC, version DESC
 )
 UPDATE hospital_bed b
-SET state = lbs.to_state,
-    version = b.version + 1
+SET state = lbs.to_state
 FROM latest_bed_state lbs
 WHERE b.id = lbs.bed_id
   AND b.state = 'ready'
