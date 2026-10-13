@@ -358,4 +358,24 @@ Executed via isolated integration runner `npm run test:clinical-encounters`:
 | **Journey 7** | Bed Transfer & Atomic Discharge | Transfer to telemetry bed; discharge releases bed atomically to ready | `07_discharge_atomic_bed_release.png` | **PASS** |
 | **Journey 8** | Amharic Localization & Dark Mode | Ethiopian Amharic translation in DOM, dark theme contrast ratio >= 4.5:1 | `08_unauthorized_rejection_amharic_dark_mode.png` | **PASS** |
 
+
 **Overall Result:** **8 / 8 journeys PASS (0 errors)**. All synthetic data cleaned up in `finally` block; zero test pollution in development database.
+
+---
+
+## 10. Formal Acceptance & Sign-Off
+
+### 10.1 Independent End-to-End Review Summary (Commit `3d65e37`)
+
+| Review Area | Verification Standard | Review Outcome & Evidence |
+| :--- | :--- | :--- |
+| **Access Controls & Scoping** | RBAC across `admin`, `doctor`, `nurse`, `receptionist`, `patient`. Strict scoping with `audit_event` logging. | **APPROVED**: Database `encounterScope` strictly enforces ownership; unassigned clinicians receive 404/403. Care team delegation and revocation validated in Go unit/integration tests and browser Journey 6. |
+| **Admission & Discharge Lifecycle** | Inpatient (`ipd`) and outpatient (`opd`) admission; atomic bed locking; discharge clearance check; closing `bed_assignment`. | **APPROVED**: IPD admission requires and locks available bed with `FOR UPDATE`; assigns bed atomically. Discharge closes active `bed_assignment` and clears `bed_id` while preserving bed operational states. |
+| **Bed Management Integration** | Separation of occupancy from operational states (`ready`, `maintenance`, `unavailable`); optimistic concurrency versioning. | **APPROVED**: All 17 `TestBed_` suites and Journey 7 verify state preservation and atomic release. Concurrency conflicts return `ErrStale` / HTTP 409 across both `SetBedState` and `UpdateBed`. |
+| **Detail Registers** | Diagnoses (ICD-10), Care Teams, Procedures, Clinical Notes, Financial Clearance, Follow-ups. | **APPROVED**: All 8 detail tabs rendered and interactable in `<EncounterWorkspace>`; persistence verified across fresh browser sessions (Journeys 2, 3, 4). |
+| **Migration Upgrades (067-070)** | Forward and upgrade safety from 066 through 070. Concurrency repair marker idempotency. | **APPROVED**: Migration 070 introduces `bed_concurrency_repair_marker` handling configuration-only edits where version was bumped without state events. All 7 bed scenarios verified in `TestEncounter_PopulatedUpgrade_PreservesBedStates`. |
+| **Automated Test Quality** | Go backend adapter tests, TypeScript typechecking, Playwright E2E browser suite. | **APPROVED**: 100% test pass rate across all suites: 5/5 Encounter tests, 17/17 Bed tests, full repository Go test suite, 0 TypeScript errors, 8/8 Playwright browser journeys. |
+
+### 10.2 Final Sign-Off Statement
+The Clinical Encounters & IPD/OPD Detail Registers module satisfies all functional, architectural, security, and migration safety criteria. Formal acceptance is hereby granted to merge into `main`.
+
